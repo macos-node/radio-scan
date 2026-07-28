@@ -1,5 +1,12 @@
 # radio-scan
 
+> **Part of the [n-suite](./SUITE.md).** This repo ships the standalone logger
+> below. Its evolution into a Nostr-native, social airplay member of the suite is
+> mapped in **[radio-scan-introduction.md](./radio-scan-introduction.md)**,
+> **[docs/radio-scan-buildmap-2026-07-28.md](./docs/radio-scan-buildmap-2026-07-28.md)**,
+> and the wire-contract proposal
+> **[schema/airplay-design-2026-07-28.md](./schema/airplay-design-2026-07-28.md)**.
+
 Probe and log what internet radio streams are playing. `radio-scan` reads the
 "Now Playing" metadata that Icecast/Shoutcast streams broadcast, records every
 track change with a timestamp, and rolls the results into daily / weekly
