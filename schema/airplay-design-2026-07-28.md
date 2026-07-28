@@ -9,7 +9,13 @@
 > The Nostr wire contract](../SUITE.md)**. Build context:
 > **[docs/radio-scan-buildmap-2026-07-28.md](../docs/radio-scan-buildmap-2026-07-28.md)**.
 
-Date: 2026-07-28 · kinds **UNDECIDED** (candidates below) · freeze **deferred**
+Date: 2026-07-28 · kinds **LOCKED for the proposal** — airplay.v1 = **31240**,
+station.v1 = **31241** · freeze **deferred**
+
+> The precise wire shapes now live as drafted contracts with fixtures:
+> [`airplay.v1.json`](./airplay.v1.json), [`station.v1.json`](./station.v1.json),
+> and [`fixtures/`](./fixtures/). Snippets below are illustrative; those files are
+> authoritative for the proposal.
 
 ---
 
@@ -29,17 +35,19 @@ primitives; only two new event kinds are introduced.
 
 | Kind | Name | NIP | Role | Signed by | `d` identity |
 |------|------|-----|------|-----------|--------------|
-| `30078`? | `station.v1` | 51/33 | A stream a user **follows** (url + metadata) | any user | `airplay:station:<slug>` |
-| `31240`? | `airplay.v1` | 33 | An **airplay observation** for a station+track | any user | `airplay:<station>:<trackkey>` |
+| `31241` | `station.v1` | 33 | A stream a user **follows** (url + metadata) | any user | `airplay:station:<slug>` |
+| `31240` | `airplay.v1` | 33 | An **airplay observation** for a station+track | any user | `airplay:<station>:<mrkhex>` |
 | `7` | reaction | 25 | React to / rate an airplay or station | any user | — |
 | `31239` | `feed.v1` | 33 | A note *about* airplay ("heavy rotation…") | owner + contributors | `glmps:<id>` |
 | `30000` | registry | 51 | Optional **shared** curated station set | owner | `airplay:stations` |
 | `4550` | sign-off | 72 | Vouch a station into the shared registry | owner | — |
 
-> **Kind numbers are placeholders.** `31240` is offered as the next free
-> parameterised-replaceable kind after the suite's `31237–31239`; `30078` is the
-> NIP-78 app-data range. Both must be confirmed unused across the suite before
-> freeze (Open decision #2 in the build map).
+> **Kinds locked for the proposal.** Confirmed unused across the suite (the used
+> set is `1063 / 4550 / 27235 / 30000 / 31237 / 31238 / 31239`): `airplay.v1 =
+> 31240` and `station.v1 = 31241`, kept contiguous with the suite's `31237–31239`
+> block rather than the NIP-78 `30078` range (so both airplay and station are
+> addressable and #d/#a-discoverable in the same family). Final confirmation is a
+> merge-time check, not a freeze commitment.
 
 Everything is **parameterised-replaceable** (33/30xxx) so re-publishing the same
 `d` updates in place — an observation's play-count grows, a station's metadata is
@@ -49,11 +57,11 @@ corrected, without event spam.
 
 ```json
 {
-  "kind": 30078,
+  "kind": 31241,
   "tags": [
     ["d", "airplay:station:acidjazz"],
     ["name", "Acid Jazz"],
-    ["url", "http://79.111.14.76:8000/acidjazz"],
+    ["r", "http://79.111.14.76:8000/acidjazz"],
     ["fmt", "audio/aacp"], ["br", "320"],
     ["server", "Icecast 2.4.0-kh4"],
     ["t", "acid-jazz"], ["t", "funk"],
@@ -62,6 +70,9 @@ corrected, without event spam.
   "content": "Optional human description of the station."
 }
 ```
+
+The stream URL is carried in the single-letter **`r`** tag so it is
+relay-filterable (`#r`) — the cross-user station identity.
 
 The registry carries **no airplay** — just the stream identity, so anyone can
 discover and follow it. `station_info.txt` (already captured by the sensor)
@@ -77,15 +88,16 @@ accretes. It carries `artist + title` (all radio gives), a **match** to an
 {
   "kind": 31240,
   "tags": [
-    ["d", "airplay:acidjazz:<trackkey>"],
-    ["station", "airplay:station:acidjazz"],
+    ["d", "airplay:acidjazz:d5ea7d4c9bd7dae04b4e13dba6ad15f3"],
     ["artist", "Dana Bryant"],
     ["title", "Heat"],
     ["plays", "12"],
     ["first_heard", "1785248099"],
     ["last_heard", "1785331200"],
-    ["mrk", "<master-release-key>"],
+    ["r", "http://79.111.14.76:8000/acidjazz"],
+    ["a", "31241:<ownerhex>:airplay:station:acidjazz"],
     ["a", "31237:<ownerhex>:disco-vault:314"],
+    ["mrk", "master:d5ea7d4c9bd7dae04b4e13dba6ad15f3"],
     ["track", "3"], ["disc", "1"],
     ["alt", "Heard on Acid Jazz radio"]
   ],
@@ -93,10 +105,13 @@ accretes. It carries `artist + title` (all radio gives), a **match** to an
 }
 ```
 
-- **`<trackkey>`** — a normalised `artist|title` hash so the same track has one
-  stable observation per station. The normalisation is the **same** one that
-  feeds the master-release-key (SUITE.md flags it as the open question — do it
-  once, here).
+- **`d` suffix (`<mrkhex>`)** — the 32 hex of the master-release-key (the `mrk`
+  value without `master:`), so the same track has one stable, replaceable
+  observation per station. The normalisation is the **same** one that feeds the
+  master-release-key (SUITE.md flags it as the open question — do it once, here).
+- **`r`** — the stream URL (relay-filterable `#r`): cross-user station identity.
+- **station `a`** (`31241:…`) — the author's own `station.v1`, for metadata
+  hydrate.
 - **`mrk`** — the **master-release-key** (content-derived), so airplay of "the
   same work" groups across users and across stations even when title spellings
   differ. This is airplay acting as the first real consumer of that deferred
@@ -162,8 +177,10 @@ semver *and* the shared `contract.vN` SHA.
 
 ## Open questions (do not guess)
 
-1. **Kind numbers.** Confirm `31240` (airplay) and the registry kind (`30078`
-   NIP-78 vs a `30xxx` NIP-51 list) are free across the suite before freezing.
+1. **Kind numbers — LOCKED for the proposal (2026-07-28).** `airplay.v1 = 31240`,
+   `station.v1 = 31241`, verified unused across the suite. A shared *curated*
+   station registry, if built, reuses the existing `30000` set + `4550` sign-off.
+   Re-confirm at merge time only.
 2. **`<trackkey>` / `mrk` normalisation.** The exact normalisation (case,
    punctuation, `feat.`, remix suffixes, `&` vs `and`) is *the* hard problem and
    is shared with the master-release-key — specify it once, test with fixtures

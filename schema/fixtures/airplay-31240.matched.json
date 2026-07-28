@@ -1,0 +1,24 @@
+{
+  "_comment": "airplay.v1 MATCHED example — 'Dana Bryant - Heat' heard 12x on acidjazz and reconciled to a release in the owner's catalogue (disco-vault:314, track 3, disc 1). Two `a` tags: the author's station.v1 (own-hydrate) and the release.v2 (the match). Presence of the 31237: coordinate is what marks it matched. mrk verified against master-key.v1 (key 'dana bryant|heat'). id/created_at/sig illustrative; pubkey = suite owner (author == ndisc author, one key per person).",
+  "kind": 31240,
+  "content": "",
+  "tags": [
+    ["d", "airplay:acidjazz:d5ea7d4c9bd7dae04b4e13dba6ad15f3"],
+    ["artist", "Dana Bryant"],
+    ["title", "Heat"],
+    ["plays", "12"],
+    ["first_heard", "1785248099"],
+    ["last_heard", "1785331200"],
+    ["r", "http://79.111.14.76:8000/acidjazz"],
+    ["a", "31241:916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d:airplay:station:acidjazz"],
+    ["a", "31237:916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d:disco-vault:314"],
+    ["mrk", "master:d5ea7d4c9bd7dae04b4e13dba6ad15f3"],
+    ["track", "3"],
+    ["disc", "1"],
+    ["alt", "Heard on Acid Jazz radio"]
+  ],
+  "id": "<illustrative — 64-hex event id>",
+  "pubkey": "916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d",
+  "created_at": 1785331200,
+  "sig": "<illustrative — 128-hex signature>"
+}

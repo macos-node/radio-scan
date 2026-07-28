@@ -62,8 +62,9 @@ service: **launchd** on macOS, **systemd** on Linux (both shipped).
 - Vendors the shared `schema/` contracts; adds one new one it authors.
 
 ## Nostr surface
-Proposed **producer** of a single new kind, `airplay.v1` (kind number TBD — see
-the schema design). Signs with the **same owner `nsec`** as `ndisc` / `ntree` /
+Proposed **producer** of two new kinds — `airplay.v1` (**31240**) and
+`station.v1` (**31241**), locked for the proposal and drafted with fixtures in
+`schema/` (see the schema design). Signs with the **same owner `nsec`** as `ndisc` / `ntree` /
 `nsmpl` (one person = one `npub`), held in the OS keyring. Keeps
 `relay.fizx.uk` in its relay set as the discovery hub. Publishing is
 **opt-in and aggregated** by default — see the privacy note in the design doc,

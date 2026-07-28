@@ -149,9 +149,10 @@ radio-scan/
     radio-scan-buildmap-2026-07-28.md   # this file
     radio-scan-lockup.svg               # per-app lockup, when the mark exists
   schema/
-    airplay-design-2026-07-28.md        # wire-contract proposal (this drop)
-    airplay.v1.json                     # the contract, once emitted (unfrozen → frozen)
-    station.v1.json                     # stream-registry contract
+    airplay-design-2026-07-28.md        # wire-contract proposal
+    airplay.v1.json                     # drafted contract (proposal; kind 31240)
+    station.v1.json                     # drafted contract (proposal; kind 31241)
+    fixtures/                           # matched / unmatched / minimal + station example
   bridge/                         # L2 — suite dir + reconcile + publish/poll (P1–P3)
   src/  src-tauri/                # only if P4-UI is chosen (Tauri 2)
 ```
@@ -170,8 +171,10 @@ Rust core worthwhile. Nothing in P1–P3 forces the choice except P4.
    nping). The repo is `radio-scan` per the org, but does it get an n-alias for
    the suite roster — `ntune`, `nscan`, `nair`, `nwave`? *Recommend `ntune`;
    keep `radio-scan` as the repo/product name.*
-2. **`airplay.v1` kind number + dedup window.** Pick an unused parameterised-
-   replaceable kind; decide the "same play" dedup window. See the schema doc.
+2. **`airplay.v1` kind number + dedup window.** *Kinds locked for the proposal
+   (2026-07-28): `airplay.v1 = 31240`, `station.v1 = 31241` — verified unused
+   across the suite; drafted with fixtures in `schema/`.* Still open: the
+   "same play" dedup window. See the schema doc.
 3. **Matched vs unmatched model.** Radio gives `artist + title` only (no album).
    Does an observation carry a release `a`-ref + track locator (reuse
    `clip.v1`), an artist/track pair, or both? Align with the master-release-key.

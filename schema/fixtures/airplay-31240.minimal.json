@@ -1,0 +1,19 @@
+{
+  "_comment": "airplay.v1 MINIMAL example — every optional tag omitted. Just the eight required tags (d, artist, title, plays, first_heard, last_heard, r, mrk) for 'F.R.I.S.K - Take The Sun Away' heard once on acidjazz, unmatched, station.v1 not yet referenced. The smallest valid airplay event. mrk verified against master-key.v1 (key 'f r i s k|take the sun away').",
+  "kind": 31240,
+  "content": "",
+  "tags": [
+    ["d", "airplay:acidjazz:96729c5d80fc1ed8c078bba3e1f997ac"],
+    ["artist", "F.R.I.S.K"],
+    ["title", "Take The Sun Away"],
+    ["plays", "1"],
+    ["first_heard", "1785248534"],
+    ["last_heard", "1785248534"],
+    ["r", "http://79.111.14.76:8000/acidjazz"],
+    ["mrk", "master:96729c5d80fc1ed8c078bba3e1f997ac"]
+  ],
+  "id": "<illustrative — 64-hex event id>",
+  "pubkey": "916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d",
+  "created_at": 1785248534,
+  "sig": "<illustrative — 128-hex signature>"
+}

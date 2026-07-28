@@ -1,0 +1,48 @@
+{
+  "$comment": "PROPOSAL — NOT canonical, NOT vendored into the suite, NOT SHA-pinned, NOT adopted. Wire-contract draft for STATION events: a radio stream a user follows in radio-scan, published so others can discover and follow it. Lives in the external repo github.com/macos-node/radio-scan for TESTING ONLY. Kinds are locked provisionally against the suite's used set (1063/4550/27235/30000/31237/31238/31239): station.v1 = 31241, its sibling airplay.v1 = 31240 — both free, contiguous with the suite's 31237-31239 block. No .sha256 pin and no freeze governance apply until this is proposed to merge into the suite (ndisc/schema). Design rationale: docs/radio-scan-buildmap-2026-07-28.md and schema/airplay-design-2026-07-28.md.",
+  "schemaVersion": "station.v1",
+  "status": "proposal",
+  "frozen": false,
+  "pinned": false,
+  "canonicalHome": "macos-node/radio-scan — schema/station.v1.json (proposal; not yet in ndisc/schema)",
+  "authority": {
+    "model": "per-publisher key — any pubkey publishes its OWN followed-stations set; there is no single owner or gate. Mirrors clip.v1's per-publisher model, not feed.v1's single-owner root.",
+    "note": "Cross-user 'who else follows this stream' filters on the stream URL via the single-letter #r tag, not on the per-author addressable coordinate."
+  },
+  "kinds": {
+    "station": {
+      "kind": 31241,
+      "spec": "NIP-01 parameterised-replaceable (addressable) event",
+      "class": "addressable — re-publishing the same d-tag replaces in place (edit metadata, no event spam)",
+      "kindRationale": "A followed station is a small, editable, per-user record — the addressable form fits (like release.v2 / feed.v1). 31241 sits contiguous with the suite's 31237-31239 block and is unused across the suite.",
+      "content": "Optional human description of the station (plain text).",
+      "writtenBy": "radio-scan (the L2 suite bridge), signed with the owner nsec from the OS keyring — the same key as ndisc/ntree/nsmpl (one person = one npub).",
+      "tags": {
+        "d": { "required": true, "format": "airplay:station:<slug>", "note": "Addressable identity within the author. <slug> is a stable, filesystem-safe station name (radio-scan's config `name`, or derived from the URL)." },
+        "name": { "required": true, "type": "string", "note": "Human display name of the station." },
+        "r": { "required": true, "type": "string", "note": "The direct stream URL (the mount, e.g. http://host:8000/mount). Single-letter tag so it is RELAY-FILTERABLE (#r) — the cross-user station identity: 'all stations / airplay for this URL' is a #r filter. Resolve playlist wrappers (.m3u/.pls/.xspf) to the real mount before publishing." },
+        "fmt": { "required": false, "type": "string", "note": "Advertised content-type, e.g. audio/aacp — from the stream's icy headers (radio-scan writes station_info.txt)." },
+        "br": { "required": false, "type": "string", "note": "Advertised bitrate in kbps, integer as string, e.g. \"320\"." },
+        "server": { "required": false, "type": "string", "note": "Server banner, e.g. \"Icecast 2.4.0-kh4\"." },
+        "t": { "required": false, "repeatable": true, "type": "string", "note": "Genre / topic slug(s), lowercased (#t filterable). Align with the suite's genre slugs where they fit; free tags otherwise." },
+        "alt": { "required": false, "type": "string", "note": "NIP-31 human-readable fallback for generic clients." }
+      },
+      "rule": "Consumers MUST require only d + name + r structurally; every descriptive tag (fmt/br/server/t) is optional. A station with no descriptive tags is still valid — it is a bare 'I follow this URL' record."
+    }
+  },
+  "subscription": {
+    "ownStations": {
+      "filter": { "kinds": [31241], "authors": ["<this npub>"] },
+      "note": "Rebuild the user's own followed-station set from the relays (relay = truth, local = cache)."
+    },
+    "stationFollowers": {
+      "filter": { "kinds": [31241], "#r": ["http://host:8000/mount"] },
+      "note": "Cross-user discovery: everyone who follows a given stream URL."
+    }
+  },
+  "relatedContracts": {
+    "airplay.v1": "schema/airplay.v1.json — an observation references its station by both the #r URL (cross-user) and, optionally, this event's addressable `a` coordinate (own-hydrate).",
+    "shared-registry": "A curated shared station list can reuse the suite's kind:30000 (NIP-51 set, d=airplay:stations) + kind:4550 sign-off, exactly as the contributor registry does — out of scope for this file."
+  },
+  "changePolicy": "PROPOSAL — free to edit; no SHA pin, no coordinated-wave governance yet. If/when proposed to merge into the suite, it adopts the suite discipline (SHA-pin at the authority, additive-only after freeze, kind confirmed unused, coordinated re-vendor across consumers) — see clip.v1.json for the model."
+}

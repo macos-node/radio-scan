@@ -1,0 +1,21 @@
+{
+  "_comment": "airplay.v1 UNMATCHED example — 'Urban Species - Religion And Politics (featuring Terry Callier)' heard on acidjazz but NOT in the owner's catalogue: no release-`a` (only the station `a`), no track/disc. This is the discovery-candidate case ('heard, not owned'). mrk verified against master-key.v1 — note the normalization drops the parenthetical 'featuring' (key 'urban species|religion and politics terry callier').",
+  "kind": 31240,
+  "content": "",
+  "tags": [
+    ["d", "airplay:acidjazz:fde9ab59cdcacb32cea0e6e3f0d8cfd4"],
+    ["artist", "Urban Species"],
+    ["title", "Religion And Politics (featuring Terry Callier)"],
+    ["plays", "2"],
+    ["first_heard", "1785248262"],
+    ["last_heard", "1785310000"],
+    ["r", "http://79.111.14.76:8000/acidjazz"],
+    ["a", "31241:916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d:airplay:station:acidjazz"],
+    ["mrk", "master:fde9ab59cdcacb32cea0e6e3f0d8cfd4"],
+    ["alt", "Heard on Acid Jazz radio"]
+  ],
+  "id": "<illustrative — 64-hex event id>",
+  "pubkey": "916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d",
+  "created_at": 1785310000,
+  "sig": "<illustrative — 128-hex signature>"
+}

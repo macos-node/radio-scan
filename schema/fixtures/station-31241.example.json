@@ -1,0 +1,21 @@
+{
+  "_comment": "station.v1 example — the acidjazz stream, populated from the icy headers radio-scan actually captured (station_info.txt: 320 kbps audio/aacp, Icecast 2.4.0-kh4). id/pubkey/created_at/sig are illustrative; pubkey is the suite owner (one key per person). Cross-user discovery keys on the #r URL.",
+  "kind": 31241,
+  "content": "Acid jazz / funk / soul stream (Icecast).",
+  "tags": [
+    ["d", "airplay:station:acidjazz"],
+    ["name", "Acid Jazz"],
+    ["r", "http://79.111.14.76:8000/acidjazz"],
+    ["fmt", "audio/aacp"],
+    ["br", "320"],
+    ["server", "Icecast 2.4.0-kh4"],
+    ["t", "acid-jazz"],
+    ["t", "funk"],
+    ["t", "soul"],
+    ["alt", "A radio stream followed in radio-scan"]
+  ],
+  "id": "<illustrative — 64-hex event id>",
+  "pubkey": "916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d",
+  "created_at": 1785248100,
+  "sig": "<illustrative — 128-hex signature>"
+}

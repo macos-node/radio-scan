@@ -1,0 +1,78 @@
+{
+  "$comment": "PROPOSAL — NOT canonical, NOT vendored into the suite, NOT SHA-pinned, NOT adopted. Wire-contract draft for AIRPLAY events: one observation per (author, station, track) recording that a stream played a track, how many times, and when — with an optional match to an ndisc release. Published so airplay aggregates across users on the relays. Lives in the external repo github.com/macos-node/radio-scan for TESTING ONLY. Kinds locked provisionally against the suite's used set: airplay.v1 = 31240, sibling station.v1 = 31241 (both free, contiguous with 31237-31239). No .sha256 pin / no freeze governance until proposed to merge into ndisc/schema. PRIVACY: airplay reveals listening habits, so an event exists ONLY when the user opts in to publish (local-by-default; aggregate-first). Design: schema/airplay-design-2026-07-28.md; build map: docs/radio-scan-buildmap-2026-07-28.md.",
+  "schemaVersion": "airplay.v1",
+  "status": "proposal",
+  "frozen": false,
+  "pinned": false,
+  "canonicalHome": "macos-node/radio-scan — schema/airplay.v1.json (proposal; not yet in ndisc/schema)",
+  "authority": {
+    "model": "per-publisher key — any pubkey publishes its OWN airplay; there is no owner or gate. Relays are the network truth; no node owns 'what is being heard'. radio-scan is the schema authority for the shape only.",
+    "note": "Own airplay reconciles by author pubkey; cross-user 'airplay on this stream' filters #r (URL); cross-user 'airplay of this work' groups on the master-release-key (mrk)."
+  },
+  "kinds": {
+    "airplay": {
+      "kind": 31240,
+      "spec": "NIP-01 parameterised-replaceable (addressable) event",
+      "class": "addressable — re-publishing the same d-tag replaces in place, so `plays` / `last_heard` accrete without event spam",
+      "kindRationale": "An observation is a running, editable per-track tally — addressable fits. 31240 is unused across the suite and contiguous with 31237-31239.",
+      "content": "Empty string (optionally a short human note about the airplay).",
+      "writtenBy": "radio-scan (the L2 suite bridge), signed with the owner nsec (same key as ndisc) — opt-in only.",
+      "tags": {
+        "d": { "required": true, "format": "airplay:<station-slug>:<mrkhex>", "note": "Addressable identity within the author: station slug + the 32-hex master-release-key suffix (the `mrk` value without its 'master:' prefix). Same track on the same station => same d => the tally replaces in place. Natural per-(station,track) dedup." },
+        "artist": { "required": true, "type": "string", "note": "Artist as read from the stream's StreamTitle (left of ' - ')." },
+        "title": { "required": true, "type": "string", "note": "Track title as read from StreamTitle (right of ' - ')." },
+        "plays": { "required": true, "type": "string", "note": "Times this author observed this track on this station, integer as string. Monotonic; grows as the event is re-published." },
+        "first_heard": { "required": true, "type": "string", "note": "Unix seconds (string) of the first observation." },
+        "last_heard": { "required": true, "type": "string", "note": "Unix seconds (string) of the most recent observation." },
+        "r": { "required": true, "type": "string", "note": "The station's stream URL. Single-letter => RELAY-FILTERABLE (#r): the cross-user station identity for 'all airplay on this URL', independent of who published it. Matches station.v1's `r`." },
+        "mrk": { "required": true, "format": "master:<32 hex>", "note": "The suite master-release-key tag (master-key.v1) = 'master:' + first 32 hex of SHA-256(norm(artist)+'|'+norm(title)). Computed by the SAME normalization as ndisc's master-release-key (schema/master-key.vectors.json) so 'the same work' groups across users and title-spelling variants. See openQuestions on relay-filterability." },
+        "a": {
+          "required": false,
+          "repeatable": true,
+          "note": "Addressable references, distinguished by kind prefix. (1) STATION (own-hydrate): 31241:<this npub hex>:airplay:station:<slug> — hydrate station name/genre/bitrate from the author's station.v1. (2) RELEASE (match): 31237:<ndisc npub hex>:disco-vault:<id> — present ONLY when the heard track was reconciled to a release in the owner's catalogue; reuses clip.v1's release-a-ref shape. Absent release-`a` => UNMATCHED => a discovery candidate ('heard, not owned')."
+        },
+        "track": { "required": false, "type": "string", "note": "Track number within its disc (string). Present only when matched to a release and known — the clip.v1 track-locator shape." },
+        "disc": { "required": false, "type": "string", "note": "Disc number (string). Omitted or \"1\" for single-disc releases." },
+        "alt": { "required": false, "type": "string", "note": "NIP-31 human-readable fallback, e.g. \"Heard on Acid Jazz radio\"." }
+      },
+      "rule": "Consumers MUST require only d + artist + title + plays + first_heard + last_heard + r + mrk; treat station-`a`, release-`a`, track, disc as optional. Matched vs unmatched is signalled by the PRESENCE of a release-`a` (31237:) coordinate. A consumer that doesn't recognise `mrk` falls back to (artist,title) grouping."
+    }
+  },
+  "consumes": {
+    "station": { "kind": 31241, "spec": "station.v1", "direction": "read-only", "note": "Hydrate station metadata from the referenced station.v1; never written here." },
+    "release": { "kind": 31237, "spec": "release.v2", "direction": "read-only", "note": "When matched, the release-`a` references a release.v2 event; consumers hydrate artist/title/year/cover from it. Airplay copies no release metadata and never writes 31237." },
+    "profile": { "kind": 0, "direction": "read-only", "note": "Author display (name/nip05/picture), as elsewhere in the suite." }
+  },
+  "interaction": {
+    "reactions": { "kind": 7, "spec": "NIP-25", "note": "React to / rate an airplay observation by its `a` coordinate (31240:...), using the suite's shared lib/rating.ts aggregation — identical to clip/sample rating. Nothing new needed." },
+    "feedNotes": { "kind": 31239, "spec": "feed.v1", "note": "A feed note may `a`-ref an airplay observation to comment on it ('heavy rotation this week on acidjazz'). Reuses the existing owner-authored feed channel." }
+  },
+  "subscription": {
+    "ownAirplay": {
+      "filter": { "kinds": [31240], "authors": ["<this npub>"] },
+      "note": "Rebuild this user's airplay tallies (relay = truth, local = cache)."
+    },
+    "stationAirplay": {
+      "filter": { "kinds": [31240], "#r": ["http://host:8000/mount"] },
+      "note": "Cross-user: all airplay anyone has published for a stream URL — the collective 'what this station plays'."
+    },
+    "workAirplay": {
+      "filter": { "kinds": [31240], "#mrk": ["master:<32 hex>"] },
+      "note": "Cross-user: airplay of 'the same work' across stations and users. NOTE `#mrk` is a multi-letter tag and is NOT relay-filterable as written — today this is a client-side group-by; see openQuestions."
+    }
+  },
+  "privacy": {
+    "default": "local-only — the sensor logs to disk and the suite dir; NOTHING is published until the user opts in.",
+    "publishGranularity": "aggregate-first — publish weekly / rolling heavy-rotation tallies, not a live per-track ticker.",
+    "perStation": "opt-in is per-station — a user may share one station and not another.",
+    "realtime": "publishing a live 'now playing' is a separate, explicit, later choice — never implied by enabling aggregate sharing."
+  },
+  "openQuestions": [
+    "Relay-filterable work key: `mrk` (and any cross-user grouping key) must live in a SINGLE-LETTER tag to be filterable relay-side. Overloading `#t` pollutes genre filters; a dedicated single-letter tag needs allocating. Same open item as the suite master-release-key — resolve once, together.",
+    "Station identity across users: `#r` on the raw URL groups by exact string. Normalise the URL (scheme/host/case, trailing slash) and resolve playlist wrappers before publishing so followers of the same station converge.",
+    "Matched-only vs always-publish: this draft publishes both (match = presence of a release-`a`). Confirm unmatched airplay is wanted on the wire (it is the discovery signal) vs. kept local.",
+    "Aggregation granularity: per-(station,track) replaceable (this draft) vs periodic digest events — replaceable bounds event count; digests give cleaner history.",
+    "mrk/normalization edge cases specific to radio StreamTitle noise (station idents, '- Single', bracketed mixes) — extend master-key fixtures with radio-sourced vectors."
+  ],
+  "changePolicy": "PROPOSAL — free to edit; no SHA pin, no coordinated-wave governance yet. On a merge proposal it adopts the suite discipline (confirm kind unused; SHA-pin at the authority; additive-only after freeze; coordinated re-vendor across nplay/nview/glmps). See clip.v1.json for the model."
+}
