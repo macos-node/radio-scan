@@ -3,3 +3,6 @@
 .swiftpm/
 DerivedData/
 *.xcodeproj
+
+# Assembled app bundle (produced by build-app.sh)
+RadioBar.app/
