@@ -85,8 +85,11 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   signed-in pubkey (fallback to the suite owner), so a followed station
   round-trips back through the live subscription. Header identity chip + Follow
   button; import/generate/forget-key dialog; hover-✕ unfollow. Verified
-  tsc+vite+`cargo check`; the follow round-trip needs a real `nsec` + relay write
-  to confirm on a `make dev` run.
+  tsc+vite+`cargo check`; **keyring nsec import/read verified on Linux** (`make
+  dev`, libsecret — the imported suite npub matches the read filter, so the list
+  correctly reads the owner's own stations). **Still open:** the publish/follow
+  round-trip (Follow → `station.v1` → reads back) — the one remaining
+  `Needs-verify: linux` on the signing path.
 - **Build/CI (Linux↔macOS):** `gui/tauri/scripts/{dev,build-install}.sh` (native
   bundle per OS), a tag-triggered `.github/workflows/ntune-release.yml`
   (`ntune-v*`), and `gui/tauri/CONTRIBUTING-cross-session.md` for the split.
