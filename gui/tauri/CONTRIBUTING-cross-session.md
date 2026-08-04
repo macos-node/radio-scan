@@ -1,8 +1,8 @@
 # ntune — cross-session change contract v1.0
 
-> Status: PROPOSED 2026-08-04 (macOS session). Adapted from `xjmzx/pong`
-> CONTRIBUTING-cross-session v1.0. Pending Linux (`adjmx`) acceptance — amend in
-> place; major changes get a new version header.
+> Status: ACCEPTED v1.0 2026-08-04 (macOS + Linux sessions). Adapted from
+> `xjmzx/pong` CONTRIBUTING-cross-session v1.0. Amend in place; major changes get
+> a new version header.
 
 Two Claude sessions ship `gui/tauri` (ntune) in lockstep off one branch
 (`l4-ui-u0` → `main`): **Linux** (`adjmx`) and **macOS** (`macos-node`). This is
@@ -83,3 +83,6 @@ OS you run it on). Dev loop: `scripts/dev.sh`.
 - **v1.0** (macOS `macos-node`, 2026-08-04) — initial proposal, adapted from
   `xjmzx/pong` CONTRIBUTING-cross-session v1.0. Pending Linux (`adjmx`)
   acceptance.
+- **v1.0 accepted** (Linux `adjmx`, 2026-08-04) — adopted as of ntune U2; the U2
+  commit follows §2 (header) and §1 (`Needs-verify: linux/macos` on the keyring
+  path). Both sessions now bound to v1.0.
