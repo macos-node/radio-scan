@@ -85,12 +85,16 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   signed-in pubkey (fallback to the suite owner), so a followed station
   round-trips back through the live subscription. Header identity chip + Follow
   button; import/generate/forget-key dialog; hover-✕ unfollow. Verified
-  tsc+vite+`cargo check`; **fully verified on Linux** (`make dev`, libsecret):
-  nsec import/read (imported suite npub matches the read filter) **and the
-  publish/follow round-trip** — published "Acid Jazz", the live subscription read
-  it straight back (header → `1 · station.v1 (relays)`) and it tunes in. The
-  Linux signing path is clear; **`Needs-verify: macos`** (Keychain) remains for
-  the macOS session.
+  tsc+vite+`cargo check`; **verified on BOTH platforms**. Linux (`make dev`,
+  libsecret): nsec import/read (imported suite npub matches the read filter) **and
+  the publish/follow round-trip** — published "Acid Jazz", the live subscription
+  read it straight back (header → `1 · station.v1 (relays)`) and it tunes in.
+  macOS: the keyring backend needed a **platform-split** (U2 forced
+  secret-service everywhere → broken on a clean Mac; fixed `058c1fa` —
+  `apple-native` on macOS, `sync-secret-service` on Linux); Keychain round-trip
+  verified there, and the Linux build + libsecret backend reconfirmed after the
+  split. **Signing path clear on both platforms** — no open release-critical
+  `Needs-verify`, so an `ntune-v*` tag is unblocked (contract §3).
 - **Build/CI (Linux↔macOS):** `gui/tauri/scripts/{dev,build-install}.sh` (native
   bundle per OS), a tag-triggered `.github/workflows/ntune-release.yml`
   (`ntune-v*`), and `gui/tauri/CONTRIBUTING-cross-session.md` for the split.
