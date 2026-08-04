@@ -22,12 +22,22 @@ serde_json = "1"
 # Nostr identity + station.v1 publishing (U2). Same pins as ntree/ndisc.
 nostr = "0.43"
 nostr-sdk = "0.43"
-# OS keychain for the owner nsec (libsecret via secret-service on Linux).
-# Matches ntree — pure-Rust crypto, no OpenSSL.
-keyring = { version = "3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
+# OS keychain for the owner nsec — dependency is PLATFORM-SPLIT in the
+# [target.*] sections below (macOS Keychain vs Linux secret-service). A single
+# global `sync-secret-service` build stores via D-Bus on macOS too, which fails
+# on any Mac without a running secret-service — verified broken 2026-08-04.
 
 # --- reserved for later phases -----------------------------------------------
 # U3 loopback ICY proxy (port of radioscan.py) — nplay's loopback crate:
 #   tiny_http = "0.12"
 # U4 podcast RSS:
 #   feed-rs = "2"
+
+# --- OS keychain backend, per platform --------------------------------------
+# macOS/iOS → native Keychain (apple-native); Linux → libsecret/secret-service
+# (needs a pure-Rust crypto backend). Windows would use `windows-native`.
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
