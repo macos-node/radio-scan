@@ -81,10 +81,17 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   bit). No rodio backend needed. **Audio verified on Linux (dev):** Acid Jazz
   (AAC+) audible in `make dev` (webkit2gtk/gstreamer); the `.deb` `Depends` on
   `gstreamer1.0-plugins-bad` + `-libav` so a clean install has sound (§6 canary).
-  macOS WKWebView decodes AAC+ natively; `.AppImage` can't bundle these — document.
-  **Still open (`Needs-verify: linux`):** `http://` radio playing *through the
-  proxy* on Linux, ideally in the packaged `.deb`/`.AppImage` (mixed content only
-  bites the bundle, not dev). Build reconfirmed on Linux after the proxy deps.
+  macOS WKWebView decodes AAC+ natively. **`http://`-via-proxy VERIFIED on Linux**
+  in a packaged, secure-origin **release binary** (`target/release/ntune`, built
+  via `tauri build`): an `http` MP3 (Drone Zone) and an `http` `audio/aacp` mount
+  (Acid Jazz) both play; `https` controls play direct. Two fixes fell out of this:
+  webkit2gtk refuses the legacy `audio/aacp` MIME → the proxy now normalizes it to
+  `audio/aac`; and `resolveStations` now honors NIP-09 delete timestamps so
+  unfollow→refollow works.
+  **AppImage caveat:** `tauri build --bundles appimage` ships an *incomplete*
+  bundled GStreamer (missing `autoaudiosink`/`appsink`) → the AppImage freezes on
+  playback. The **`.deb`** (system-linked + codec `Depends`) is the sound Linux
+  artifact; the AppImage needs GStreamer-plugin bundling before it's shippable.
 - **U1 (done):** the station list is the user's published `station.v1` (kind
   31241) read off the relays (`relay.fizx.uk` + nos.lol + relay.primal.net), with
   the Rust seed as first-run fallback until U2 publishes any.
