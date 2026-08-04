@@ -8,7 +8,9 @@ import { IdentityDialog } from "./components/IdentityDialog";
 import { AddStationDialog } from "./components/AddStationDialog";
 import {
   getIdentity,
+  getProxyPort,
   seedStations,
+  streamUrl,
   unfollowStation,
   type Identity,
   type Station,
@@ -60,12 +62,18 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const [volume, setVolume] = useState<number>(loadVolume);
   const [version, setVersion] = useState("");
+  const [proxyPort, setProxyPort] = useState<number | null>(null);
   const [showIdentity, setShowIdentity] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
 
-  // Prefer the relay registry; fall back to the seed until it publishes (U2).
+  // Show published (followed) stations AND any seeds not already followed
+  // (deduped by url), so the seed list stays visible after publishing instead of
+  // being replaced — and stays testable.
   const usingRelay = relayStations.length > 0;
-  const stations = usingRelay ? relayStations : seed;
+  const stations = useMemo(() => {
+    const followed = new Set(relayStations.map((s) => s.url));
+    return [...relayStations, ...seed.filter((s) => !followed.has(s.url))];
+  }, [relayStations, seed]);
   const loading = !usingRelay && seed.length === 0 && relayLoading;
 
   /** Where the visible list came from — surfaced next to the section header. */
@@ -75,9 +83,9 @@ export default function App() {
     return "seed · no published stations yet";
   }, [usingRelay, relayStations.length, relayLoading]);
 
-  // One hidden <audio> element drives all playback. Remote HTTP streams play
-  // directly in WebKit2GTK — the asset-protocol limitation nplay routes around
-  // is local-file-only, so no Rust audio backend is needed.
+  // One hidden <audio> element drives all playback, fed through the Rust
+  // loopback proxy (src-tauri/src/proxy.rs) so a packaged secure origin can play
+  // plain http:// streams without mixed-content blocking. See streamUrl.
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -88,6 +96,9 @@ export default function App() {
       .then(setIdentity)
       .catch((e) => console.error("get_identity failed", e));
     getVersion().then(setVersion).catch(() => setVersion(""));
+    getProxyPort()
+      .then(setProxyPort)
+      .catch((e) => console.error("proxy_port failed", e));
   }, []);
 
   // Unfollow = publish a kind:5 delete; the live subscription drops it on read.
@@ -128,7 +139,13 @@ export default function App() {
       }
       setCurrent(s);
       setBuffering(true);
-      a.src = s.url;
+      // Only http:// streams need the loopback proxy (mixed-content on a secure
+      // origin); https:// plays directly. Fall back to direct if the port isn't
+      // ready yet.
+      a.src =
+        proxyPort != null && s.url.startsWith("http://")
+          ? streamUrl(proxyPort, s.url)
+          : s.url;
       a.volume = volume;
       a.play().catch((e) => {
         console.error("play failed", e);
@@ -136,7 +153,7 @@ export default function App() {
         setPlaying(false);
       });
     },
-    [current, playing, stop, volume],
+    [current, playing, stop, volume, proxyPort],
   );
 
   const togglePlay = useCallback(() => {

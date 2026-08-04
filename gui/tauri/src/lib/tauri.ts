@@ -1,16 +1,31 @@
 // Typed wrappers around the Rust commands in src-tauri/src/lib.rs.
 //
-// Radio streams play webview-side via a plain <audio> element on the remote
-// HTTP URL — WebKit2GTK plays *remote* media fine (the asset-protocol
-// limitation nplay hit is only for *local* files), so no Rust audio command is
-// needed. Rust owns the seed fallback (U0) + nostr identity and station.v1
-// publishing (U2). The nsec never leaves Rust except once on generate.
+// Radio plays webview-side in an <audio> element, but through a Rust loopback
+// proxy (src-tauri/src/proxy.rs): a packaged app's secure origin (tauri://…)
+// blocks a plain http:// stream as mixed content, so we play the stream via
+// http://127.0.0.1:<port> instead (see getProxyPort / streamUrl). Rust also owns
+// the seed fallback (U0) + nostr identity and station.v1 publishing (U2); the
+// nsec never leaves Rust except once on generate.
 
 import { invoke } from "@tauri-apps/api/core";
 import type { Station } from "./station";
 import { RELAYS } from "./relays";
 
 export type { Station };
+
+// --- loopback stream proxy ---------------------------------------------------
+
+/** The loopback proxy's port for this run (src-tauri/src/proxy.rs). */
+export function getProxyPort(): Promise<number> {
+  return invoke<number>("proxy_port");
+}
+
+/** The URL the <audio> element should load for an upstream stream: a loopback
+ *  origin, so a secure-origin (packaged) build isn't blocked by mixed content
+ *  when the stream is plain http://. */
+export function streamUrl(port: number, upstream: string): string {
+  return `http://127.0.0.1:${port}/?url=${encodeURIComponent(upstream)}`;
+}
 
 /** Starter stations, served from Rust so the IPC round-trip is exercised. The
  *  fallback shown until the user's followed `station.v1` (31241) events are read

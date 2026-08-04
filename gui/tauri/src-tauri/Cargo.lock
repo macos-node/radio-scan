@@ -2449,11 +2449,13 @@ dependencies = [
  "keyring",
  "nostr",
  "nostr-sdk",
+ "percent-encoding",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "tokio",
 ]
 
 [[package]]

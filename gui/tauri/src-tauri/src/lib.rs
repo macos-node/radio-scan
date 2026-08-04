@@ -1,8 +1,11 @@
 // ntune — radio-scan's L4 desktop UI (the tuner / player / subscription surface).
 // See ../../docs/radio-scan-ui-2026-08-04.md for the build map.
 //
-// Radio streams play webview-side in the <audio> element (WebKit2GTK plays
-// *remote* media fine), so there is no Rust audio backend. This module owns:
+// Radio plays webview-side in the <audio> element, but through a Rust loopback
+// proxy (proxy.rs) — a packaged app's secure origin (tauri://localhost) blocks a
+// plain http:// stream as mixed content, so we play http://127.0.0.1:<port>
+// instead. This module owns:
+//   • proxy_port — the loopback stream proxy's port (playback fix + U3 tap point)
 //   • seed_stations — the first-run fallback station list (U0)
 //   • nostr identity in the OS keychain + station.v1 publish/unfollow (U2)
 //
@@ -16,6 +19,21 @@ use nostr::{EventBuilder, Keys, Kind, SecretKey, Tag};
 use nostr_sdk::prelude::Output;
 use nostr_sdk::Client;
 use serde::Serialize;
+use tauri::Manager;
+
+mod proxy;
+
+// --- loopback stream proxy ---------------------------------------------------
+
+/// The port the loopback stream proxy (proxy.rs) bound to this run. The webview
+/// plays `http://127.0.0.1:<port>/?url=<upstream>` so a packaged (secure-origin)
+/// build isn't blocked by mixed content on plain http:// streams.
+struct ProxyPort(u16);
+
+#[tauri::command]
+fn proxy_port(state: tauri::State<'_, ProxyPort>) -> u16 {
+    state.0
+}
 
 // --- seed stations (U0 fallback) --------------------------------------------
 
@@ -54,6 +72,10 @@ fn station(
 /// Shown until the user's followed `station.v1` events are read off the relays.
 #[tauri::command]
 fn seed_stations() -> Vec<Station> {
+    // A small, varied starter set — reliable SomaFM channels (https + one http and
+    // one AAC, so both the direct and loopback-proxy paths get exercised in normal
+    // use), shown until the user's followed station.v1 events load. All verified
+    // playing 2026-08-04.
     vec![
         station(
             "groovesalad",
@@ -64,20 +86,28 @@ fn seed_stations() -> Vec<Station> {
             &["ambient", "downtempo"],
         ),
         station(
+            "secretagent",
+            "SomaFM — Secret Agent",
+            "https://ice1.somafm.com/secretagent-128-mp3",
+            "audio/mpeg",
+            128,
+            &["downtempo", "lounge"],
+        ),
+        station(
+            "groovesalad-aac",
+            "SomaFM — Groove Salad (AAC)",
+            "https://ice1.somafm.com/groovesalad-128-aac",
+            "audio/aac",
+            128,
+            &["ambient", "aac"],
+        ),
+        station(
             "dronezone",
             "SomaFM — Drone Zone",
-            "https://ice1.somafm.com/dronezone-128-mp3",
+            "http://ice1.somafm.com/dronezone-128-mp3",
             "audio/mpeg",
             128,
             &["ambient", "space"],
-        ),
-        station(
-            "defcon",
-            "SomaFM — DEF CON Radio",
-            "https://ice1.somafm.com/defcon-128-mp3",
-            "audio/mpeg",
-            128,
-            &["electronica"],
         ),
         station(
             "indiepop",
@@ -339,7 +369,14 @@ async fn unfollow_station(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            // The proxy runs on its own thread + runtime; grab its port for the UI.
+            let port = proxy::start()?;
+            app.manage(ProxyPort(port));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
+            proxy_port,
             seed_stations,
             get_identity,
             generate_identity,

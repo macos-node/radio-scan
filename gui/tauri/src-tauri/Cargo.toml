@@ -19,6 +19,11 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Loopback stream proxy (src/proxy.rs) — lets the webview play http:// radio from
+# a secure origin without mixed-content blocking. A raw TCP relay (no HTTP client
+# lib): tokio for the sockets, percent-encoding to decode the ?url= param.
+tokio = { version = "1", features = ["rt", "net", "io-util", "time"] }
+percent-encoding = "2"
 # Nostr identity + station.v1 publishing (U2). Same pins as ntree/ndisc.
 nostr = "0.43"
 nostr-sdk = "0.43"

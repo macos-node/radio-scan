@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Internet radio streams are frequently plain http:// (e.g. an Icecast
+         mount on a raw IP:port). macOS App Transport Security makes WKWebView
+         block cleartext loads by default, so those streams are silent on macOS
+         while Linux webkit2gtk (no ATS) plays them fine. A radio player must be
+         able to play any user-added stream, so allow cleartext loads. Tauri
+         merges this into the app's generated Info.plist (dev + bundle). -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
+</dict>
+</plist>
