@@ -30,8 +30,9 @@ export function StationList({
   if (stations.length === 0) {
     return (
       <div className="p-4 text-sm text-muted">
-        No stations yet. (U1 populates this from your followed{" "}
-        <span className="font-mono text-nostr">station.v1</span> events.)
+        No stations. (U2 lets you follow one — publishing a{" "}
+        <span className="font-mono text-nostr">station.v1</span> event you'll
+        read back here.)
       </div>
     );
   }

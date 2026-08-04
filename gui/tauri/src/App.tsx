@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { Palette, Radio } from "lucide-react";
 import { ToolbarIconButton } from "./components/ToolbarIconButton";
 import { StationList } from "./components/StationList";
 import { PlayerBar } from "./components/PlayerBar";
 import { seedStations, type Station } from "./lib/tauri";
+import { OWNER_PUBKEY } from "./lib/station";
+import { useStations } from "./hooks/useStations";
 import { shortVersion } from "./lib/format";
-import { cn } from "./lib/cn";
 
 const THEME_KEY = "ntune.theme";
 const VOLUME_KEY = "ntune.volume";
@@ -33,8 +34,13 @@ function loadVolume(): number {
 }
 
 export default function App() {
-  const [stations, setStations] = useState<Station[]>([]);
-  const [loading, setLoading] = useState(true);
+  // U1: the station list is the user's published `station.v1` (31241) events off
+  // the relays. The Rust seed is the first-run fallback until any exist.
+  const { stations: relayStations, loading: relayLoading } = useStations(
+    OWNER_PUBKEY,
+    true,
+  );
+  const [seed, setSeed] = useState<Station[]>([]);
   const [current, setCurrent] = useState<Station | null>(null);
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
@@ -42,16 +48,27 @@ export default function App() {
   const [volume, setVolume] = useState<number>(loadVolume);
   const [version, setVersion] = useState("");
 
+  // Prefer the relay registry; fall back to the seed until it publishes (U2).
+  const usingRelay = relayStations.length > 0;
+  const stations = usingRelay ? relayStations : seed;
+  const loading = !usingRelay && seed.length === 0 && relayLoading;
+
+  /** Where the visible list came from — surfaced next to the section header. */
+  const source = useMemo(() => {
+    if (usingRelay) return `${relayStations.length} · station.v1 (relays)`;
+    if (relayLoading) return "seed · checking relays…";
+    return "seed · no published stations yet";
+  }, [usingRelay, relayStations.length, relayLoading]);
+
   // One hidden <audio> element drives all playback. Remote HTTP streams play
   // directly in WebKit2GTK — the asset-protocol limitation nplay routes around
-  // is local-file-only, so U0 needs no Rust audio backend.
+  // is local-file-only, so no Rust audio backend is needed.
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     seedStations()
-      .then(setStations)
-      .catch((e) => console.error("seed_stations failed", e))
-      .finally(() => setLoading(false));
+      .then(setSeed)
+      .catch((e) => console.error("seed_stations failed", e));
     getVersion().then(setVersion).catch(() => setVersion(""));
   }, []);
 
@@ -143,16 +160,10 @@ export default function App() {
       <main className="flex min-h-0 flex-1">
         <section className="flex w-full min-w-0 flex-col overflow-y-auto">
           <div className="flex items-center gap-2 px-3 pb-1 pt-3">
-            <h2
-              className={cn(
-                "text-[11px] font-semibold uppercase tracking-wide text-muted",
-              )}
-            >
+            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
               Stations
             </h2>
-            <span className="font-mono text-[10px] text-muted/60">
-              seed · U1 → station.v1
-            </span>
+            <span className="font-mono text-[10px] text-muted/60">{source}</span>
           </div>
           <StationList
             stations={stations}
