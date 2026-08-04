@@ -75,7 +75,11 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
 `uk.fizx.ntune`; suite alias **ntune**.
 - **U0 (done):** Tauri shell, three themes, tune & listen. Remote streams play in
   the webview `<audio>` element — no rodio backend needed (confirmed: nplay's
-  asset-protocol detour is local-file-only).
+  asset-protocol detour is local-file-only). **Audio playback verified on Linux**
+  — Acid Jazz (AAC+) is audible in `make dev` (webkit2gtk/gstreamer); the `.deb`
+  now `Depends` on `gstreamer1.0-plugins-bad` + `gstreamer1.0-libav` so a clean
+  install has sound (§6 canary). macOS WKWebView decodes AAC+ natively; the
+  `.AppImage` can't bundle these reliably — document for users.
 - **U1 (done):** the station list is the user's published `station.v1` (kind
   31241) read off the relays (`relay.fizx.uk` + nos.lol + relay.primal.net), with
   the Rust seed as first-run fallback until U2 publishes any.
