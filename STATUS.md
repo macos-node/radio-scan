@@ -114,6 +114,13 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
 - **Build/CI (Linux↔macOS):** `gui/tauri/scripts/{dev,build-install}.sh` (native
   bundle per OS), a tag-triggered `.github/workflows/ntune-release.yml`
   (`ntune-v*`), and `gui/tauri/CONTRIBUTING-cross-session.md` for the split.
+- **Release readiness (`ntune-v0.1.0`):** version bumped to `0.1.0`; **every
+  release-critical path verified on BOTH platforms** — keyring signing, audio
+  playback, http-via-proxy (incl. the platform-opposite `audio/aacp` MIME:
+  remap→`audio/aac` on Linux only, pass-through on macOS). No open runtime
+  `Needs-verify`. **One blocker remains: the AppImage** freezes on playback
+  (bundled GStreamer gap — [`docs/appimage-gstreamer-2026-08-04.md`](gui/tauri/docs/appimage-gstreamer-2026-08-04.md)).
+  Recommendation: ship `.deb` + `.dmg`, drop the AppImage for v0.1.0.
 - **Next — U3:** now-playing via a Rust loopback ICY proxy (port of
   `radioscan.py`), then U4 podcast/npub feed tabs.
 
