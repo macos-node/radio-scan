@@ -79,14 +79,24 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
 - **U1 (done):** the station list is the user's published `station.v1` (kind
   31241) read off the relays (`relay.fizx.uk` + nos.lol + relay.primal.net), with
   the Rust seed as first-run fallback until U2 publishes any.
-- **Next — U2:** follow = publish `station.v1` (sign with the keyring `nsec`).
-  Then U3 now-playing via a Rust loopback ICY proxy (port of `radioscan.py`), U4
-  podcast/npub feed tabs.
+- **U2 (done, not yet live-tested):** first write path. Nostr identity in the OS
+  keychain (own `ntune`/`ntune-dev` service, mirrors ntree) + `publish_station`
+  (kind 31241) and `unfollow_station` (NIP-09 kind:5). Reads/publishes as the
+  signed-in pubkey (fallback to the suite owner), so a followed station
+  round-trips back through the live subscription. Header identity chip + Follow
+  button; import/generate/forget-key dialog; hover-✕ unfollow. Verified
+  tsc+vite+`cargo check`; the follow round-trip needs a real `nsec` + relay write
+  to confirm on a `make dev` run.
+- **Build/CI (Linux↔macOS):** `gui/tauri/scripts/{dev,build-install}.sh` (native
+  bundle per OS), a tag-triggered `.github/workflows/ntune-release.yml`
+  (`ntune-v*`), and `gui/tauri/CONTRIBUTING-cross-session.md` for the split.
+- **Next — U3:** now-playing via a Rust loopback ICY proxy (port of
+  `radioscan.py`), then U4 podcast/npub feed tabs.
 
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
   reconcile heard tracks vs ndisc's catalogue) and the Nostr publisher/poller.
-  The suite-level UI is now **underway** — ntune (§6) is at U0–U1; RadioBar (§5)
+  The suite-level UI is now **underway** — ntune (§6) is at U0–U2; RadioBar (§5)
   remains a local macOS viewer, not the suite surface. See the build map's open
   decisions (n-alias, dedup window, relay-filterable work key, privacy
   granularity, Python-vs-Rust) and the L4 map's (RadioBar fate, playback engine,
