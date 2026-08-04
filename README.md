@@ -141,6 +141,28 @@ python3 radioscan.py resummarize mystation    # rebuild all summaries from the r
 
 (Add `--config config.json` to resolve a station by name, or `--data-dir DIR`.)
 
+## macOS menubar app (RadioBar)
+
+`gui/macos/` ships **RadioBar**, a native SwiftUI menubar app that lets you watch
+the logger without a terminal. Click the menubar icon for the current track, the
+last few plays, and top artists, with buttons to pause/resume logging and open
+the data folder. The icon reflects state — a broadcasting antenna when logging,
+slashed when paused. It's a thin **viewer/controller**: it reads the logger's
+JSONL output and drives the `launchd` service, and never touches the stream
+itself. macOS-only (it depends on SwiftUI/AppKit, which don't exist on Linux).
+
+```bash
+cd gui/macos
+swift run                       # dev run
+./build-app.sh /Applications    # build RadioBar.app + install it (then double-click to launch)
+```
+
+See [`gui/macos/README.md`](./gui/macos/README.md) for details. **Note:** it
+currently targets the personal single-station deployment (`~/RadioTuner`, launchd
+label `com.tigger.acidjazz`); pointing it at `radioscan.py`'s own multi-station
+layout (`~/radio-scan-data/<name>/`, label `com.radioscan`) is still on the
+to-do list.
+
 ## Enrichment
 
 The stream gives you artist + title; to add album/year, run the MusicBrainz

@@ -28,6 +28,10 @@ others) *hear*. It:
 - is the first real consumer of the deferred **cross-user aggregation** and
   **master-release-key** items on the SUITE.md roadmap.
 
+A local **macOS menubar viewer** (`gui/macos/`, RadioBar) already exists as a
+non-Nostr front-end over the logger's output — an early seed of the suite's
+deferred P4 UI, not itself a suite surface.
+
 Full identity: [`radio-scan-introduction.md`](./radio-scan-introduction.md).
 Build order and open decisions:
 [`docs/radio-scan-buildmap-2026-07-28.md`](./docs/radio-scan-buildmap-2026-07-28.md).
