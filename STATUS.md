@@ -1,6 +1,6 @@
 # radio-scan — project status
 
-_Last updated: 2026-08-02_
+_Last updated: 2026-08-04_
 
 A snapshot of where this project stands, for picking it back up (in Claude Code
 or elsewhere). Grew from a personal playlist logger into the seed of an
@@ -25,6 +25,7 @@ The logger generalised into a repo at **github.com/macos-node/radio-scan**
 - `service/` — macOS launchd + Linux systemd installers.
 - `enrich/enrich.py` — MusicBrainz album/year lookup.
 - `gui/macos/` — RadioBar, a native macOS menubar app (see §5).
+- `gui/tauri/` — **ntune**, the L4 cross-platform desktop tuner/player (see §6).
 - `skill/SKILL.md` — agent skill. Plus `README.md`, `.github/workflows/ci.yml`, MIT `LICENSE`.
 
 ## 3. n-suite design (notes in the repo)
@@ -34,6 +35,9 @@ in, share the streams they follow, publish airplay, and interact over Nostr).
 - `radio-scan-introduction.md` — suite identity.
 - `docs/radio-scan-buildmap-2026-07-28.md` — three layers (L1 sensor / L2 suite
   bridge / L3 Nostr), phased P0–P4, and an open-decisions worklist.
+- `docs/radio-scan-ui-2026-08-04.md` — the **L4 UI build map** (the tuner/player;
+  resolves the prior map's P4-UI open decision in favour of building it, phases
+  U0–U5). See §6.
 - `SUITE.md` — placeholder pointing at ndisc's canonical hub (to vendor).
 
 ## 4. Wire-contract drafts (proposal, testing-only)
@@ -61,12 +65,32 @@ icon reflects logging state. Not a stream reader. macOS-only (SwiftUI/AppKit).
   (`~/radio-scan-data/<name>/`, label `com.radioscan`) — reconcile when
   generalising to multi-station.
 
+## 6. L4 desktop UI — ntune (building)
+The suite-level tuner/player at `gui/tauri/` (Tauri 2 + React 19 + TS + Tailwind,
+matching nplay/ndisc). Where RadioBar (§5) is a macOS-only *viewer* over the
+logger, **ntune is a cross-platform *player*** — the first thing here that
+actually listens (the L1 sensor discards audio). Radio-first, with podcast RSS +
+per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
+`docs/radio-scan-ui-2026-08-04.md` (phases U0–U5). Developed on Linux; identifier
+`uk.fizx.ntune`; suite alias **ntune**.
+- **U0 (done):** Tauri shell, three themes, tune & listen. Remote streams play in
+  the webview `<audio>` element — no rodio backend needed (confirmed: nplay's
+  asset-protocol detour is local-file-only).
+- **U1 (done):** the station list is the user's published `station.v1` (kind
+  31241) read off the relays (`relay.fizx.uk` + nos.lol + relay.primal.net), with
+  the Rust seed as first-run fallback until U2 publishes any.
+- **Next — U2:** follow = publish `station.v1` (sign with the keyring `nsec`).
+  Then U3 now-playing via a Rust loopback ICY proxy (port of `radioscan.py`), U4
+  podcast/npub feed tabs.
+
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
-  reconcile heard tracks vs ndisc's catalogue), the Nostr publisher/poller, and
-  the suite-level (P4) UI — RadioBar is a local viewer only, not a suite surface.
-  See the build map's open decisions (n-alias, dedup window, relay-filterable
-  work key, privacy granularity, Python-vs-Rust, P4 UI).
+  reconcile heard tracks vs ndisc's catalogue) and the Nostr publisher/poller.
+  The suite-level UI is now **underway** — ntune (§6) is at U0–U1; RadioBar (§5)
+  remains a local macOS viewer, not the suite surface. See the build map's open
+  decisions (n-alias, dedup window, relay-filterable work key, privacy
+  granularity, Python-vs-Rust) and the L4 map's (RadioBar fate, playback engine,
+  who publishes airplay).
 
 _(The schema drafts under `schema/` are now pushed — commit `98d6175`.)_
 
