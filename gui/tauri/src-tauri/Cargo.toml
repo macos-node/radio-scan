@@ -19,11 +19,14 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Nostr identity + station.v1 publishing (U2). Same pins as ntree/ndisc.
+nostr = "0.43"
+nostr-sdk = "0.43"
+# OS keychain for the owner nsec (libsecret via secret-service on Linux).
+# Matches ntree — pure-Rust crypto, no OpenSSL.
+keyring = { version = "3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
 
-# --- reserved for later phases (kept out of the U0 build) --------------------
-# U2 publish station.v1 + U3 relay reads — match ntree's pins:
-#   nostr = "0.43"
-#   nostr-sdk = "0.43"
+# --- reserved for later phases -----------------------------------------------
 # U3 loopback ICY proxy (port of radioscan.py) — nplay's loopback crate:
 #   tiny_http = "0.12"
 # U4 podcast RSS:

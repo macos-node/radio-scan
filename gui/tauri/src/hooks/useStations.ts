@@ -6,16 +6,7 @@ import {
   resolveStations,
   type Station,
 } from "../lib/station";
-
-// The tuner is a READ-ONLY consumer of station.v1 in U1 — no identity, no
-// publishing yet (that is U2). Fixed relay set, the suite default with
-// relay.fizx.uk as the discovery hub (same set nplay uses). A relay-config UI
-// comes later. Transport only; the parse + dedupe maths is lib/station.ts.
-const RELAYS = [
-  "wss://relay.fizx.uk",
-  "wss://nos.lol",
-  "wss://relay.primal.net",
-];
+import { RELAYS } from "../lib/relays";
 
 export interface StationsState {
   stations: Station[];

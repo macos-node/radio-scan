@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { Palette, Radio } from "lucide-react";
+import { KeyRound, Palette, Plus, Radio } from "lucide-react";
 import { ToolbarIconButton } from "./components/ToolbarIconButton";
 import { StationList } from "./components/StationList";
 import { PlayerBar } from "./components/PlayerBar";
-import { seedStations, type Station } from "./lib/tauri";
+import { IdentityDialog } from "./components/IdentityDialog";
+import { AddStationDialog } from "./components/AddStationDialog";
+import {
+  getIdentity,
+  seedStations,
+  unfollowStation,
+  type Identity,
+  type Station,
+} from "./lib/tauri";
 import { OWNER_PUBKEY } from "./lib/station";
 import { useStations } from "./hooks/useStations";
 import { shortVersion } from "./lib/format";
@@ -34,10 +42,15 @@ function loadVolume(): number {
 }
 
 export default function App() {
-  // U1: the station list is the user's published `station.v1` (31241) events off
-  // the relays. The Rust seed is the first-run fallback until any exist.
+  // U2: read (and publish) the signed-in identity's own stations; with no key
+  // set, fall back to reading the suite owner's published set.
+  const [identity, setIdentity] = useState<Identity | null>(null);
+  const ownerHex = identity?.pk ?? OWNER_PUBKEY;
+
+  // U1: the station list is that pubkey's published `station.v1` (31241) events
+  // off the relays. The Rust seed is the first-run fallback until any exist.
   const { stations: relayStations, loading: relayLoading } = useStations(
-    OWNER_PUBKEY,
+    ownerHex,
     true,
   );
   const [seed, setSeed] = useState<Station[]>([]);
@@ -47,6 +60,8 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const [volume, setVolume] = useState<number>(loadVolume);
   const [version, setVersion] = useState("");
+  const [showIdentity, setShowIdentity] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
 
   // Prefer the relay registry; fall back to the seed until it publishes (U2).
   const usingRelay = relayStations.length > 0;
@@ -69,8 +84,20 @@ export default function App() {
     seedStations()
       .then(setSeed)
       .catch((e) => console.error("seed_stations failed", e));
+    getIdentity()
+      .then(setIdentity)
+      .catch((e) => console.error("get_identity failed", e));
     getVersion().then(setVersion).catch(() => setVersion(""));
   }, []);
+
+  // Unfollow = publish a kind:5 delete; the live subscription drops it on read.
+  const unfollow = useCallback(
+    (s: Station) => {
+      if (!identity) return;
+      unfollowStation(s.slug).catch((e) => console.error("unfollow failed", e));
+    },
+    [identity],
+  );
 
   useEffect(() => applyTheme(theme), [theme]);
 
@@ -147,6 +174,29 @@ export default function App() {
         )}
         <span className="text-xs text-muted">radio-scan · tuner</span>
         <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setShowAdd(true)}
+            disabled={!identity}
+            title={
+              identity ? "Follow a station" : "Set a signing key to follow stations"
+            }
+            className="flex items-center gap-1 rounded-sm border border-transparent px-2 py-1 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg disabled:pointer-events-none disabled:opacity-40"
+          >
+            <Plus size={14} />
+            Follow
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowIdentity(true)}
+            title={identity ? `Signed in — ${identity.npub}` : "No signing key"}
+            className="flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+          >
+            <KeyRound size={14} className={identity ? "text-nostr" : undefined} />
+            <span className="font-mono">
+              {identity ? `${identity.npub.slice(0, 12)}…` : "no key"}
+            </span>
+          </button>
           <ToolbarIconButton
             icon={<Palette size={15} />}
             title={`Theme: ${theme} (click to cycle)`}
@@ -171,6 +221,7 @@ export default function App() {
             playing={playing}
             loading={loading}
             onTune={tune}
+            onUnfollow={identity && usingRelay ? unfollow : undefined}
           />
         </section>
       </main>
@@ -200,6 +251,22 @@ export default function App() {
           setPlaying(false);
         }}
       />
+
+      {showIdentity && (
+        <IdentityDialog
+          identity={identity}
+          onClose={() => setShowIdentity(false)}
+          onChange={setIdentity}
+        />
+      )}
+      {showAdd && (
+        <AddStationDialog
+          onClose={() => setShowAdd(false)}
+          onPublished={() => {
+            /* the live relay subscription reads the new station.v1 back in */
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,22 +1,24 @@
-import { Loader2, Radio } from "lucide-react";
+import { Loader2, Radio, X } from "lucide-react";
 import type { Station } from "../lib/tauri";
 import { cn } from "../lib/cn";
 
-/** The tuner's station list. In U0 the rows come from the seed command; from U1
- *  they are `station.v1` events and each row's dot becomes the source-model dot
- *  (lib/source.ts) — live/off now, matched/unmatched against ndisc later. */
+/** The tuner's station list. Rows are the user's `station.v1` events (or the
+ *  seed fallback). When `onUnfollow` is provided (the signed-in owner's own
+ *  relay list), each row gets a hover ✕ that publishes a kind:5 delete. */
 export function StationList({
   stations,
   currentSlug,
   playing,
   loading,
   onTune,
+  onUnfollow,
 }: {
   stations: Station[];
   currentSlug: string | null;
   playing: boolean;
   loading: boolean;
   onTune: (s: Station) => void;
+  onUnfollow?: (s: Station) => void;
 }) {
   if (loading) {
     return (
@@ -30,9 +32,9 @@ export function StationList({
   if (stations.length === 0) {
     return (
       <div className="p-4 text-sm text-muted">
-        No stations. (U2 lets you follow one — publishing a{" "}
-        <span className="font-mono text-nostr">station.v1</span> event you'll
-        read back here.)
+        No stations. Use <span className="text-fg">Follow</span> to publish a{" "}
+        <span className="font-mono text-nostr">station.v1</span> and read it back
+        here.
       </div>
     );
   }
@@ -42,19 +44,19 @@ export function StationList({
       {stations.map((s) => {
         const current = s.slug === currentSlug;
         return (
-          <li key={s.slug}>
+          <li key={s.slug} className="group relative flex items-stretch">
             <button
               type="button"
               onClick={() => onTune(s)}
               className={cn(
-                "flex w-full items-center gap-3 px-3 py-2 text-left",
+                "flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left",
                 "border-l-2 border-transparent transition-colors",
                 "hover:bg-surfaceHover",
                 current && "border-accent bg-surface",
               )}
             >
               {/* Source dot — green when this station is the one playing. The
-                  full lib/source.ts dot model lands with the relay data (U1). */}
+                  full lib/source.ts dot model lands with matched/unmatched. */}
               <span
                 className={cn(
                   "h-2 w-2 shrink-0 rounded-full",
@@ -81,6 +83,17 @@ export function StationList({
                 </span>
               )}
             </button>
+            {onUnfollow && (
+              <button
+                type="button"
+                onClick={() => onUnfollow(s)}
+                title={`Unfollow ${s.name}`}
+                aria-label={`Unfollow ${s.name}`}
+                className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+              >
+                <X size={14} />
+              </button>
+            )}
           </li>
         );
       })}

@@ -146,7 +146,7 @@ exactly like an acquisition-source dot, and matched/unmatched maps to leaf-dots.
 Each phase is independently useful. Do not start a phase before its predecessor's
 seam is stable.
 
-### U0 — Scaffold + tune & listen  *(no Nostr, no proxy)*
+### U0 — Scaffold + tune & listen  *(no Nostr, no proxy)* — ✅ done
 - Tauri 2 + React 19 + TS + Tailwind v3, `make dev`/`make install`/`make check`,
   `~/.local` install, the shared `--c-*` design tokens (never hex), squared
   corners, Helvetica-UI / mono-for-IDs, collapse-flanks layout, `shortVersion()`
@@ -157,18 +157,26 @@ seam is stable.
 - **Deliverable:** a working internet-radio player on the suite's stack. Proves
   remote-HTTP playback with zero Rust audio code.
 
-### U1 — Station library from `station.v1`
+### U1 — Station library from `station.v1` — ✅ done
 - Subscribe to `station.v1` (31241) off the relays (own follows first), keeping
   `relay.fizx.uk` in the set. Render the **station directory** with the source-dot
   model; hydrate `name`/`fmt`/`br` from tags. Reuse the ndisc/ntree relay client.
 - **Deliverable:** the tuner's station list *is* the Nostr registry, read-only.
+- *As built:* `lib/station.ts` (pure parse/resolve) + `hooks/useStations.ts`
+  (`SimplePool`), reads `ownerHex`'s stations, seed fallback until any exist.
 
-### U2 — Follow = publish `station.v1`  *(first write path)*
+### U2 — Follow = publish `station.v1`  *(first write path)* — ✅ done
 - Add/follow/edit a station → sign & publish `station.v1` with the keyring `nsec`
   (mirror `ntree`'s publish flow and `useReactions` signer). Parameterised-
   replaceable `d` = `airplay:station:<slug>`, URL in the `r` tag.
 - **Deliverable:** following a station in the UI puts it on the relays for others
   to discover — L4 is now the registry's author.
+- *As built:* keyring identity in Rust (`get/generate/import/clear_identity`,
+  own `ntune`/`ntune-dev` service, mirrors ntree) + `publish_station` (31241) and
+  `unfollow_station` (NIP-09 kind:5). The read filter uses the **signed-in
+  pubkey** (fallback to the suite owner), so publish + read stay self-consistent;
+  the live subscription reads a new station straight back in. Header gains an
+  identity chip + Follow button; rows get a hover ✕ to unfollow.
 
 ### U3 — Now-playing via the loopback ICY proxy
 - Implement the Rust loopback proxy (port `radioscan.py`'s ICY parser →

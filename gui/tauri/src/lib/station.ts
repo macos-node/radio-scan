@@ -39,6 +39,15 @@ export interface Station {
   tags: string[];
 }
 
+/** Derive a stable, filesystem-safe slug (the `d` suffix) from a station name.
+ *  Lowercased, non-alphanumerics collapsed to single hyphens, trimmed. */
+export function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 const tag = (ev: NostrEvent, k: string): string | undefined =>
   ev.tags.find((t) => t[0] === k)?.[1];
 const all = (ev: NostrEvent, k: string): string[] =>
