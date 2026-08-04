@@ -87,12 +87,18 @@ export function resolveStations(
   events: NostrEvent[],
   ownerPubkey: string,
 ): Station[] {
-  // Owner kind:5 deletions referencing a station address (NIP-09 `a` tags).
-  const deleted = new Set<string>();
+  // Owner kind:5 deletions referencing a station address (NIP-09 `a` tags),
+  // keyed to the LATEST deletion time per address. NIP-09: a deletion only
+  // voids events with created_at <= its own — so re-publishing a station after
+  // unfollowing it (same slug, later timestamp) must NOT stay tombstoned.
+  const deletedAt = new Map<string, number>();
   for (const e of events) {
     if (e.kind !== DELETE_KIND || e.pubkey !== ownerPubkey) continue;
     for (const t of e.tags) {
-      if (t[0] === "a" && t[1]?.startsWith(`${STATION_KIND}:`)) deleted.add(t[1]);
+      if (t[0] === "a" && t[1]?.startsWith(`${STATION_KIND}:`)) {
+        const prev = deletedAt.get(t[1]) ?? 0;
+        if (e.created_at > prev) deletedAt.set(t[1], e.created_at);
+      }
     }
   }
 
@@ -100,7 +106,9 @@ export function resolveStations(
   for (const ev of events) {
     if (ev.kind !== STATION_KIND || ev.pubkey !== ownerPubkey) continue;
     const address = stationAddress(ev);
-    if (deleted.has(address)) continue;
+    const delAt = deletedAt.get(address);
+    // Suppress only if deleted and NOT re-published after the deletion.
+    if (delAt !== undefined && ev.created_at <= delAt) continue;
     const station = parseStation(ev);
     if (!station) continue;
     const prev = byAddr.get(address);
