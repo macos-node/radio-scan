@@ -63,6 +63,9 @@ export default function App() {
   const [volume, setVolume] = useState<number>(loadVolume);
   const [version, setVersion] = useState("");
   const [proxyPort, setProxyPort] = useState<number | null>(null);
+  // Stations just published this session — shown immediately (optimistic insert)
+  // because the live subscription doesn't reliably echo your own fresh publish.
+  const [optimistic, setOptimistic] = useState<Station[]>([]);
   const [showIdentity, setShowIdentity] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
 
@@ -70,10 +73,18 @@ export default function App() {
   // (deduped by url), so the seed list stays visible after publishing instead of
   // being replaced — and stays testable.
   const usingRelay = relayStations.length > 0;
+  // Published stations, then just-published (optimistic) ones the subscription
+  // hasn't echoed yet, then seeds — deduped by url so nothing shows twice.
   const stations = useMemo(() => {
-    const followed = new Set(relayStations.map((s) => s.url));
-    return [...relayStations, ...seed.filter((s) => !followed.has(s.url))];
-  }, [relayStations, seed]);
+    const seen = new Set<string>();
+    const out: Station[] = [];
+    for (const s of [...relayStations, ...optimistic, ...seed]) {
+      if (seen.has(s.url)) continue;
+      seen.add(s.url);
+      out.push(s);
+    }
+    return out;
+  }, [relayStations, optimistic, seed]);
   const loading = !usingRelay && seed.length === 0 && relayLoading;
 
   /** Where the visible list came from — surfaced next to the section header. */
@@ -105,6 +116,7 @@ export default function App() {
   const unfollow = useCallback(
     (s: Station) => {
       if (!identity) return;
+      setOptimistic((prev) => prev.filter((p) => p.url !== s.url));
       unfollowStation(s.slug).catch((e) => console.error("unfollow failed", e));
     },
     [identity],
@@ -279,9 +291,9 @@ export default function App() {
       {showAdd && (
         <AddStationDialog
           onClose={() => setShowAdd(false)}
-          onPublished={() => {
-            /* the live relay subscription reads the new station.v1 back in */
-          }}
+          onPublished={(s) =>
+            setOptimistic((prev) => [s, ...prev.filter((p) => p.url !== s.url)])
+          }
         />
       )}
     </div>

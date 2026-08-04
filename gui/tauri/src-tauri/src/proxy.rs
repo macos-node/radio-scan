@@ -101,12 +101,17 @@ async fn handle(mut client: TcpStream) {
             .await;
         return;
     };
-    // webkit2gtk's media loader refuses the legacy SHOUTcast `audio/aacp` MIME
-    // (HE-AAC / aacPlus) even though the payload is ordinary decodable AAC —
-    // normalize it to the standard `audio/aac` it accepts. Harmless on macOS
-    // WKWebView, which accepts either. Only this alias is remapped; everything
-    // else passes through untouched.
-    let content_type = if content_type.eq_ignore_ascii_case("audio/aacp") {
+    // The two webviews want OPPOSITE MIMEs for the same HE-AAC stream:
+    //   • webkit2gtk (Linux) refuses the legacy SHOUTcast `audio/aacp` alias and
+    //     needs the standard `audio/aac`.
+    //   • WKWebView (macOS) plays `audio/aacp` but FAILS on `audio/aac` for the
+    //     same payload.
+    // So remap `audio/aacp` -> `audio/aac` on Linux ONLY; pass it through on
+    // macOS. Both verified on real hardware 2026-08-04. Only this alias is
+    // touched; everything else passes through untouched.
+    let content_type = if cfg!(target_os = "linux")
+        && content_type.eq_ignore_ascii_case("audio/aacp")
+    {
         "audio/aac".to_string()
     } else {
         content_type

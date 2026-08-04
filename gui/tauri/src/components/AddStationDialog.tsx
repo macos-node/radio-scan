@@ -2,16 +2,17 @@ import { useState } from "react";
 import { Loader2, Radio } from "lucide-react";
 import { Modal } from "./Modal";
 import { publishStation } from "../lib/tauri";
-import { slugify } from "../lib/station";
+import { slugify, type Station } from "../lib/station";
 
-/** Follow a stream: publish a station.v1. On success the live relay
- *  subscription reads the new event straight back into the list. */
+/** Follow a stream: publish a station.v1. On success we hand the new station
+ *  back for an optimistic insert — the live subscription doesn't reliably echo
+ *  a replaceable event you just published, so don't wait on it. */
 export function AddStationDialog({
   onClose,
   onPublished,
 }: {
   onClose: () => void;
-  onPublished: () => void;
+  onPublished: (station: Station) => void;
 }) {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -29,14 +30,24 @@ export function AddStationDialog({
         .split(",")
         .map((t) => slugify(t))
         .filter(Boolean);
+      const slug = slugify(name);
+      const trimmedName = name.trim();
+      const trimmedUrl = url.trim();
       await publishStation({
-        slug: slugify(name),
-        name: name.trim(),
-        url: url.trim(),
+        slug,
+        name: trimmedName,
+        url: trimmedUrl,
         tags,
         description: "",
       });
-      onPublished();
+      onPublished({
+        slug,
+        name: trimmedName,
+        url: trimmedUrl,
+        fmt: null,
+        bitrate: null,
+        tags,
+      });
       onClose();
     } catch (e) {
       setError(String(e));
