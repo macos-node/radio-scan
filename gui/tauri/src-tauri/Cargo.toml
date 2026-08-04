@@ -1,0 +1,30 @@
+[package]
+name = "ntune"
+version = "0.0.1"
+description = "radio-scan L4 desktop UI — tuner / player / subscription surface (n-suite)"
+authors = ["macos-node"]
+edition = "2021"
+
+[lib]
+# The `_lib` suffix keeps the lib name unique so it doesn't conflict with the
+# bin name on Windows (see rust-lang/cargo#8519). Mirrors nplay.
+name = "ntune_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# --- reserved for later phases (kept out of the U0 build) --------------------
+# U2 publish station.v1 + U3 relay reads — match ntree's pins:
+#   nostr = "0.43"
+#   nostr-sdk = "0.43"
+# U3 loopback ICY proxy (port of radioscan.py) — nplay's loopback crate:
+#   tiny_http = "0.12"
+# U4 podcast RSS:
+#   feed-rs = "2"

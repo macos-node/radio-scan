@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme palettes — channel triples consumed by tailwind.config.ts as
+   rgb(var(--c-x) / <alpha-value>). :root is the fizx.uk scheme; .theme-upleb
+   swaps to the upleb.uk orange scheme (radio-scan's macos-node home); .theme-mono
+   greys the chrome but keeps semantic hue. Mirrors nplay / ndisc verbatim so the
+   whole suite reads as one system. */
+:root {
+  --c-bg: 9 13 18;
+  --c-panel: 13 17 23;
+  --c-surface: 19 29 42;
+  --c-surface-hover: 30 45 61;
+  --c-fg: 240 246 252;
+  --c-muted: 107 122 141;
+  --c-accent: 122 240 205;
+  --c-digital: 125 211 252;
+  --c-ok: 74 222 128;
+  --c-warn: 251 191 36;
+  --c-alert: 248 113 113;
+  --c-mauve: 167 139 250;
+  --c-auburn: 178 96 58;
+  --c-medium: 74 222 128;
+  /* Theme-neutral Nostr tint — publish/relay UI reads the same under every
+     theme (suite rule). Defined ONCE here, deliberately not overridden below. */
+  --c-nostr: 130 95 235;
+}
+
+.theme-upleb {
+  --c-bg: 10 15 21;
+  --c-panel: 13 17 23;
+  --c-surface: 22 32 45;
+  --c-surface-hover: 30 45 61;
+  --c-fg: 201 209 217;
+  --c-muted: 107 122 141;
+  --c-accent: 255 182 158;
+  --c-digital: 255 120 73;
+  --c-ok: 74 222 128;
+  --c-warn: 251 191 36;
+  --c-alert: 248 113 113;
+  --c-mauve: 255 179 71;
+  --c-auburn: 178 96 58;
+  --c-medium: 74 222 128;
+}
+
+/* Monochrome — chrome goes greyscale; MEANING keeps its colour. Status tokens
+   (ok / warn / alert / auburn) stay in hue on purpose: for a live/off station
+   dot, hue is the only channel carrying the signal. Mirrors nplay's reasoning. */
+.theme-mono {
+  --c-bg: 10 10 11;
+  --c-panel: 16 16 18;
+  --c-surface: 28 28 31;
+  --c-surface-hover: 44 44 48;
+  --c-fg: 240 240 243;
+  --c-muted: 122 122 128;
+  --c-accent: 232 232 236;
+  --c-digital: 152 152 159;
+  --c-mauve: 198 198 204;
+  --c-ok: 74 222 128;
+  --c-warn: 251 191 36;
+  --c-alert: 248 113 113;
+  --c-auburn: 178 96 58;
+  --c-medium: 210 210 216;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-bg text-fg font-sans antialiased;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  @apply bg-surfaceHover text-fg;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--c-surface-hover));
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--c-muted));
+}

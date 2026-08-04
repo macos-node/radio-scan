@@ -1,0 +1,13 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="112" fill="#0D1117"/>
+  <!-- radio body -->
+  <rect x="96" y="176" width="320" height="216" rx="28" stroke="#A78BFA" stroke-width="20"/>
+  <!-- antenna -->
+  <path d="M300 176 L392 108" stroke="#A78BFA" stroke-width="20" stroke-linecap="round"/>
+  <!-- tuner dial -->
+  <circle cx="332" cy="284" r="48" stroke="#7AF0CD" stroke-width="20"/>
+  <circle cx="332" cy="284" r="8" fill="#7AF0CD"/>
+  <!-- broadcast waves from the dial -->
+  <path d="M168 256 a44 44 0 0 1 0 56" stroke="#7DD3FC" stroke-width="18" stroke-linecap="round"/>
+  <path d="M204 240 a80 80 0 0 1 0 88" stroke="#7DD3FC" stroke-width="18" stroke-linecap="round"/>
+</svg>

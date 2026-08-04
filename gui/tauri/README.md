@@ -1,0 +1,41 @@
+# ntune — radio-scan L4 desktop UI
+
+The **tuner / player / subscription** surface of [radio-scan](../../README.md) —
+the n-suite's listening front-end. Where the L1 Python sensor *observes* what
+stations play (and discards the audio), ntune *plays* them: tune a stream,
+follow it, and (later phases) subscribe to podcasts and per-npub audio feeds.
+
+> Build map & phased plan: [`../../docs/radio-scan-ui-2026-08-04.md`](../../docs/radio-scan-ui-2026-08-04.md).
+> Suite conventions & wire contract: [`../../SUITE.md`](../../SUITE.md),
+> [`../../schema/airplay-design-2026-07-28.md`](../../schema/airplay-design-2026-07-28.md).
+
+## Status — **U0 (scaffold)**
+
+A working internet-radio player. It seeds a handful of SomaFM stations from Rust
+(`seed_stations`), lists them, and plays the selected stream in the webview
+`<audio>` element with play/stop and volume. No Nostr, no now-playing metadata,
+no Rust audio backend yet — those arrive in later phases:
+
+| Phase | Adds |
+|-------|------|
+| **U0** ✅ | Tauri shell, themes, tune & listen (webview `<audio>`) |
+| U1 | Station list from `station.v1` (31241) off the relays |
+| U2 | Follow = publish `station.v1` (keyring `nsec`) |
+| U3 | Now-playing via a Rust loopback ICY proxy (port of `radioscan.py`) |
+| U4 | Podcast RSS (`feed-rs`) + per-npub `1063` feed tabs |
+| U5 | Polish: spectrum, gapless, NIP-46, `feed.v1` notes |
+
+## Develop
+
+```bash
+make deps     # npm install + cargo fetch (one-time)
+make dev      # tauri dev (hot-reload)
+make check    # tsc + vite build + cargo check
+make icons    # regenerate the raster icon set from icon.svg
+make install  # binary + .desktop under ~/.local
+```
+
+Stack: Tauri 2 · React 19 · TypeScript · Tailwind v3 — matching the rest of the
+suite (`nplay`/`ndisc`). Cross-platform, developed on Linux even though the
+repo's home is `macos-node` (the sensor's macOS service is the reason for that
+home; the UI is not macOS-bound).
