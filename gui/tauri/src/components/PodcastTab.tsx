@@ -5,6 +5,8 @@ import {
   ChevronRight,
   Copy,
   Download,
+  LayoutGrid,
+  List,
   Loader2,
   Music,
   Play,
@@ -21,6 +23,8 @@ import {
   type Episode,
   type Podcast,
 } from "../lib/tauri";
+import { podcastIconKey } from "../lib/mediaIcon";
+import { MediaGlyph } from "./MediaGlyph";
 import { cn } from "../lib/cn";
 
 interface Sub {
@@ -29,6 +33,9 @@ interface Sub {
 }
 
 const SUBS_KEY = "ntune.podcasts";
+const VIEW_KEY = "ntune.podcastView";
+
+type View = "list" | "cards";
 
 function loadSubs(): Sub[] {
   try {
@@ -39,6 +46,10 @@ function loadSubs(): Sub[] {
 }
 function saveSubs(s: Sub[]) {
   localStorage.setItem(SUBS_KEY, JSON.stringify(s));
+}
+
+function loadView(): View {
+  return localStorage.getItem(VIEW_KEY) === "cards" ? "cards" : "list";
 }
 
 function fmtDuration(secs: number | null): string {
@@ -52,8 +63,74 @@ function fmtDate(unix: number | null): string {
   return new Date(unix * 1000).toISOString().slice(0, 10);
 }
 
+/** Episode rows for one podcast — shared by the list (indented under its row)
+ *  and card (in the detail panel) views. */
+function EpisodeList({
+  pod,
+  podcastTitle,
+  currentKey,
+  playing,
+  onPlayEpisode,
+  indent = false,
+}: {
+  pod: Podcast;
+  podcastTitle: string;
+  currentKey: string | null;
+  playing: boolean;
+  onPlayEpisode: (ep: Episode, podcastTitle: string) => void;
+  indent?: boolean;
+}) {
+  if (pod.episodes.length === 0) {
+    return (
+      <p className={cn("py-2 text-xs text-muted", indent ? "px-9" : "px-3")}>
+        No audio episodes found in this feed.
+      </p>
+    );
+  }
+  return (
+    <ul className="flex flex-col pb-1">
+      {pod.episodes.slice(0, 100).map((ep) => {
+        const isCurrent = ep.id === currentKey;
+        return (
+          <li key={ep.id}>
+            <button
+              type="button"
+              onClick={() => onPlayEpisode(ep, podcastTitle)}
+              className={cn(
+                "flex w-full items-center gap-2 py-1.5 pr-3 text-left hover:bg-surfaceHover",
+                indent ? "pl-9" : "pl-3",
+                isCurrent && "bg-surface",
+              )}
+            >
+              {isCurrent && playing ? (
+                <Music size={12} className="shrink-0 text-mauve" />
+              ) : (
+                <Play size={12} className="shrink-0 text-muted" />
+              )}
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate text-xs",
+                  isCurrent ? "text-fg" : "text-muted",
+                )}
+              >
+                {ep.title}
+              </span>
+              <span className="shrink-0 font-mono text-[10px] text-muted/70">
+                {[fmtDate(ep.publishedAt), fmtDuration(ep.durationSecs)]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /** Podcasts tab (U4): subscribe by RSS URL (localStorage), browse episodes
- *  fetched via Rust feed-rs, play through the shared player. */
+ *  fetched via Rust feed-rs, play through the shared player. Two views — a dense
+ *  list and a glyph card grid (icons matched by title, see lib/mediaIcon). */
 export function PodcastTab({
   onPlayEpisode,
   currentKey,
@@ -64,6 +141,7 @@ export function PodcastTab({
   playing: boolean;
 }) {
   const [subs, setSubs] = useState<Sub[]>(loadSubs);
+  const [view, setView] = useState<View>(loadView);
   const [addUrl, setAddUrl] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +150,11 @@ export function PodcastTab({
   const [loadingUrl, setLoadingUrl] = useState<string | null>(null);
   // Feed URL just copied to the clipboard — briefly shows a ✓ on that row.
   const [copied, setCopied] = useState<string | null>(null);
+
+  const chooseView = (v: View) => {
+    setView(v);
+    localStorage.setItem(VIEW_KEY, v);
+  };
 
   const copy = (url: string) => {
     copyText(url)
@@ -174,6 +257,8 @@ export function PodcastTab({
   const field =
     "flex-1 rounded-sm border border-surface bg-surface px-2.5 py-1.5 font-mono text-xs text-fg outline-none focus:border-accent";
 
+  const expandedSub = expanded ? subs.find((s) => s.url === expanded) : undefined;
+
   return (
     <div className="flex flex-col">
       {/* Subscribe row */}
@@ -225,104 +310,180 @@ export function PodcastTab({
           No podcasts yet. Paste an RSS feed URL above to subscribe.
         </div>
       ) : (
-        <ul className="flex flex-col">
-          {subs.map((s) => {
-            const open = expanded === s.url;
-            const pod = cache[s.url];
-            return (
-              <li key={s.url} className="border-b border-surface/50">
-                <div className="group flex items-stretch">
-                  <button
-                    type="button"
-                    onClick={() => toggle(s.url)}
-                    className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left hover:bg-surfaceHover"
-                  >
-                    {open ? (
-                      <ChevronDown size={14} className="shrink-0 text-muted" />
-                    ) : (
-                      <ChevronRight size={14} className="shrink-0 text-muted" />
-                    )}
-                    <span className="truncate text-sm text-fg">{s.title}</span>
-                    {loadingUrl === s.url && (
-                      <Loader2 size={12} className="animate-spin text-muted" />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => copy(s.url)}
-                    title="Copy feed URL"
-                    aria-label={`Copy ${s.title} feed URL`}
-                    className={cn(
-                      "grid w-8 shrink-0 place-items-center text-muted transition-opacity hover:text-fg",
-                      copied === s.url
-                        ? "opacity-100"
-                        : "opacity-0 group-hover:opacity-100",
-                    )}
-                  >
-                    {copied === s.url ? (
-                      <Check size={14} className="text-ok" />
-                    ) : (
-                      <Copy size={14} />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => remove(s.url)}
-                    title="Unsubscribe"
-                    aria-label={`Unsubscribe ${s.title}`}
-                    className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
+        <>
+          {/* Count + list/card view toggle */}
+          <div className="flex items-center gap-2 px-3 pb-1">
+            <span className="font-mono text-[10px] text-muted/60">
+              {subs.length} subscribed
+            </span>
+            <div className="ml-auto flex items-center gap-0.5">
+              {(
+                [
+                  { id: "list", icon: <List size={13} />, label: "List view" },
+                  { id: "cards", icon: <LayoutGrid size={13} />, label: "Card view" },
+                ] as const
+              ).map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => chooseView(v.id)}
+                  title={v.label}
+                  aria-label={v.label}
+                  aria-pressed={view === v.id}
+                  className={cn(
+                    "grid h-6 w-6 place-items-center rounded-sm transition-colors",
+                    view === v.id
+                      ? "bg-surface text-fg"
+                      : "text-muted hover:bg-surfaceHover hover:text-fg",
+                  )}
+                >
+                  {v.icon}
+                </button>
+              ))}
+            </div>
+          </div>
 
-                {open && pod && (
-                  <ul className="flex flex-col pb-1">
-                    {pod.episodes.length === 0 && (
-                      <li className="px-9 py-2 text-xs text-muted">
-                        No audio episodes found in this feed.
-                      </li>
+          {view === "list" ? (
+            <ul className="flex flex-col">
+              {subs.map((s) => {
+                const open = expanded === s.url;
+                const pod = cache[s.url];
+                return (
+                  <li key={s.url} className="border-b border-surface/50">
+                    <div className="group flex items-stretch">
+                      <button
+                        type="button"
+                        onClick={() => toggle(s.url)}
+                        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left hover:bg-surfaceHover"
+                      >
+                        {open ? (
+                          <ChevronDown size={14} className="shrink-0 text-muted" />
+                        ) : (
+                          <ChevronRight size={14} className="shrink-0 text-muted" />
+                        )}
+                        <span className="truncate text-sm text-fg">{s.title}</span>
+                        {loadingUrl === s.url && (
+                          <Loader2 size={12} className="animate-spin text-muted" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => copy(s.url)}
+                        title="Copy feed URL"
+                        aria-label={`Copy ${s.title} feed URL`}
+                        className={cn(
+                          "grid w-8 shrink-0 place-items-center text-muted transition-opacity hover:text-fg",
+                          copied === s.url
+                            ? "opacity-100"
+                            : "opacity-0 group-hover:opacity-100",
+                        )}
+                      >
+                        {copied === s.url ? (
+                          <Check size={14} className="text-ok" />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => remove(s.url)}
+                        title="Unsubscribe"
+                        aria-label={`Unsubscribe ${s.title}`}
+                        className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+
+                    {open && pod && (
+                      <EpisodeList
+                        pod={pod}
+                        podcastTitle={s.title}
+                        currentKey={currentKey}
+                        playing={playing}
+                        onPlayEpisode={onPlayEpisode}
+                        indent
+                      />
                     )}
-                    {pod.episodes.slice(0, 100).map((ep) => {
-                      const isCurrent = ep.id === currentKey;
-                      return (
-                        <li key={ep.id}>
-                          <button
-                            type="button"
-                            onClick={() => onPlayEpisode(ep, s.title)}
-                            className={cn(
-                              "flex w-full items-center gap-2 py-1.5 pl-9 pr-3 text-left hover:bg-surfaceHover",
-                              isCurrent && "bg-surface",
-                            )}
-                          >
-                            {isCurrent && playing ? (
-                              <Music size={12} className="shrink-0 text-mauve" />
-                            ) : (
-                              <Play size={12} className="shrink-0 text-muted" />
-                            )}
-                            <span
-                              className={cn(
-                                "min-w-0 flex-1 truncate text-xs",
-                                isCurrent ? "text-fg" : "text-muted",
-                              )}
-                            >
-                              {ep.title}
-                            </span>
-                            <span className="shrink-0 font-mono text-[10px] text-muted/70">
-                              {[fmtDate(ep.publishedAt), fmtDuration(ep.durationSecs)]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="px-3 pb-3">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(116px,1fr))] gap-2">
+                {subs.map((s) => {
+                  const open = expanded === s.url;
+                  return (
+                    <div key={s.url} className="group relative">
+                      <button
+                        type="button"
+                        onClick={() => toggle(s.url)}
+                        title={s.title}
+                        aria-pressed={open}
+                        className={cn(
+                          "flex w-full flex-col items-center gap-2 rounded-sm border p-3 text-center transition-colors",
+                          open
+                            ? "border-accent bg-surface"
+                            : "border-surface hover:bg-surfaceHover",
+                        )}
+                      >
+                        <MediaGlyph iconKey={podcastIconKey(s.title)} />
+                        <span className="line-clamp-2 text-xs leading-snug text-fg">
+                          {s.title}
+                        </span>
+                        {loadingUrl === s.url && (
+                          <Loader2 size={12} className="animate-spin text-muted" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => remove(s.url)}
+                        title="Unsubscribe"
+                        aria-label={`Unsubscribe ${s.title}`}
+                        className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-sm bg-panel/80 text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Detail panel for the selected card */}
+              {expandedSub && cache[expandedSub.url] && (
+                <div className="mt-3 rounded-sm border border-surface">
+                  <div className="flex items-center gap-2 border-b border-surface px-3 py-2">
+                    <MediaGlyph iconKey={podcastIconKey(expandedSub.title)} size={22} />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
+                      {expandedSub.title}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copy(expandedSub.url)}
+                      title="Copy feed URL"
+                      aria-label={`Copy ${expandedSub.title} feed URL`}
+                      className="grid h-6 w-6 place-items-center text-muted hover:text-fg"
+                    >
+                      {copied === expandedSub.url ? (
+                        <Check size={14} className="text-ok" />
+                      ) : (
+                        <Copy size={14} />
+                      )}
+                    </button>
+                  </div>
+                  <EpisodeList
+                    pod={cache[expandedSub.url]}
+                    podcastTitle={expandedSub.title}
+                    currentKey={currentKey}
+                    playing={playing}
+                    onPlayEpisode={onPlayEpisode}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
