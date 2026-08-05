@@ -13,13 +13,21 @@
 // sibling matcher (FM + simple genres) reusing the same key → glyph plumbing.
 
 export type MediaIconKey =
+  // podcasts
   | "bitcoin"
   | "privacy"
   | "news"
   | "tree"
   | "duck"
   | "host"
-  | "default";
+  | "default"
+  // stations (genres; `fm` is the generic default)
+  | "fm"
+  | "ambient"
+  | "jazz"
+  | "rock"
+  | "electronic"
+  | "classical";
 
 interface Rule {
   key: MediaIconKey;
@@ -47,4 +55,28 @@ export function podcastIconKey(title: string): MediaIconKey {
     if (rule.test.test(t)) return rule.key;
   }
   return "default";
+}
+
+// --- stations: FM + simple genres -------------------------------------------
+// Stations match on name + tags (genres). Substring (not word-boundary) so messy
+// names like "JAZZ24" or "Technobase.fm" still land. Keep the genre set small and
+// generic; the default is "fm" (a plain radio glyph). Extend as needed.
+
+const STATION_RULES: { key: MediaIconKey; needles: string[] }[] = [
+  { key: "news", needles: ["news"] },
+  { key: "jazz", needles: ["jazz"] },
+  { key: "ambient", needles: ["ambient", "drone"] },
+  { key: "classical", needles: ["classical"] },
+  { key: "rock", needles: ["rock", "metal"] },
+  { key: "electronic", needles: ["electro", "techno", "house", "trance", "edm"] },
+];
+
+/** The glyph key for a station, from its name + genre tags. First matching rule
+ *  wins; "fm" (generic radio) when no genre is recognised. */
+export function stationIconKey(name: string, tags: string[] = []): MediaIconKey {
+  const hay = [name ?? "", ...tags].join(" ").toLowerCase();
+  for (const rule of STATION_RULES) {
+    if (rule.needles.some((n) => hay.includes(n))) return rule.key;
+  }
+  return "fm";
 }

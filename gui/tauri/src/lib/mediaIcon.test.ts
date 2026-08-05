@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { podcastIconKey } from "./mediaIcon";
+import { podcastIconKey, stationIconKey } from "./mediaIcon";
 
 // The matcher is a keyword/format heuristic — first rule wins. Specific subjects
 // beat the generic person-host format, so "The Bitcoin Podcast" reads as bitcoin.
@@ -41,5 +41,30 @@ describe("podcastIconKey", () => {
   it("falls back to default when nothing matches (incl. empty)", () => {
     expect(podcastIconKey("Radiolab")).toBe("default");
     expect(podcastIconKey("")).toBe("default");
+  });
+});
+
+// Stations match on name + tags (genres) — substring, so messy names like
+// "JAZZ24" or "Technobase.fm" still land. Default is the generic "fm" (radio).
+describe("stationIconKey", () => {
+  it("matches simple genres from tags", () => {
+    expect(stationIconKey("Acid Jazz", ["acid", "jazz"])).toBe("jazz");
+    expect(stationIconKey("SomaFM — Groove Salad", ["ambient", "downtempo"])).toBe("ambient");
+    expect(stationIconKey("SomaFM — Drone Zone", ["ambient", "space"])).toBe("ambient");
+    expect(stationIconKey("Classical KUSC", ["classical"])).toBe("classical");
+    expect(stationIconKey("Rock Antenne", ["classic rock"])).toBe("rock");
+    expect(stationIconKey("Technobase", ["techno"])).toBe("electronic");
+    expect(stationIconKey("BBC Radio 4", ["news", "talk"])).toBe("news");
+  });
+
+  it("matches from the name too, case-insensitive (no tags)", () => {
+    expect(stationIconKey("JAZZ24", [])).toBe("jazz");
+    expect(stationIconKey("Ambient Sleeping Pill", [])).toBe("ambient");
+  });
+
+  it("defaults to fm when no genre is recognised", () => {
+    expect(stationIconKey("SomaFM — Secret Agent", ["downtempo", "lounge"])).toBe("fm");
+    expect(stationIconKey("Groove FM", [])).toBe("fm");
+    expect(stationIconKey("", [])).toBe("fm");
   });
 });
