@@ -48,9 +48,10 @@ Verification reply = a follow-up commit `verified: <os> — <path>` (or a fix
 commit if broken).
 
 ## 4. CI builds both platforms — but it can't hear
-`.github/workflows/ntune-release.yml` builds mac `.dmg` + Linux
-`.deb`/`.AppImage` from one `ntune-v*` tag, so neither session hand-builds the
-other's installer. **But CI has no audio device and installs no GStreamer codec
+`.github/workflows/ntune-release.yml` builds mac `.dmg` + Linux `.deb` from one
+`ntune-v*` tag, so neither session hand-builds the other's installer. (The
+`.AppImage` is deferred — it freezes on playback; see
+`docs/appimage-gstreamer-2026-08-04.md`.) **But CI has no audio device and installs no GStreamer codec
 plugins** — it proves the app *compiles and bundles*, never that a stream
 *plays*. Every release still needs a human "it plays on my platform" check per
 the matrix below. That check is the real gate, not the green build.
@@ -60,7 +61,7 @@ the matrix below. That check is the real gate, not the green build.
 | Platform | Bundle | Webview | Verify on real hardware |
 |---|---|---|---|
 | macOS arm64 | `.dmg` → `/Applications` | WKWebView | AAC+ stream actually plays; Keychain `nsec`; `~/Library/Application Support/uk.fizx.ntune` paths |
-| Linux x86_64 | `.deb` / `.AppImage` → `~/Applications` | webkit2gtk 4.1 | AAC+ stream plays **with `gstreamer1.0-plugins-bad` + `-libav` installed**; libsecret `nsec`; XDG paths |
+| Linux x86_64 | `.deb` (system install; AppImage deferred) | webkit2gtk 4.1 | AAC+ stream plays **with `gstreamer1.0-plugins-bad` + `-libav` installed**; libsecret `nsec`; XDG paths |
 
 Local install for either side: `scripts/build-install.sh` (native bundle for the
 OS you run it on). Dev loop: `scripts/dev.sh`.

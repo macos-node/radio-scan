@@ -1,10 +1,13 @@
 # ntune — AppImage GStreamer gap (Linux release blocker)
 
-> **Status: FINDING / ACTION NEEDED before `ntune-v0.1.0`.** Reproduced on Linux
-> (`adjmx` session) 2026-08-04. The `.AppImage` that `ntune-release.yml` builds
+> **Status: RESOLVED for `ntune-v0.1.0` — ship `.deb`-only.** Reproduced on Linux
+> (`adjmx` session) 2026-08-04. The `.AppImage` that `ntune-release.yml` built
 > **freezes on playback** — its bundled GStreamer is missing audio-sink plugins.
-> The **`.deb` is unaffected** and is the sound Linux artifact. A release decision
-> is needed: fix the AppImage bundle, or drop the AppImage from the release.
+> The **`.deb` is unaffected** and is the sound Linux artifact.
+> **Decision (2026-08-04):** the AppImage job is **dropped from `ntune-release.yml`**
+> (`--bundles deb` only); `ntune-v0.1.0` ships `.deb` (Linux) + `.dmg` (macOS). The
+> AppImage returns in a later release once the bundle ships `appsink`/
+> `autoaudiosink` (options in "Fixing the AppImage" below).
 > Cross-session contract: [`../CONTRIBUTING-cross-session.md`](../CONTRIBUTING-cross-session.md).
 
 Date: 2026-08-04 · surface: packaging (Linux) · gates: `ntune-v*` release
