@@ -1,25 +1,38 @@
-import { Loader2, Radio, X } from "lucide-react";
-import type { Station } from "../lib/tauri";
+import { useState } from "react";
+import { Check, Copy, Loader2, Radio, X } from "lucide-react";
+import { copyText, type Station } from "../lib/tauri";
 import { cn } from "../lib/cn";
 
-/** The tuner's station list. Rows are the user's `station.v1` events (or the
- *  seed fallback). When `onUnfollow` is provided (the signed-in owner's own
- *  relay list), each row gets a hover ✕ that publishes a kind:5 delete. */
+/** The tuner's station list. Rows are the local station store (seeded on first
+ *  run) overlaid with any Nostr `station.v1` events. When `onRemove` is provided
+ *  each row gets a hover ✕ that removes it from the local store (and, if signed
+ *  in, publishes a kind:5 unfollow so the relay overlay stays in step). */
 export function StationList({
   stations,
   currentSlug,
   playing,
   loading,
   onTune,
-  onUnfollow,
+  onRemove,
 }: {
   stations: Station[];
   currentSlug: string | null;
   playing: boolean;
   loading: boolean;
   onTune: (s: Station) => void;
-  onUnfollow?: (s: Station) => void;
+  onRemove?: (s: Station) => void;
 }) {
+  // Slug of the row whose URL was just copied — briefly shows a ✓.
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = (s: Station) => {
+    copyText(s.url)
+      .then(() => {
+        setCopied(s.slug);
+        setTimeout(() => setCopied((c) => (c === s.slug ? null : c)), 1200);
+      })
+      .catch((e) => console.error("copy failed", e));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 p-4 text-sm text-muted">
@@ -32,9 +45,8 @@ export function StationList({
   if (stations.length === 0) {
     return (
       <div className="p-4 text-sm text-muted">
-        No stations. Use <span className="text-fg">Follow</span> to publish a{" "}
-        <span className="font-mono text-nostr">station.v1</span> and read it back
-        here.
+        No stations. Use <span className="text-fg">Add</span> to save a stream
+        URL — it's kept on this device.
       </div>
     );
   }
@@ -83,12 +95,28 @@ export function StationList({
                 </span>
               )}
             </button>
-            {onUnfollow && (
+            <button
+              type="button"
+              onClick={() => copy(s)}
+              title={`Copy ${s.name} URL`}
+              aria-label={`Copy ${s.name} stream URL`}
+              className={cn(
+                "grid w-8 shrink-0 place-items-center text-muted transition-opacity hover:text-fg",
+                copied === s.slug ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+              )}
+            >
+              {copied === s.slug ? (
+                <Check size={14} className="text-ok" />
+              ) : (
+                <Copy size={14} />
+              )}
+            </button>
+            {onRemove && (
               <button
                 type="button"
-                onClick={() => onUnfollow(s)}
-                title={`Unfollow ${s.name}`}
-                aria-label={`Unfollow ${s.name}`}
+                onClick={() => onRemove(s)}
+                title={`Remove ${s.name}`}
+                aria-label={`Remove ${s.name}`}
                 className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
               >
                 <X size={14} />

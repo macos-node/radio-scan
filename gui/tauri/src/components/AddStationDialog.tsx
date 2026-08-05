@@ -1,18 +1,21 @@
 import { useState } from "react";
 import { Loader2, Radio } from "lucide-react";
 import { Modal } from "./Modal";
-import { publishStation } from "../lib/tauri";
+import { addLocalStation, publishStation } from "../lib/tauri";
 import { slugify, type Station } from "../lib/station";
 
-/** Follow a stream: publish a station.v1. On success we hand the new station
- *  back for an optimistic insert — the live subscription doesn't reliably echo
- *  a replaceable event you just published, so don't wait on it. */
+/** Add a stream. Always saves to the local station store (persisted on this
+ *  device, no key required); when signed in it ALSO publishes a station.v1 to
+ *  the relays (best-effort — a relay failure never loses the local save). The
+ *  saved station is handed back for an immediate insert. */
 export function AddStationDialog({
+  hasIdentity,
   onClose,
-  onPublished,
+  onAdded,
 }: {
+  hasIdentity: boolean;
   onClose: () => void;
-  onPublished: (station: Station) => void;
+  onAdded: (station: Station) => void;
 }) {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -33,21 +36,31 @@ export function AddStationDialog({
       const slug = slugify(name);
       const trimmedName = name.trim();
       const trimmedUrl = url.trim();
-      await publishStation({
+
+      // Local save first — this is the durable one and must not depend on relays.
+      const station = await addLocalStation({
         slug,
         name: trimmedName,
         url: trimmedUrl,
         tags,
-        description: "",
       });
-      onPublished({
-        slug,
-        name: trimmedName,
-        url: trimmedUrl,
-        fmt: null,
-        bitrate: null,
-        tags,
-      });
+      onAdded(station);
+
+      // If signed in, mirror it to the relays too. A publish failure is
+      // surfaced but the station is already saved locally, so we still close.
+      if (hasIdentity) {
+        try {
+          await publishStation({
+            slug,
+            name: trimmedName,
+            url: trimmedUrl,
+            tags,
+            description: "",
+          });
+        } catch (e) {
+          console.error("publish_station failed (saved locally)", e);
+        }
+      }
       onClose();
     } catch (e) {
       setError(String(e));
@@ -60,7 +73,7 @@ export function AddStationDialog({
     "w-full rounded-sm border border-surface bg-surface px-2.5 py-2 text-sm text-fg outline-none focus:border-accent";
 
   return (
-    <Modal title="Follow a station" onClose={onClose}>
+    <Modal title="Add a station" onClose={onClose}>
       <div className="space-y-3">
         <div className="space-y-1">
           <label className="block text-xs text-muted">Name</label>
@@ -97,6 +110,11 @@ export function AddStationDialog({
             d = airplay:station:{slugify(name) || "…"}
           </p>
         )}
+        <p className="text-[10px] text-muted/70">
+          {hasIdentity
+            ? "Saved on this device and published to your relays."
+            : "Saved on this device. Set a signing key to also publish to relays."}
+        </p>
         {error && <p className="text-xs text-alert">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <button
@@ -117,7 +135,7 @@ export function AddStationDialog({
             ) : (
               <Radio size={13} />
             )}
-            Publish &amp; follow
+            Add station
           </button>
         </div>
       </div>

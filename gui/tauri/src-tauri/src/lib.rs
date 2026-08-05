@@ -7,6 +7,8 @@
 // instead. This module owns:
 //   • proxy_port — the loopback stream proxy's port (playback fix + U3 tap point)
 //   • seed_stations — the first-run fallback station list (U0)
+//   • the local station store (stations.json) — the always-available, no-key
+//     station list; adds persist to disk, seeded from seed_stations on first run
 //   • nostr identity in the OS keychain + station.v1 publish/unfollow (U2)
 //
 // station.v1 (kind 31241) is signed with the owner nsec from the keyring — the
@@ -39,7 +41,9 @@ fn proxy_port(state: tauri::State<'_, ProxyPort>) -> u16 {
 
 /// A tunable stream. Field-for-field the subset of `station.v1` the UI needs
 /// (schema/station.v1.json): `slug` = the `d` suffix, `url` = the `r` tag.
-#[derive(Serialize, Clone)]
+/// Also the on-disk shape of the local station store (stations.json), so it
+/// round-trips — hence `Deserialize`.
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Station {
     pub slug: String,
     pub name: String,
@@ -69,13 +73,13 @@ fn station(
 
 /// Starter stations. SomaFM's public ICY streams are reliable, well-behaved
 /// seeds for proving remote-HTTP playback and (from U3) ICY metadata parsing.
-/// Shown until the user's followed `station.v1` events are read off the relays.
-#[tauri::command]
-fn seed_stations() -> Vec<Station> {
+/// Seeded into the local store on a fresh install (see `list_local_stations`)
+/// so a new user has something to test the tuner with; every seed is a normal,
+/// user-removable row afterwards.
+fn seed_station_list() -> Vec<Station> {
     // A small, varied starter set — reliable SomaFM channels (https + one http and
     // one AAC, so both the direct and loopback-proxy paths get exercised in normal
-    // use), shown until the user's followed station.v1 events load. All verified
-    // playing 2026-08-04.
+    // use). All verified playing 2026-08-04.
     vec![
         station(
             "groovesalad",
@@ -118,6 +122,110 @@ fn seed_stations() -> Vec<Station> {
             &["indie", "pop"],
         ),
     ]
+}
+
+/// The seed set, exposed to the renderer. Kept for callers/tests that want the
+/// pristine list; the live station list now comes from `list_local_stations`,
+/// which seeds itself from this on first run.
+#[tauri::command]
+fn seed_stations() -> Vec<Station> {
+    seed_station_list()
+}
+
+// --- local station store (stations.json) ------------------------------------
+// The always-available, no-key-required station list. Persisted as a JSON array
+// in the app-data dir — the same dir the favorites log lives in, which Tauri
+// resolves to the platform-standard location (Linux: $XDG_DATA_HOME/<id> a.k.a.
+// ~/.local/share/<id>; macOS: ~/Library/Application Support/<id>). Adds land
+// here immediately, survive restarts, and don't need a Nostr key. On a fresh
+// install (file absent) it seeds from `seed_station_list`; every entry — seed or
+// user-added — is then removable. Independent of the Nostr station.v1 layer,
+// which stays an optional overlay for signed-in users.
+
+fn app_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+fn stations_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    Ok(app_data_dir(app)?.join("stations.json"))
+}
+
+/// Read the store. `Ok(None)` means the file is absent (a first run that has not
+/// been seeded yet) — distinct from `Ok(Some(vec![]))`, an intentionally emptied
+/// list, which must NOT be re-seeded.
+fn read_local_stations(app: &tauri::AppHandle) -> Result<Option<Vec<Station>>, String> {
+    match std::fs::read_to_string(stations_path(app)?) {
+        Ok(t) => serde_json::from_str::<Vec<Station>>(&t)
+            .map(Some)
+            .map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+fn write_local_stations(app: &tauri::AppHandle, stations: &[Station]) -> Result<(), String> {
+    let body = serde_json::to_string_pretty(stations).map_err(|e| e.to_string())?;
+    std::fs::write(stations_path(app)?, body).map_err(|e| e.to_string())
+}
+
+/// The persisted station list. Seeds itself from `seed_station_list` on first
+/// run (file absent) so a fresh install is testable out of the box.
+#[tauri::command]
+fn list_local_stations(app: tauri::AppHandle) -> Result<Vec<Station>, String> {
+    match read_local_stations(&app)? {
+        Some(v) => Ok(v),
+        None => {
+            let seeds = seed_station_list();
+            write_local_stations(&app, &seeds)?;
+            Ok(seeds)
+        }
+    }
+}
+
+/// Save a stream to the local store. Deduped by slug AND url (re-adding either
+/// replaces in place); the newest add sorts to the top. No Nostr key required.
+#[tauri::command]
+fn add_local_station(
+    app: tauri::AppHandle,
+    slug: String,
+    name: String,
+    url: String,
+    fmt: Option<String>,
+    bitrate: Option<u32>,
+    tags: Vec<String>,
+) -> Result<Station, String> {
+    let station = Station {
+        slug,
+        name,
+        url,
+        fmt,
+        bitrate,
+        tags,
+    };
+    // Ensure the store is materialised (seeds on first run) before mutating.
+    let mut stations = list_local_stations(app.clone())?;
+    stations.retain(|s| s.slug != station.slug && s.url != station.url);
+    stations.insert(0, station.clone());
+    write_local_stations(&app, &stations)?;
+    Ok(station)
+}
+
+/// Remove a station from the local store by slug. Idempotent.
+#[tauri::command]
+fn remove_local_station(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+    let stations = list_local_stations(app.clone())?;
+    let kept: Vec<Station> = stations.into_iter().filter(|s| s.slug != slug).collect();
+    write_local_stations(&app, &kept)
+}
+
+/// Write `contents` to `path` — the write half of the JSON export. `path` comes
+/// from the plugin Save dialog (a user-chosen location), so this just commits
+/// the bytes; the renderer builds the JSON.
+#[tauri::command]
+fn export_file(path: String, contents: String) -> Result<(), String> {
+    std::fs::write(&path, contents).map_err(|e| e.to_string())
 }
 
 // --- nostr identity (OS keychain) -------------------------------------------
@@ -475,9 +583,7 @@ struct Favorite {
 }
 
 fn favorites_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join("favorites.jsonl"))
+    Ok(app_data_dir(app)?.join("favorites.jsonl"))
 }
 
 fn read_favorites(app: &tauri::AppHandle) -> Result<Vec<Favorite>, String> {
@@ -547,6 +653,8 @@ fn remove_favorite(app: tauri::AppHandle, id: String) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // The proxy runs on its own thread + runtime; grab its port for the UI.
             // The app handle lets it emit now-playing events parsed from ICY (U3).
@@ -557,6 +665,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             proxy_port,
             seed_stations,
+            list_local_stations,
+            add_local_station,
+            remove_local_station,
+            export_file,
             get_identity,
             generate_identity,
             import_identity,

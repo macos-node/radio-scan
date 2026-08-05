@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { Headphones, Heart, KeyRound, Palette, Plus, Radio } from "lucide-react";
+import {
+  Download,
+  Headphones,
+  Heart,
+  KeyRound,
+  Palette,
+  Plus,
+  Radio,
+} from "lucide-react";
 import { ToolbarIconButton } from "./components/ToolbarIconButton";
 import { StationList } from "./components/StationList";
 import { PodcastTab } from "./components/PodcastTab";
@@ -10,12 +18,14 @@ import { AddStationDialog } from "./components/AddStationDialog";
 import { FavoritesDialog } from "./components/FavoritesDialog";
 import {
   addFavorite,
+  exportJson,
   getIdentity,
   getProxyPort,
   listFavorites,
+  listLocalStations,
   onNowPlaying,
   removeFavorite,
-  seedStations,
+  removeLocalStation,
   streamUrl,
   unfollowStation,
   type Episode,
@@ -67,7 +77,10 @@ export default function App() {
     ownerHex,
     true,
   );
-  const [seed, setSeed] = useState<Station[]>([]);
+  // The local, no-key station store (stations.json) — the always-available base
+  // list. Seeded from the Rust seed set on first run; user adds/removes persist
+  // to disk. The Nostr station.v1 list (relayStations) is an optional overlay.
+  const [localStations, setLocalStations] = useState<Station[]>([]);
   const [tab, setTab] = useState<Tab>("stations");
   // Unified "what's playing" — a live station or a seekable episode (U4).
   const [current, setCurrent] = useState<Playing | null>(null);
@@ -87,35 +100,33 @@ export default function App() {
   const currentUrlRef = useRef<string | null>(null);
   // Throttle episode-position saves.
   const lastSaveRef = useRef(0);
-  // Stations just published this session — shown immediately (optimistic insert)
-  // because the live subscription doesn't reliably echo your own fresh publish.
-  const [optimistic, setOptimistic] = useState<Station[]>([]);
   const [showIdentity, setShowIdentity] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [showFavorites, setShowFavorites] = useState(false);
 
-  // Show published (followed) stations AND any seeds not already followed
-  // (deduped by url), so the seed list stays visible after publishing.
+  // The local store is the base list; any Nostr station.v1 events (for signed-in
+  // users) overlay on top, deduped by url. Local-first so an add always shows.
   const usingRelay = relayStations.length > 0;
   const stations = useMemo(() => {
     const seen = new Set<string>();
     const out: Station[] = [];
-    for (const s of [...relayStations, ...optimistic, ...seed]) {
+    for (const s of [...localStations, ...relayStations]) {
       if (seen.has(s.url)) continue;
       seen.add(s.url);
       out.push(s);
     }
     return out;
-  }, [relayStations, optimistic, seed]);
-  const loading = !usingRelay && seed.length === 0 && relayLoading;
+  }, [localStations, relayStations]);
+  const loading = localStations.length === 0 && relayLoading;
 
   /** Where the station list came from — shown next to the section header. */
   const source = useMemo(() => {
-    if (usingRelay) return `${relayStations.length} · station.v1 (relays)`;
-    if (relayLoading) return "seed · checking relays…";
-    return "seed · no published stations yet";
-  }, [usingRelay, relayStations.length, relayLoading]);
+    const local = `${localStations.length} local`;
+    if (usingRelay) return `${local} · +${relayStations.length} station.v1`;
+    if (relayLoading) return `${local} · checking relays…`;
+    return `${local} · saved on this device`;
+  }, [localStations.length, usingRelay, relayStations.length, relayLoading]);
 
   // One hidden <audio> element drives all playback, fed through the Rust loopback
   // proxy (proxy.rs) so a packaged secure origin can play plain http:// without
@@ -123,9 +134,9 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    seedStations()
-      .then(setSeed)
-      .catch((e) => console.error("seed_stations failed", e));
+    listLocalStations()
+      .then(setLocalStations)
+      .catch((e) => console.error("list_local_stations failed", e));
     getIdentity()
       .then(setIdentity)
       .catch((e) => console.error("get_identity failed", e));
@@ -157,14 +168,47 @@ export default function App() {
     return () => unlisten?.();
   }, []);
 
-  const unfollow = useCallback(
+  // A newly-saved station (from AddStationDialog) — already persisted to the
+  // local store by Rust; reflect it immediately, deduped by url + slug.
+  const onAdded = useCallback((s: Station) => {
+    setLocalStations((prev) => [
+      s,
+      ...prev.filter((p) => p.url !== s.url && p.slug !== s.slug),
+    ]);
+  }, []);
+
+  // Remove a station: drop it from the local store (persisted), and if signed in
+  // also publish a station.v1 unfollow so the Nostr overlay stays in step.
+  const removeStation = useCallback(
     (s: Station) => {
-      if (!identity) return;
-      setOptimistic((prev) => prev.filter((p) => p.url !== s.url));
-      unfollowStation(s.slug).catch((e) => console.error("unfollow failed", e));
+      setLocalStations((prev) => prev.filter((p) => p.slug !== s.slug));
+      removeLocalStation(s.slug).catch((e) =>
+        console.error("remove_local_station failed", e),
+      );
+      if (identity) {
+        unfollowStation(s.slug).catch((e) =>
+          console.error("unfollow failed", e),
+        );
+      }
     },
     [identity],
   );
+
+  // Export the current station list as JSON (native Save dialog). Exports the
+  // merged, displayed list — the same rows the user sees.
+  const exportStations = useCallback(() => {
+    exportJson(
+      "ntune-stations.json",
+      stations.map((s) => ({
+        slug: s.slug,
+        name: s.name,
+        url: s.url,
+        fmt: s.fmt,
+        bitrate: s.bitrate,
+        tags: s.tags,
+      })),
+    ).catch((e) => console.error("export stations failed", e));
+  }, [stations]);
 
   useEffect(() => applyTheme(theme), [theme]);
 
@@ -336,14 +380,15 @@ export default function App() {
           <button
             type="button"
             onClick={() => setShowAdd(true)}
-            disabled={!identity}
             title={
-              identity ? "Follow a station" : "Set a signing key to follow stations"
+              identity
+                ? "Add a station (saved locally + published to relays)"
+                : "Add a station (saved on this device)"
             }
-            className="flex items-center gap-1 rounded-sm border border-transparent px-2 py-1 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg disabled:pointer-events-none disabled:opacity-40"
+            className="flex items-center gap-1 rounded-sm border border-transparent px-2 py-1 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
           >
             <Plus size={14} />
-            Follow
+            Add
           </button>
           <button
             type="button"
@@ -406,6 +451,16 @@ export default function App() {
                   Stations
                 </h2>
                 <span className="font-mono text-[10px] text-muted/60">{source}</span>
+                <button
+                  type="button"
+                  onClick={exportStations}
+                  disabled={stations.length === 0}
+                  title="Export stations as JSON"
+                  className="ml-auto flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-fg disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <Download size={12} />
+                  Export
+                </button>
               </div>
               <StationList
                 stations={stations}
@@ -413,7 +468,7 @@ export default function App() {
                 playing={playing}
                 loading={loading}
                 onTune={tune}
-                onUnfollow={identity && usingRelay ? unfollow : undefined}
+                onRemove={removeStation}
               />
             </section>
           ) : (
@@ -501,10 +556,9 @@ export default function App() {
       )}
       {showAdd && (
         <AddStationDialog
+          hasIdentity={!!identity}
           onClose={() => setShowAdd(false)}
-          onPublished={(s) =>
-            setOptimistic((prev) => [s, ...prev.filter((p) => p.url !== s.url)])
-          }
+          onAdded={onAdded}
         />
       )}
     </div>

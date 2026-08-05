@@ -10,3 +10,8 @@ src-tauri/gen/schemas
 *.log
 .DS_Store
 app-icon.png
+
+# tsc -b (composite build) artifacts
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts

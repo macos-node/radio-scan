@@ -9,10 +9,37 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { save } from "@tauri-apps/plugin-dialog";
 import type { Station } from "./station";
 import { RELAYS } from "./relays";
 
 export type { Station };
+
+// --- clipboard + JSON export (stations / podcasts) --------------------------
+
+/** Copy text (a stream / feed URL) to the OS clipboard. */
+export function copyText(text: string): Promise<void> {
+  return writeText(text);
+}
+
+/** Prompt for a location with a native Save dialog and write `data` as pretty
+ *  JSON there. Returns the chosen path, or null if the user cancelled. */
+export async function exportJson(
+  defaultName: string,
+  data: unknown,
+): Promise<string | null> {
+  const path = await save({
+    defaultPath: defaultName,
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (!path) return null; // cancelled
+  await invoke("export_file", {
+    path,
+    contents: JSON.stringify(data, null, 2),
+  });
+  return path;
+}
 
 // --- loopback stream proxy ---------------------------------------------------
 
@@ -44,11 +71,46 @@ export function streamUrl(port: number, upstream: string): string {
   return `http://127.0.0.1:${port}/?url=${encodeURIComponent(upstream)}`;
 }
 
-/** Starter stations, served from Rust so the IPC round-trip is exercised. The
- *  fallback shown until the user's followed `station.v1` (31241) events are read
- *  off the relays (see hooks/useStations.ts). */
+/** Starter stations, served from Rust. The pristine seed set — on a fresh
+ *  install these are copied into the local store (listLocalStations) as normal,
+ *  removable rows. Kept exposed for tests / a "reset to seeds" affordance. */
 export function seedStations(): Promise<Station[]> {
   return invoke<Station[]>("seed_stations");
+}
+
+// --- local station store (no Nostr key required) ----------------------------
+// The always-available station list, persisted to stations.json in the app-data
+// dir (Linux: ~/.local/share/<id>; macOS: ~/Library/Application Support/<id>).
+// Adds land here immediately and survive restarts. Independent of the Nostr
+// station.v1 layer (useStations.ts), which stays an optional overlay.
+
+/** The persisted local stations. Seeds itself from the seed set on first run. */
+export function listLocalStations(): Promise<Station[]> {
+  return invoke<Station[]>("list_local_stations");
+}
+
+/** Save a stream to the local store (deduped by slug + url). No key needed. */
+export function addLocalStation(input: {
+  slug: string;
+  name: string;
+  url: string;
+  fmt?: string | null;
+  bitrate?: number | null;
+  tags: string[];
+}): Promise<Station> {
+  return invoke<Station>("add_local_station", {
+    slug: input.slug,
+    name: input.name,
+    url: input.url,
+    fmt: input.fmt ?? null,
+    bitrate: input.bitrate ?? null,
+    tags: input.tags,
+  });
+}
+
+/** Remove a local station by slug. Idempotent. */
+export function removeLocalStation(slug: string): Promise<void> {
+  return invoke("remove_local_station", { slug });
 }
 
 // --- podcast RSS (U4) --------------------------------------------------------

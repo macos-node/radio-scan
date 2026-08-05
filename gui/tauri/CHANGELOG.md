@@ -9,6 +9,20 @@ The listening surface grows from radio-only to **radio + podcasts**, with live
 track info. Verified on Linux; macOS verification of U4a in progress.
 
 ### Added
+- **Copy URL + JSON export (stations & podcasts).** Every station and podcast row
+  gets a hover **copy** button (stream / feed URL → clipboard, brief ✓). Each list
+  has an **Export** button that writes the list as pretty JSON via a native Save
+  dialog (`ntune-stations.json` / `ntune-podcasts.json`). New Tauri plugins:
+  `clipboard-manager` + `dialog`; the file is written by an `export_file` command.
+- **Local station store.** Added stations now save to a **local, no-key store**
+  (`stations.json` in the app-data dir — Linux `~/.local/share/uk.fizx.ntune`,
+  macOS `~/Library/Application Support/uk.fizx.ntune`), so an add persists across
+  restarts without a Nostr key. On a **fresh install** it's seeded from the built-in
+  starter stations so the tuner is testable out of the box; every seed is an
+  ordinary, **removable** row and does not come back once removed. When signed in,
+  an add still also publishes a `station.v1` to the relays (best-effort — a relay
+  failure never loses the local save), so the Nostr layer is now an optional
+  overlay on top of the always-available local list.
 - **Now-playing (U3).** The player bar shows the live **♪ Artist — Title**,
   parsed from the stream's ICY metadata by the loopback proxy (decode ladder
   UTF-8 → Windows-1251 → Latin-1). Updates on every track change. *Currently

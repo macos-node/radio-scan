@@ -1,7 +1,10 @@
 import { useState } from "react";
 import {
+  Check,
   ChevronDown,
   ChevronRight,
+  Copy,
+  Download,
   Loader2,
   Music,
   Play,
@@ -9,7 +12,13 @@ import {
   Rss,
   X,
 } from "lucide-react";
-import { fetchPodcast, type Episode, type Podcast } from "../lib/tauri";
+import {
+  copyText,
+  exportJson,
+  fetchPodcast,
+  type Episode,
+  type Podcast,
+} from "../lib/tauri";
 import { cn } from "../lib/cn";
 
 interface Sub {
@@ -59,6 +68,23 @@ export function PodcastTab({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [cache, setCache] = useState<Record<string, Podcast>>({});
   const [loadingUrl, setLoadingUrl] = useState<string | null>(null);
+  // Feed URL just copied to the clipboard — briefly shows a ✓ on that row.
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copy = (url: string) => {
+    copyText(url)
+      .then(() => {
+        setCopied(url);
+        setTimeout(() => setCopied((c) => (c === url ? null : c)), 1200);
+      })
+      .catch((e) => console.error("copy failed", e));
+  };
+
+  const exportSubs = () => {
+    exportJson("ntune-podcasts.json", subs).catch((e) =>
+      console.error("export podcasts failed", e),
+    );
+  };
 
   const fetchInto = async (url: string) => {
     setLoadingUrl(url);
@@ -144,6 +170,15 @@ export function PodcastTab({
           )}
           Add
         </button>
+        <button
+          type="button"
+          onClick={exportSubs}
+          disabled={subs.length === 0}
+          title="Export podcasts as JSON"
+          className="flex items-center gap-1 rounded-sm border border-surface px-2 py-1.5 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg disabled:pointer-events-none disabled:opacity-40"
+        >
+          <Download size={13} />
+        </button>
       </div>
       {error && <p className="px-3 pb-2 text-xs text-alert">{error}</p>}
 
@@ -172,6 +207,24 @@ export function PodcastTab({
                     <span className="truncate text-sm text-fg">{s.title}</span>
                     {loadingUrl === s.url && (
                       <Loader2 size={12} className="animate-spin text-muted" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => copy(s.url)}
+                    title="Copy feed URL"
+                    aria-label={`Copy ${s.title} feed URL`}
+                    className={cn(
+                      "grid w-8 shrink-0 place-items-center text-muted transition-opacity hover:text-fg",
+                      copied === s.url
+                        ? "opacity-100"
+                        : "opacity-0 group-hover:opacity-100",
+                    )}
+                  >
+                    {copied === s.url ? (
+                      <Check size={14} className="text-ok" />
+                    ) : (
+                      <Copy size={14} />
                     )}
                   </button>
                   <button

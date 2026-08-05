@@ -11,10 +11,12 @@ follow it, and (later phases) subscribe to podcasts and per-npub audio feeds.
 
 ## Status — **U0 (scaffold)**
 
-A working internet-radio player. It seeds a handful of SomaFM stations from Rust
-(`seed_stations`), lists them, and plays the selected stream in the webview
-`<audio>` element with play/stop and volume. No Nostr, no now-playing metadata,
-no Rust audio backend yet — those arrive in later phases:
+A working internet-radio player. Stations live in a **local store**
+(`stations.json` in the app-data dir), seeded from a handful of SomaFM stations
+on first run (`seed_stations`); adds persist there with no Nostr key and every
+seed is a removable row. It lists them and plays the selected stream in the
+webview `<audio>` element with play/stop and volume. When signed in, an add also
+publishes a `station.v1` to the relays as an overlay:
 
 | Phase | Adds |
 |-------|------|
