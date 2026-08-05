@@ -50,8 +50,39 @@ The same component gives nplay a "what's playing" + scrobble for owned music,
 feeding the same airplay/scrobble primitives. **One menubar pattern, three
 consumers:** ntune (radio), nplay (owned music), the logger.
 
+## Favorites / "like"
+When logging or listening live, a **favorite button** marks a track you like — the
+"what you hear *and love*" signal on top of "what you hear."
+
+**v1 — local-first curated log (CHOSEN direction).** A favorite writes the
+currently-playing track (artist / title / station / timestamp) to a curated
+favorites list — a hand-picked subset of the tracklist. No Nostr, no
+dependencies; ships with what the logger already knows.
+
+**Later layer — the suite reaction.** Once the airplay layer lands, upgrade a
+favorite to the suite's **kind:7 reaction** primitive (the same one
+ndisc.blobtree uses on kind:1063), targeting the `airplay.v1` event and ideally
+keyed to the **master-release-key (`mrk`)** so likes aggregate per *work* — stable
+across stations/formats, not per-random-play.
+
+**Dependency — know what's playing.** You can only favorite the current track if
+its identity is available at press time:
+- **logger / macOS RadioBar** already parses ICY `StreamTitle` → favorite works
+  there now (local log).
+- **ntune's player** learns now-playing only at **U3** (the proxy currently strips
+  metadata). So a "favorite what's playing" button in ntune / the tray
+  **sequences with U3**: *U3 → now-playing → favorite (local) → later kind:7/`mrk`*.
+
+**Where it lives.** The tray companion (quick ❤ on what's playing) + a heart on
+ntune's now-playing + "mark favorite" in the logger. One primitive, three surfaces.
+
 ## Open decisions
-- **Swift-native (macOS-only) vs Tauri-tray (cross-platform)** — lean Tauri-tray.
+- ~~Swift-native vs Tauri-tray~~ **RESOLVED (2026-08-05):** RadioBar stays
+  macOS-native; the cross-platform surface is a Tauri tray in ntune (L4 build map,
+  Open-Decision #1).
 - Does **ntune** grow the tray, or a **shared** suite tray app?
+- **Favorites v1 is local** (chosen); the later reaction *target* is open — kind:7
+  on the `airplay.v1` event vs keyed to the `mrk` (lean `mrk`, so likes group per
+  *work*).
 - `airplay.v1` emission point + privacy posture (local-by-default per the schema draft).
 - Where the suite-wide pattern lives long-term (the ndisc `SUITE.md` hub) once it spans repos.
