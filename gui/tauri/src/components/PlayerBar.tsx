@@ -1,34 +1,49 @@
-import { Loader2, Music, Pause, Play, Radio, Volume2 } from "lucide-react";
-import type { NowPlaying, Station } from "../lib/tauri";
+import { Headphones, Loader2, Music, Pause, Play, Radio, Volume2 } from "lucide-react";
+import type { NowPlaying } from "../lib/tauri";
+import type { Playing } from "../lib/player";
 import { cn } from "../lib/cn";
 
-/** The bottom transport. Shows the tuned station, a live indicator, and the
- *  now-playing "Artist – Title" (U3) parsed from the stream's ICY metadata by
- *  the loopback proxy. Playback is driven by the parent's hidden <audio>
- *  element — this is presentation + controls only. */
+function fmtTime(secs: number): string {
+  if (!Number.isFinite(secs) || secs < 0) return "0:00";
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/** The bottom transport. Handles both source types: a live station (with the
+ *  ICY now-playing label, U3) and a podcast episode (with a seek bar). Playback
+ *  is driven by the parent's hidden <audio> — this is presentation + controls. */
 export function PlayerBar({
-  station,
+  current,
   nowPlaying,
   playing,
   buffering,
   volume,
+  position,
+  duration,
   onToggle,
+  onSeek,
   onVolume,
 }: {
-  station: Station | null;
+  current: Playing | null;
   nowPlaying: NowPlaying | null;
   playing: boolean;
   buffering: boolean;
   volume: number;
+  position: number;
+  duration: number;
   onToggle: () => void;
+  onSeek: (secs: number) => void;
   onVolume: (v: number) => void;
 }) {
+  const isEpisode = current?.kind === "episode";
+
   return (
     <footer className="flex items-center gap-4 border-t border-surface bg-panel px-4 py-3">
       <button
         type="button"
         onClick={onToggle}
-        disabled={!station}
+        disabled={!current}
         title={playing ? "Stop" : "Play"}
         aria-label={playing ? "Stop" : "Play"}
         className={cn(
@@ -47,20 +62,50 @@ export function PlayerBar({
       </button>
 
       <div className="min-w-0 flex-1">
-        {station ? (
+        {current ? (
           <>
             <div className="flex items-center gap-2">
-              <Radio size={13} className="shrink-0 text-accent" />
-              <span className="truncate text-sm text-fg">{station.name}</span>
-              {playing && (
+              {isEpisode ? (
+                <Headphones size={13} className="shrink-0 text-accent" />
+              ) : (
+                <Radio size={13} className="shrink-0 text-accent" />
+              )}
+              <span className="truncate text-sm text-fg">{current.title}</span>
+              {!isEpisode && playing && (
                 <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide text-ok">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ok" />
                   live
                 </span>
               )}
             </div>
-            {/* Now-playing from ICY metadata (U3), else the stream format. */}
-            {nowPlaying ? (
+
+            {isEpisode ? (
+              /* Episode: seek bar + times. */
+              <div className="mt-1 flex items-center gap-2">
+                <span className="w-9 shrink-0 text-right font-mono text-[10px] text-muted">
+                  {fmtTime(position)}
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={duration || 0}
+                  step={1}
+                  value={Math.min(position, duration || 0)}
+                  onChange={(e) => onSeek(Number(e.target.value))}
+                  aria-label="Seek"
+                  className="h-1 flex-1 cursor-pointer accent-accent"
+                />
+                <span className="w-9 shrink-0 font-mono text-[10px] text-muted">
+                  {duration ? fmtTime(duration) : "—"}
+                </span>
+                {current.subtitle && (
+                  <span className="ml-1 hidden max-w-[40%] truncate text-xs text-muted sm:inline">
+                    {current.subtitle}
+                  </span>
+                )}
+              </div>
+            ) : nowPlaying ? (
+              /* Station: ICY now-playing (U3). */
               <div className="flex items-center gap-1.5 truncate text-xs">
                 <Music size={11} className="shrink-0 text-mauve" />
                 {nowPlaying.artist && (
@@ -75,8 +120,7 @@ export function PlayerBar({
               </div>
             ) : (
               <div className="truncate text-xs text-muted">
-                {station.fmt ?? "stream"}
-                {station.bitrate != null ? ` · ${station.bitrate}k` : ""}
+                stream
                 {playing ? (
                   <span className="text-muted/60"> · waiting for track info…</span>
                 ) : null}
@@ -84,7 +128,9 @@ export function PlayerBar({
             )}
           </>
         ) : (
-          <span className="text-sm text-muted">Select a station to tune in</span>
+          <span className="text-sm text-muted">
+            Select a station or episode to play
+          </span>
         )}
       </div>
 

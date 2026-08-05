@@ -132,9 +132,21 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   Title. **http-only** (proxied streams); `https` plays direct and shows none.
   Verified on Linux — Acid Jazz shows live track updates, audio stays clean
   (ffprobe). `Needs-verify: macos` (ICY parse on WKWebView).
-- **Next — U4:** podcast RSS (`feed-rs`) + per-npub `1063` feed tabs. (Possible
-  U3 follow-ups: now-playing for `https` via a TLS proxy path; `airplay.v1`
-  emission from the same tap — see the menubar-companion direction.)
+- **U4a (done, Linux-verified):** podcast RSS tab. A Stations|Podcasts tab
+  switch; subscribe by feed URL (localStorage), episodes fetched via Rust
+  `reqwest` + `feed-rs`, played through the shared player. Playback is
+  generalized to a station/episode union (`lib/player.ts`): stations are live
+  (ICY now-playing), episodes are seekable + **resume across sessions**. Also
+  fixed a proxy bug it exposed: **the proxy now follows HTTP redirects** (podcast
+  enclosures almost always 30x through a tracking CDN; `http→http` followed
+  internally, `http→https` handed off to the webview) — benefits redirecting
+  radio mounts too. Verified on Linux (BBC Global News plays).
+  **Known limit:** full **seek on `http` enclosures** needs the proxy to forward
+  `Content-Length` + honour `Range` (206); `https` feeds seek fully today.
+  `Needs-verify: macos`.
+- **Next — U4b:** per-npub `1063` feed tab (reuse the episode model + relay
+  layer). Follow-ups: reqwest-based proxy (TLS upstreams + `Range`/seek + `https`
+  now-playing); `airplay.v1` emission (menubar-companion direction).
 
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +

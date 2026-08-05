@@ -365,6 +365,99 @@ async fn unfollow_station(
     publish_event(keys, event, address, relays).await
 }
 
+// --- podcast RSS (U4) -------------------------------------------------------
+// Subscribe to a podcast by feed URL; fetch + parse RSS 2.0 / Atom (feed-rs)
+// into an episode list the UI plays through the same <audio>/proxy path as radio.
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct Episode {
+    /// Stable id — the entry guid, else the enclosure URL.
+    id: String,
+    title: String,
+    /// The audio enclosure URL (what the player loads).
+    enclosure_url: String,
+    mime: Option<String>,
+    /// Episode length in seconds, when the feed declares it.
+    duration_secs: Option<u64>,
+    /// Publish time (unix seconds), when present.
+    published_at: Option<i64>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct Podcast {
+    title: String,
+    description: Option<String>,
+    image: Option<String>,
+    episodes: Vec<Episode>,
+}
+
+/// The audio enclosure for a feed entry: prefer a media object, fall back to an
+/// `enclosure`/audio link. Returns (url, mime, duration_secs).
+fn entry_enclosure(entry: &feed_rs::model::Entry) -> Option<(String, Option<String>, Option<u64>)> {
+    for m in &entry.media {
+        for c in &m.content {
+            if let Some(url) = &c.url {
+                let mime = c.content_type.as_ref().map(|m| m.to_string());
+                let is_audio = mime.as_deref().is_none_or(|s| s.starts_with("audio"));
+                if is_audio {
+                    return Some((url.to_string(), mime, c.duration.map(|d| d.as_secs())));
+                }
+            }
+        }
+    }
+    for l in &entry.links {
+        let is_enclosure = l.rel.as_deref() == Some("enclosure")
+            || l.media_type.as_deref().is_some_and(|m| m.starts_with("audio"));
+        if is_enclosure {
+            return Some((l.href.clone(), l.media_type.clone(), None));
+        }
+    }
+    None
+}
+
+/// Fetch and parse a podcast feed into an episode list (newest first).
+#[tauri::command]
+async fn fetch_podcast(url: String) -> Result<Podcast, String> {
+    let bytes = reqwest::Client::new()
+        .get(&url)
+        .header("User-Agent", "ntune (radio-scan)")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())?
+        .bytes()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let feed = feed_rs::parser::parse(&bytes[..]).map_err(|e| format!("parse failed: {e}"))?;
+
+    let episodes = feed
+        .entries
+        .iter()
+        .filter_map(|e| {
+            let (enclosure_url, mime, duration_secs) = entry_enclosure(e)?;
+            Some(Episode {
+                id: if e.id.is_empty() { enclosure_url.clone() } else { e.id.clone() },
+                title: e.title.as_ref().map(|t| t.content.clone()).unwrap_or_default(),
+                enclosure_url,
+                mime,
+                duration_secs,
+                published_at: e.published.map(|d| d.timestamp()),
+            })
+        })
+        .collect();
+
+    Ok(Podcast {
+        title: feed.title.map(|t| t.content).unwrap_or_else(|| "Untitled".to_string()),
+        description: feed.description.map(|t| t.content),
+        image: feed.logo.or(feed.icon).map(|i| i.uri),
+        episodes,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -385,6 +478,7 @@ pub fn run() {
             clear_identity,
             publish_station,
             unfollow_station,
+            fetch_podcast,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ntune");

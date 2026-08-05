@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { KeyRound, Palette, Plus, Radio } from "lucide-react";
+import { Headphones, KeyRound, Palette, Plus, Radio } from "lucide-react";
 import { ToolbarIconButton } from "./components/ToolbarIconButton";
 import { StationList } from "./components/StationList";
+import { PodcastTab } from "./components/PodcastTab";
 import { PlayerBar } from "./components/PlayerBar";
 import { IdentityDialog } from "./components/IdentityDialog";
 import { AddStationDialog } from "./components/AddStationDialog";
@@ -13,13 +14,16 @@ import {
   seedStations,
   streamUrl,
   unfollowStation,
+  type Episode,
   type Identity,
   type NowPlaying,
   type Station,
 } from "./lib/tauri";
+import { resumePosition, savePosition, type Playing } from "./lib/player";
 import { OWNER_PUBKEY } from "./lib/station";
 import { useStations } from "./hooks/useStations";
 import { shortVersion } from "./lib/format";
+import { cn } from "./lib/cn";
 
 const THEME_KEY = "ntune.theme";
 const VOLUME_KEY = "ntune.volume";
@@ -28,6 +32,7 @@ const VOLUME_KEY = "ntune.volume";
  *  Kept in step with the pre-paint script in index.html. */
 type Theme = "fizx" | "upleb" | "mono";
 const THEMES: Theme[] = ["mono", "fizx", "upleb"];
+type Tab = "stations" | "podcasts";
 
 function loadTheme(): Theme {
   const v = localStorage.getItem(THEME_KEY);
@@ -58,19 +63,25 @@ export default function App() {
     true,
   );
   const [seed, setSeed] = useState<Station[]>([]);
-  const [current, setCurrent] = useState<Station | null>(null);
+  const [tab, setTab] = useState<Tab>("stations");
+  // Unified "what's playing" — a live station or a seekable episode (U4).
+  const [current, setCurrent] = useState<Playing | null>(null);
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const [volume, setVolume] = useState<number>(loadVolume);
   const [version, setVersion] = useState("");
   const [proxyPort, setProxyPort] = useState<number | null>(null);
-  // Now-playing parsed from the stream's ICY metadata (U3), or null when the
-  // stream carries none / nothing's tuned. Cleared on stop and station change.
+  // Now-playing parsed from a station's ICY metadata (U3); null for episodes /
+  // metadata-less streams. Cleared on stop and source change.
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
-  // The tuned station's URL, in a ref so the now-playing listener (registered
-  // once) always matches against the current station without re-subscribing.
+  // The playing URL, in a ref so the now-playing listener (registered once)
+  // always matches the current source without re-subscribing.
   const currentUrlRef = useRef<string | null>(null);
+  // Throttle episode-position saves.
+  const lastSaveRef = useRef(0);
   // Stations just published this session — shown immediately (optimistic insert)
   // because the live subscription doesn't reliably echo your own fresh publish.
   const [optimistic, setOptimistic] = useState<Station[]>([]);
@@ -78,11 +89,8 @@ export default function App() {
   const [showAdd, setShowAdd] = useState(false);
 
   // Show published (followed) stations AND any seeds not already followed
-  // (deduped by url), so the seed list stays visible after publishing instead of
-  // being replaced — and stays testable.
+  // (deduped by url), so the seed list stays visible after publishing.
   const usingRelay = relayStations.length > 0;
-  // Published stations, then just-published (optimistic) ones the subscription
-  // hasn't echoed yet, then seeds — deduped by url so nothing shows twice.
   const stations = useMemo(() => {
     const seen = new Set<string>();
     const out: Station[] = [];
@@ -95,16 +103,16 @@ export default function App() {
   }, [relayStations, optimistic, seed]);
   const loading = !usingRelay && seed.length === 0 && relayLoading;
 
-  /** Where the visible list came from — surfaced next to the section header. */
+  /** Where the station list came from — shown next to the section header. */
   const source = useMemo(() => {
     if (usingRelay) return `${relayStations.length} · station.v1 (relays)`;
     if (relayLoading) return "seed · checking relays…";
     return "seed · no published stations yet";
   }, [usingRelay, relayStations.length, relayLoading]);
 
-  // One hidden <audio> element drives all playback, fed through the Rust
-  // loopback proxy (src-tauri/src/proxy.rs) so a packaged secure origin can play
-  // plain http:// streams without mixed-content blocking. See streamUrl.
+  // One hidden <audio> element drives all playback, fed through the Rust loopback
+  // proxy (proxy.rs) so a packaged secure origin can play plain http:// without
+  // mixed-content blocking. See streamUrl.
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -120,13 +128,13 @@ export default function App() {
       .catch((e) => console.error("proxy_port failed", e));
   }, []);
 
-  // Keep the current-station URL in a ref for the now-playing listener below.
+  // Keep the playing URL in a ref for the now-playing listener below.
   useEffect(() => {
     currentUrlRef.current = current?.url ?? null;
   }, [current]);
 
-  // Subscribe once to ICY now-playing events; keep only those for the station
-  // we're currently tuned to (the proxy tags each event with its upstream url).
+  // Subscribe once to ICY now-playing events; keep only those for what we're
+  // currently playing (the proxy tags each event with its upstream url).
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     onNowPlaying((np) => {
@@ -139,7 +147,6 @@ export default function App() {
     return () => unlisten?.();
   }, []);
 
-  // Unfollow = publish a kind:5 delete; the live subscription drops it on read.
   const unfollow = useCallback(
     (s: Station) => {
       if (!identity) return;
@@ -158,35 +165,37 @@ export default function App() {
   const stop = useCallback(() => {
     const a = audioRef.current;
     if (!a) return;
+    if (current?.kind === "episode") {
+      savePosition(current.url, a.currentTime, a.duration || undefined);
+    }
     a.pause();
-    // Clearing the source actually halts a live stream's download — pause alone
-    // keeps buffering it.
+    // Clearing the source halts a live stream's download — pause alone keeps
+    // buffering it.
     a.removeAttribute("src");
     a.load();
     setPlaying(false);
     setBuffering(false);
     setNowPlaying(null);
-  }, []);
+    setPosition(0);
+    setDuration(0);
+  }, [current]);
 
-  const tune = useCallback(
-    (s: Station) => {
+  /** Core playback: load a source into the shared <audio> element. */
+  const play = useCallback(
+    (p: Playing) => {
       const a = audioRef.current;
       if (!a) return;
-      // Re-tapping the current, playing station toggles it off.
-      if (current?.slug === s.slug && playing) {
-        stop();
-        return;
-      }
-      setCurrent(s);
+      setCurrent(p);
       setNowPlaying(null);
+      setPosition(0);
+      setDuration(0);
       setBuffering(true);
-      // Only http:// streams need the loopback proxy (mixed-content on a secure
-      // origin); https:// plays directly. Fall back to direct if the port isn't
-      // ready yet.
+      // Only http:// needs the loopback proxy (mixed-content on a secure origin);
+      // https:// plays directly. Fall back to direct if the port isn't ready.
       a.src =
-        proxyPort != null && s.url.startsWith("http://")
-          ? streamUrl(proxyPort, s.url)
-          : s.url;
+        proxyPort != null && p.url.startsWith("http://")
+          ? streamUrl(proxyPort, p.url)
+          : p.url;
       a.volume = volume;
       a.play().catch((e) => {
         console.error("play failed", e);
@@ -194,14 +203,51 @@ export default function App() {
         setPlaying(false);
       });
     },
-    [current, playing, stop, volume, proxyPort],
+    [proxyPort, volume],
+  );
+
+  const tune = useCallback(
+    (s: Station) => {
+      if (current?.kind === "station" && current.key === s.slug && playing) {
+        stop();
+        return;
+      }
+      play({ kind: "station", key: s.slug, title: s.name, url: s.url, seekable: false });
+    },
+    [current, playing, stop, play],
+  );
+
+  const playEpisode = useCallback(
+    (ep: Episode, podcastTitle: string) => {
+      if (current?.kind === "episode" && current.key === ep.id && playing) {
+        stop();
+        return;
+      }
+      play({
+        kind: "episode",
+        key: ep.id,
+        title: ep.title,
+        subtitle: podcastTitle,
+        url: ep.enclosureUrl,
+        seekable: true,
+      });
+    },
+    [current, playing, stop, play],
   );
 
   const togglePlay = useCallback(() => {
     if (!current) return;
     if (playing) stop();
-    else tune(current);
-  }, [current, playing, stop, tune]);
+    else play(current);
+  }, [current, playing, stop, play]);
+
+  const seek = useCallback((secs: number) => {
+    const a = audioRef.current;
+    if (a) {
+      a.currentTime = secs;
+      setPosition(secs);
+    }
+  }, []);
 
   const changeVolume = useCallback((v: number) => {
     setVolume(v);
@@ -263,39 +309,73 @@ export default function App() {
         </div>
       </header>
 
-      {/* Body: station list (radio-first spine). Podcast / npub-feed tabs arrive
-          in U4 — see docs/radio-scan-ui-2026-08-04.md. */}
-      <main className="flex min-h-0 flex-1">
-        <section className="flex w-full min-w-0 flex-col overflow-y-auto">
-          <div className="flex items-center gap-2 px-3 pb-1 pt-3">
-            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              Stations
-            </h2>
-            <span className="font-mono text-[10px] text-muted/60">{source}</span>
-          </div>
-          <StationList
-            stations={stations}
-            currentSlug={current?.slug ?? null}
-            playing={playing}
-            loading={loading}
-            onTune={tune}
-            onUnfollow={identity && usingRelay ? unfollow : undefined}
-          />
-        </section>
+      {/* Body: Stations (radio) | Podcasts (RSS). npub-1063 feeds arrive in U4b. */}
+      <main className="flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center gap-1 border-b border-surface px-2 py-1">
+          {([
+            { id: "stations", label: "Stations", icon: <Radio size={13} /> },
+            { id: "podcasts", label: "Podcasts", icon: <Headphones size={13} /> },
+          ] as const).map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs transition-colors",
+                tab === t.id
+                  ? "bg-surface text-fg"
+                  : "text-muted hover:bg-surfaceHover hover:text-fg",
+              )}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {tab === "stations" ? (
+            <section className="flex flex-col">
+              <div className="flex items-center gap-2 px-3 pb-1 pt-3">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  Stations
+                </h2>
+                <span className="font-mono text-[10px] text-muted/60">{source}</span>
+              </div>
+              <StationList
+                stations={stations}
+                currentSlug={current?.kind === "station" ? current.key : null}
+                playing={playing}
+                loading={loading}
+                onTune={tune}
+                onUnfollow={identity && usingRelay ? unfollow : undefined}
+              />
+            </section>
+          ) : (
+            <PodcastTab
+              onPlayEpisode={playEpisode}
+              currentKey={current?.kind === "episode" ? current.key : null}
+              playing={playing}
+            />
+          )}
+        </div>
       </main>
 
       <PlayerBar
-        station={current}
+        current={current}
         nowPlaying={nowPlaying}
         playing={playing}
         buffering={buffering}
         volume={volume}
+        position={position}
+        duration={duration}
         onToggle={togglePlay}
+        onSeek={seek}
         onVolume={changeVolume}
       />
 
-      {/* Hidden transport. Event wiring keeps React state in step with the
-          element's real playback state (buffering vs playing vs errored). */}
+      {/* Hidden transport. Events keep React state in step with the element, and
+          drive episode seek/resume (loadedmetadata / timeupdate / ended). */}
       <audio
         ref={audioRef}
         preload="none"
@@ -307,6 +387,29 @@ export default function App() {
         onPause={() => setPlaying(false)}
         onError={() => {
           setBuffering(false);
+          setPlaying(false);
+        }}
+        onLoadedMetadata={(e) => {
+          const a = e.currentTarget;
+          setDuration(Number.isFinite(a.duration) ? a.duration : 0);
+          if (current?.kind === "episode") {
+            const r = resumePosition(current.url);
+            if (r > 0 && (!a.duration || r < a.duration - 15)) a.currentTime = r;
+          }
+        }}
+        onTimeUpdate={(e) => {
+          const a = e.currentTarget;
+          setPosition(a.currentTime);
+          if (current?.kind === "episode") {
+            const now = Date.now();
+            if (now - lastSaveRef.current > 4000) {
+              lastSaveRef.current = now;
+              savePosition(current.url, a.currentTime, a.duration || undefined);
+            }
+          }
+        }}
+        onEnded={() => {
+          if (current?.kind === "episode") savePosition(current.url, 0);
           setPlaying(false);
         }}
       />

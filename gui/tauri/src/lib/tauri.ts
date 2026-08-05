@@ -51,6 +51,31 @@ export function seedStations(): Promise<Station[]> {
   return invoke<Station[]>("seed_stations");
 }
 
+// --- podcast RSS (U4) --------------------------------------------------------
+
+/** One podcast episode parsed from an RSS/Atom feed (Rust feed-rs). */
+export interface Episode {
+  id: string;
+  title: string;
+  enclosureUrl: string;
+  mime: string | null;
+  durationSecs: number | null;
+  publishedAt: number | null;
+}
+
+/** A podcast feed + its episodes (newest first). */
+export interface Podcast {
+  title: string;
+  description: string | null;
+  image: string | null;
+  episodes: Episode[];
+}
+
+/** Fetch + parse a podcast feed URL into episodes. */
+export function fetchPodcast(url: string): Promise<Podcast> {
+  return invoke<Podcast>("fetch_podcast", { url });
+}
+
 // --- nostr identity (OS keychain) -------------------------------------------
 
 export interface Identity {

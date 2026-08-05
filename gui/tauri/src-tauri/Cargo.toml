@@ -27,6 +27,9 @@ percent-encoding = "2"
 # ICY now-playing (U3): decode metadata as UTF-8 → Windows-1251 (RU servers) →
 # Latin-1, matching radioscan.py's decode ladder.
 encoding_rs = "0.8"
+# Podcast RSS (U4): fetch the feed document + parse RSS 2.0/Atom + podcast tags.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "charset"] }
+feed-rs = "2"
 # Nostr identity + station.v1 publishing (U2). Same pins as ntree/ndisc.
 nostr = "0.43"
 nostr-sdk = "0.43"
