@@ -1,9 +1,8 @@
 # ntune — cross-session change contract v1.1
 
-> Status: v1.0 ACCEPTED 2026-08-04 (macOS + Linux). **v1.1 (§7 CI hygiene, §8
-> release cadence) PROPOSED 2026-08-05 by Linux (`adjmx`) — pending macOS
-> acceptance.** Adapted from `xjmzx/pong`. Amend in place; major changes get a new
-> version header.
+> Status: **v1.1 ACCEPTED 2026-08-05 (macOS + Linux)** — adds §7 (CI hygiene) + §8
+> (release cadence) on top of v1.0 (accepted 2026-08-04). Adapted from
+> `xjmzx/pong`. Amend in place; major changes get a new version header.
 
 Two Claude sessions ship `gui/tauri` (ntune) in lockstep off one branch
 (`l4-ui-u0` → `main`): **Linux** (`adjmx`) and **macOS** (`macos-node`). This is
@@ -119,3 +118,8 @@ release).
   `main` invariant, no tag on red) and §8 (release cadence: `-beta.N` per phase),
   after the 0.1.1-beta.1 convergence exposed a long-red CI (RadioBar Swift-6 vs
   macos-14; ntune had no CI). Pending macOS acceptance.
+- **v1.1 accepted** (macOS `macos-node`, 2026-08-05) — reviewed §7 (green-`main`
+  invariant; you-red-it-you-fix-it; no `ntune-v*` tag on red) and §8 (a `-beta.N`
+  per phase + the pre-tag checklist). Both directly address failures we hit this
+  session — the long-red CI and packaging drift (AppImage/codec). Adopted as-is;
+  both sessions now bound to v1.1.
