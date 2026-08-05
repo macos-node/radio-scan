@@ -18,7 +18,7 @@ use nostr::nips::nip19::{FromBech32, ToBech32};
 use nostr::{EventBuilder, Keys, Kind, SecretKey, Tag};
 use nostr_sdk::prelude::Output;
 use nostr_sdk::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
 mod proxy;
@@ -458,6 +458,91 @@ async fn fetch_podcast(url: String) -> Result<Podcast, String> {
     })
 }
 
+// --- favorites (local curated log) ------------------------------------------
+// A favorite is a track you liked while listening (from U3's now-playing).
+// v1 is local-first: appended to favorites.jsonl in the app-data dir. The later
+// layer (kind:7 reaction on airplay.v1, keyed to the master-release-key) is a
+// follow-up — see gui/tauri/docs/menubar-companion-2026-08-04.md.
+
+#[derive(Serialize, Deserialize, Clone)]
+struct Favorite {
+    id: String,      // epoch millis — a stable per-record handle for removal
+    artist: String,
+    title: String,
+    station: String, // the station name it was heard on
+    url: String,     // the station's stream url
+    ts: i64,         // epoch seconds
+}
+
+fn favorites_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("favorites.jsonl"))
+}
+
+fn read_favorites(app: &tauri::AppHandle) -> Result<Vec<Favorite>, String> {
+    match std::fs::read_to_string(favorites_path(app)?) {
+        Ok(t) => Ok(t
+            .lines()
+            .filter_map(|l| serde_json::from_str::<Favorite>(l).ok())
+            .collect()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+fn add_favorite(
+    app: tauri::AppHandle,
+    artist: String,
+    title: String,
+    station: String,
+    url: String,
+) -> Result<Favorite, String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?;
+    let fav = Favorite {
+        id: now.as_millis().to_string(),
+        artist,
+        title,
+        station,
+        url,
+        ts: now.as_secs() as i64,
+    };
+    let line = serde_json::to_string(&fav).map_err(|e| e.to_string())?;
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(favorites_path(&app)?)
+        .map_err(|e| e.to_string())?;
+    writeln!(f, "{line}").map_err(|e| e.to_string())?;
+    Ok(fav)
+}
+
+#[tauri::command]
+fn list_favorites(app: tauri::AppHandle) -> Result<Vec<Favorite>, String> {
+    let mut favs = read_favorites(&app)?;
+    favs.reverse(); // newest first
+    Ok(favs)
+}
+
+#[tauri::command]
+fn remove_favorite(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let kept: Vec<String> = read_favorites(&app)?
+        .into_iter()
+        .filter(|f| f.id != id)
+        .filter_map(|f| serde_json::to_string(&f).ok())
+        .collect();
+    let body = if kept.is_empty() {
+        String::new()
+    } else {
+        kept.join("\n") + "\n"
+    };
+    std::fs::write(favorites_path(&app)?, body).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -479,6 +564,9 @@ pub fn run() {
             publish_station,
             unfollow_station,
             fetch_podcast,
+            add_favorite,
+            list_favorites,
+            remove_favorite,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ntune");

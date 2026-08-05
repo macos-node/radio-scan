@@ -1,4 +1,13 @@
-import { Headphones, Loader2, Music, Pause, Play, Radio, Volume2 } from "lucide-react";
+import {
+  Headphones,
+  Heart,
+  Loader2,
+  Music,
+  Pause,
+  Play,
+  Radio,
+  Volume2,
+} from "lucide-react";
 import type { NowPlaying } from "../lib/tauri";
 import type { Playing } from "../lib/player";
 import { cn } from "../lib/cn";
@@ -24,6 +33,8 @@ export function PlayerBar({
   onToggle,
   onSeek,
   onVolume,
+  onFavorite,
+  isFavorited,
 }: {
   current: Playing | null;
   nowPlaying: NowPlaying | null;
@@ -35,6 +46,8 @@ export function PlayerBar({
   onToggle: () => void;
   onSeek: (secs: number) => void;
   onVolume: (v: number) => void;
+  onFavorite?: () => void;
+  isFavorited?: boolean;
 }) {
   const isEpisode = current?.kind === "episode";
 
@@ -133,6 +146,23 @@ export function PlayerBar({
           </span>
         )}
       </div>
+
+      {onFavorite && (
+        <button
+          type="button"
+          onClick={onFavorite}
+          disabled={!nowPlaying}
+          title={isFavorited ? "Remove favorite" : "Favorite this track"}
+          aria-label={isFavorited ? "Remove favorite" : "Favorite this track"}
+          className={cn(
+            "shrink-0 rounded-sm p-1.5 transition-colors",
+            "disabled:pointer-events-none disabled:opacity-30",
+            isFavorited ? "text-mauve" : "text-muted hover:text-mauve",
+          )}
+        >
+          <Heart size={16} fill={isFavorited ? "currentColor" : "none"} />
+        </button>
+      )}
 
       <div className="flex shrink-0 items-center gap-2">
         <Volume2 size={15} className="text-muted" />

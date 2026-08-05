@@ -1,20 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { Headphones, KeyRound, Palette, Plus, Radio } from "lucide-react";
+import { Headphones, Heart, KeyRound, Palette, Plus, Radio } from "lucide-react";
 import { ToolbarIconButton } from "./components/ToolbarIconButton";
 import { StationList } from "./components/StationList";
 import { PodcastTab } from "./components/PodcastTab";
 import { PlayerBar } from "./components/PlayerBar";
 import { IdentityDialog } from "./components/IdentityDialog";
 import { AddStationDialog } from "./components/AddStationDialog";
+import { FavoritesDialog } from "./components/FavoritesDialog";
 import {
+  addFavorite,
   getIdentity,
   getProxyPort,
+  listFavorites,
   onNowPlaying,
+  removeFavorite,
   seedStations,
   streamUrl,
   unfollowStation,
   type Episode,
+  type Favorite,
   type Identity,
   type NowPlaying,
   type Station,
@@ -87,6 +92,8 @@ export default function App() {
   const [optimistic, setOptimistic] = useState<Station[]>([]);
   const [showIdentity, setShowIdentity] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [showFavorites, setShowFavorites] = useState(false);
 
   // Show published (followed) stations AND any seeds not already followed
   // (deduped by url), so the seed list stays visible after publishing.
@@ -126,6 +133,9 @@ export default function App() {
     getProxyPort()
       .then(setProxyPort)
       .catch((e) => console.error("proxy_port failed", e));
+    listFavorites()
+      .then(setFavorites)
+      .catch((e) => console.error("list_favorites failed", e));
   }, []);
 
   // Keep the playing URL in a ref for the now-playing listener below.
@@ -262,6 +272,51 @@ export default function App() {
     });
   }, []);
 
+  // --- favorites (local curated log) ----------------------------------------
+  // Match by artist+title (the track), station-agnostic — "I like this track".
+  const isFavorited = useMemo(
+    () =>
+      nowPlaying != null &&
+      favorites.some(
+        (f) => f.artist === nowPlaying.artist && f.title === nowPlaying.title,
+      ),
+    [favorites, nowPlaying],
+  );
+
+  const toggleFavorite = useCallback(async () => {
+    if (!nowPlaying) return;
+    const same = (f: Favorite) =>
+      f.artist === nowPlaying.artist && f.title === nowPlaying.title;
+    const dupes = favorites.filter(same);
+    if (dupes.length) {
+      setFavorites((prev) => prev.filter((f) => !same(f)));
+      await Promise.all(
+        dupes.map((f) =>
+          removeFavorite(f.id).catch((e) =>
+            console.error("remove favorite failed", e),
+          ),
+        ),
+      );
+    } else {
+      try {
+        const fav = await addFavorite({
+          artist: nowPlaying.artist,
+          title: nowPlaying.title,
+          station: current?.title ?? "",
+          url: current?.url ?? nowPlaying.url,
+        });
+        setFavorites((prev) => [fav, ...prev]);
+      } catch (e) {
+        console.error("add favorite failed", e);
+      }
+    }
+  }, [nowPlaying, favorites, current]);
+
+  const removeFav = useCallback((id: string) => {
+    setFavorites((prev) => prev.filter((f) => f.id !== id));
+    removeFavorite(id).catch((e) => console.error("remove favorite failed", e));
+  }, []);
+
   return (
     <div className="flex h-full flex-col bg-bg text-fg">
       {/* Header */}
@@ -301,6 +356,16 @@ export default function App() {
               {identity ? `${identity.npub.slice(0, 12)}…` : "no key"}
             </span>
           </button>
+          <ToolbarIconButton
+            icon={
+              <Heart
+                size={15}
+                className={favorites.length ? "text-mauve" : undefined}
+              />
+            }
+            title={`Favorites${favorites.length ? ` (${favorites.length})` : ""}`}
+            onClick={() => setShowFavorites(true)}
+          />
           <ToolbarIconButton
             icon={<Palette size={15} />}
             title={`Theme: ${theme} (click to cycle)`}
@@ -372,6 +437,8 @@ export default function App() {
         onToggle={togglePlay}
         onSeek={seek}
         onVolume={changeVolume}
+        onFavorite={toggleFavorite}
+        isFavorited={isFavorited}
       />
 
       {/* Hidden transport. Events keep React state in step with the element, and
@@ -419,6 +486,17 @@ export default function App() {
           identity={identity}
           onClose={() => setShowIdentity(false)}
           onChange={setIdentity}
+        />
+      )}
+      {showFavorites && (
+        <FavoritesDialog
+          favorites={favorites}
+          onClose={() => setShowFavorites(false)}
+          onRemove={removeFav}
+          onTune={(s) => {
+            tune(s);
+            setShowFavorites(false);
+          }}
         />
       )}
       {showAdd && (

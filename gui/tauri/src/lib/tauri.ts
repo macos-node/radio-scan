@@ -154,3 +154,35 @@ export function publishStation(input: StationInput): Promise<PublishResult> {
 export function unfollowStation(slug: string): Promise<PublishResult> {
   return invoke<PublishResult>("unfollow_station", { slug, relays: RELAYS });
 }
+
+// --- favorites (local curated log) ------------------------------------------
+
+/** A track you liked while listening (from U3's now-playing). Local-first v1. */
+export interface Favorite {
+  id: string;
+  artist: string;
+  title: string;
+  station: string;
+  url: string;
+  ts: number; // epoch seconds
+}
+
+/** Save the current track as a favorite (appends to the local log). */
+export function addFavorite(f: {
+  artist: string;
+  title: string;
+  station: string;
+  url: string;
+}): Promise<Favorite> {
+  return invoke<Favorite>("add_favorite", f);
+}
+
+/** All favorites, newest first. */
+export function listFavorites(): Promise<Favorite[]> {
+  return invoke<Favorite[]>("list_favorites");
+}
+
+/** Remove a favorite by id. */
+export function removeFavorite(id: string): Promise<void> {
+  return invoke("remove_favorite", { id });
+}
