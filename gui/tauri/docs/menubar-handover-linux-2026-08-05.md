@@ -131,6 +131,40 @@ or the `--tray` plumbing doesn't match what you see on Linux, raise it here or i
 
 ---
 
+## Verified on Linux (`adjmx`, 2026-08-05) — PASS
+
+Verified via the installed release build (`make install` → `ntune --tray`, i.e.
+the packaged secure-origin path) and in normal use.
+
+- **Environment:** Ubuntu 24.04, **GNOME on X11**; AppIndicator extension
+  `ubuntu-appindicators@ubuntu.com` enabled.
+- **1. Icon:** appears in the top bar via StatusNotifierItem
+  (`libayatana-appindicator3-1`) + the GNOME AppIndicator extension.
+- **2. Menu:** opens; **Show ntune** and **Quit** work. **♥ is disabled with
+  nothing playing and enables only on a live now-playing track** — played an
+  `http://` SomaFM seed and the acidjazz stream, U3 fired, ♥ enabled, and the
+  favorite was stored to `favorites.jsonl`. The menu is the contract, as noted.
+- **3. `.deb` depend:** `libayatana-appindicator3-1` renders the icon on
+  KDE/XFCE/Cinnamon/MATE — **but on GNOME the shell AppIndicator extension is also
+  required or no icon shows**, and a `Depends`/`Recommends` can't install a shell
+  extension. Worth a line in this doc for clean-GNOME-Ubuntu users: it's an
+  environment prerequisite, not a bug.
+
+Beyond the ask, the Linux side also made the **frontend the single source of
+truth** (label clears on stop; ♥ gates exactly like the in-window heart), wired
+the **favorite handoff** (`tray-favorite` → same `toggleFavorite`), and set the
+**installed desktop entry to default to `ntune --tray`** (drop the flag on a DE
+that can't host an SNI tray — no rebuild).
+
+**B (Linux menubar story):** lean **yes** — ntune's tray should grow toward
+RadioBar's viewer role on Linux, sourced from `radioscan.py`'s portable log
+layout (not the mac-only `~/RadioTuner`). Bridging *ntune-playback* vs
+*logger-jsonl* is the real work; captured in the
+[`menubar-companion-2026-08-04.md`](menubar-companion-2026-08-04.md) open
+decisions (feedback + richer menu → RadioBar parity). Unscheduled.
+
+---
+
 ## Quick reference (paths)
 - Logger: `~/RadioTuner/acidjazz_radio.py` · launchd `com.tigger.acidjazz` ·
   jsonl `~/RadioTuner/acidjazz_log.jsonl` (mac host only)
