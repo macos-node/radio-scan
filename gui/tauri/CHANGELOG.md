@@ -3,7 +3,27 @@
 radio-scan's L4 desktop tuner/player. Notable changes per release. Dates are the
 tag date; unreleased work sits under the top heading until tagged.
 
-## 0.1.1-beta.2 — unreleased
+## 0.1.1-beta.3 — unreleased
+
+A cross-platform menubar/tray companion, and JSON import to round-trip the
+station/podcast lists.
+
+### Added
+- **Menubar / tray companion (U6, opt-in `--tray`).** A small cross-platform tray
+  now-playing surface — icon + menu with the live "Artist — Title", **Show ntune**,
+  **♥ Favorite current track** (enabled only on a live track, running the same
+  toggle as the in-window heart), and **Quit**. Off unless launched with `--tray`,
+  so the default app is unchanged; the installed Linux desktop entry defaults to
+  `--tray`, macOS is opt-in. Verified on macOS (WKWebView) and Linux (Ubuntu
+  GNOME/X11). *GNOME needs the shell AppIndicator extension in addition to
+  `libayatana-appindicator3-1` — see the README.*
+- **JSON import (stations & podcasts).** Each list gets an **Import** button (native
+  Open dialog) mirroring Export: merges into the local store / subscriptions,
+  deduped (stations by slug+url, podcasts by url), imported entries first — safe to
+  re-import. Round-trips the export shape and accepts minimal hand-made files
+  (`[{name,url}]` — a missing station slug is derived, descriptive fields default).
+
+## 0.1.1-beta.2 — 2026-08-05
 
 Station/podcast list management: adds persist locally with no key, and both
 lists are copyable + exportable.
