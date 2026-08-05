@@ -133,8 +133,10 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   The suite-level UI is now **underway** — ntune (§6) is at U0–U2; RadioBar (§5)
   remains a local macOS viewer, not the suite surface. See the build map's open
   decisions (n-alias, dedup window, relay-filterable work key, privacy
-  granularity, Python-vs-Rust) and the L4 map's (RadioBar fate, playback engine,
-  who publishes airplay).
+  granularity, Python-vs-Rust) and the L4 map's (playback engine, who publishes
+  airplay). *RadioBar fate is now resolved* — macOS-native RadioBar stays; the
+  cross-platform now-playing surface is a Tauri tray in ntune, a post-`v0.1.0`
+  arc ([`gui/tauri/docs/menubar-companion-2026-08-04.md`](gui/tauri/docs/menubar-companion-2026-08-04.md)).
 
 _(The schema drafts under `schema/` are now pushed — commit `98d6175`.)_
 

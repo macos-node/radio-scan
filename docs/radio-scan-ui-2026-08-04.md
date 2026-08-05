@@ -246,9 +246,15 @@ reads `airplay.v1` off the relays.
 
 ## Open decisions (the worklist)
 
-1. **`RadioBar` (Swift menubar) fate.** L4 supersedes it as the main surface —
-   retire it, or keep it as a lightweight macOS tray companion beside the Tauri
-   window? *Recommend: keep as an optional macOS tray, Tauri is primary.*
+1. **`RadioBar` (Swift menubar) fate. — RESOLVED (2026-08-05).** RadioBar stays
+   the **macOS-native** menubar option; the **cross-platform** answer is a
+   **Tauri tray mode in ntune** (Tauri's tray API covers Linux/macOS/Windows —
+   Swift can't). The tray/now-playing surface becomes a post-`v0.1.0` arc:
+   ntune grows a tray showing now-playing (fed by U3's ICY proxy), which is also
+   the natural `airplay.v1` emission point → the suite's menubar
+   now-playing/scrobbler pattern (ntune + nplay + the logger). Direction:
+   [`../gui/tauri/docs/menubar-companion-2026-08-04.md`](../gui/tauri/docs/menubar-companion-2026-08-04.md).
+   Sequence: **U3 → tray companion → `airplay.v1`**.
 2. **Repo home vs dev machine.** Stays `macos-node/radio-scan` (sensor identity);
    L4 builds/runs cross-platform, developed on Linux. *Recommend: confirm as-is;
    no split.*
