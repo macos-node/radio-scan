@@ -18,9 +18,48 @@ jobs:
           python -m py_compile radioscan.py
           find enrich -name '*.py' -print0 | xargs -0 -r python -m py_compile
 
+  ntune:
+    name: ntune (Linux — typecheck + cargo check)
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: gui/tauri
+    steps:
+      - uses: actions/checkout@v4
+      # Same Tauri system deps as ntune-release.yml; libsecret for the keyring.
+      - name: Install Tauri system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libsecret-1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            build-essential \
+            curl wget file
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: gui/tauri/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gui/tauri/src-tauri
+      - name: Install npm deps
+        run: npm ci
+      - name: Typecheck + build frontend
+        run: npm run build
+      - name: cargo check
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
   macos-gui:
     name: RadioBar (macOS)
-    runs-on: macos-14
+    # macos-15 ships Xcode 16 / Swift 6 (macos-14 has Swift 5.10, which can't
+    # build RadioBar's Package.swift swift-tools-version 6.0).
+    runs-on: macos-15
     defaults:
       run:
         working-directory: gui/macos
