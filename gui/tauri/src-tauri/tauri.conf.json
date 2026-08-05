@@ -35,7 +35,11 @@
     ],
     "linux": {
       "deb": {
-        "depends": ["gstreamer1.0-plugins-bad", "gstreamer1.0-libav"]
+        "depends": [
+          "gstreamer1.0-plugins-bad",
+          "gstreamer1.0-libav",
+          "libayatana-appindicator3-1"
+        ]
       }
     }
   }

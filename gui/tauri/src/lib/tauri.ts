@@ -8,7 +8,7 @@
 // nsec never leaves Rust except once on generate.
 
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { save } from "@tauri-apps/plugin-dialog";
 import type { Station } from "./station";
@@ -69,6 +69,27 @@ export function onNowPlaying(
  *  when the stream is plain http://. */
 export function streamUrl(port: number, upstream: string): string {
   return `http://127.0.0.1:${port}/?url=${encodeURIComponent(upstream)}`;
+}
+
+// --- tray / menubar companion (U6) ------------------------------------------
+
+/** Subscribe to the tray's "Favorite current track" menu action (U6, `--tray`).
+ *  The tray knows only artist/title from now-playing, so it hands the click to
+ *  the UI — which holds the station's display name — to run the same favorite
+ *  toggle as the in-window heart. Returns the unlisten fn. */
+export function onTrayFavorite(cb: () => void): Promise<UnlistenFn> {
+  return listen("tray-favorite", () => cb());
+}
+
+/** Push the derived now-playing state to the tray (U6, `--tray`). The UI is the
+ *  single source of truth — it already clears now-playing on stop and gates the
+ *  ♥ — so the tray's label + ♥-enabled mirror it exactly. A no-op when the app
+ *  was launched without a tray (nothing listens). */
+export function emitTrayNowPlaying(state: {
+  label: string;
+  canFavorite: boolean;
+}): Promise<void> {
+  return emit("tray-now-playing", state);
 }
 
 /** Starter stations, served from Rust. The pristine seed set — on a fresh

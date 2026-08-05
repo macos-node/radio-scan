@@ -18,12 +18,14 @@ import { AddStationDialog } from "./components/AddStationDialog";
 import { FavoritesDialog } from "./components/FavoritesDialog";
 import {
   addFavorite,
+  emitTrayNowPlaying,
   exportJson,
   getIdentity,
   getProxyPort,
   listFavorites,
   listLocalStations,
   onNowPlaying,
+  onTrayFavorite,
   removeFavorite,
   removeLocalStation,
   streamUrl,
@@ -360,6 +362,37 @@ export default function App() {
     setFavorites((prev) => prev.filter((f) => f.id !== id));
     removeFavorite(id).catch((e) => console.error("remove favorite failed", e));
   }, []);
+
+  // The tray's ♥ (U6, `--tray`) runs the SAME toggle as the in-window heart, so
+  // both surfaces stay in step. Keep a ref to the latest toggleFavorite so the
+  // listener — registered once — always sees current nowPlaying/favorites without
+  // re-subscribing. A tray click with nothing playing is a harmless no-op.
+  const toggleFavoriteRef = useRef(toggleFavorite);
+  useEffect(() => {
+    toggleFavoriteRef.current = toggleFavorite;
+  }, [toggleFavorite]);
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    onTrayFavorite(() => void toggleFavoriteRef.current())
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch((e) => console.error("tray-favorite listen failed", e));
+    return () => unlisten?.();
+  }, []);
+
+  // Push the derived now-playing state to the tray (U6). The UI owns this — it
+  // clears nowPlaying on stop and gates the ♥ on it — so the tray label and the
+  // ♥-enabled state mirror the in-window heart. Harmless if launched without a
+  // tray (nothing listens).
+  useEffect(() => {
+    const label = nowPlaying
+      ? [nowPlaying.artist, nowPlaying.title].filter(Boolean).join(" — ")
+      : playing && current
+        ? current.title
+        : "Not playing";
+    void emitTrayNowPlaying({ label, canFavorite: nowPlaying != null });
+  }, [nowPlaying, playing, current]);
 
   return (
     <div className="flex h-full flex-col bg-bg text-fg">

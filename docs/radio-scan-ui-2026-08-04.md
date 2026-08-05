@@ -200,6 +200,61 @@ seam is stable.
   NIP-46 bunker login parity (mirror the suite signing table); `feed.v1` notes
   ("heavy rotation this week"); "heard it → add to ndisc" candidate action.
 
+### U6 — Menubar / tray now-playing companion  *(depends on U3, not U5)*
+The cross-platform answer to Open decision #1: **ntune grows a tray *mode***, so
+one binary fills the Linux task-bar gap that Swift `RadioBar` can't. Direction
+doc: [`../gui/tauri/docs/menubar-companion-2026-08-04.md`](../gui/tauri/docs/menubar-companion-2026-08-04.md).
+Sequences off **U3** (the ICY proxy already gives now-playing) — can run in
+parallel with U4/U5; do **not** wait on U5.
+
+- **Tray surface (Tauri `TrayIconBuilder`, cross-platform).** Icon + tooltip +
+  context menu, wired to ntune's existing player state and the U3 StreamTitle
+  event. Menu = now-playing line · ❤ favorite · Open/focus ntune · Play·Stop ·
+  Quit; tooltip mirrors now-playing. Left-click behaviour is DE-dependent on
+  Linux, so **the menu is the contract**, not a click-to-popover.
+- **Linux reality (the actual work).** Tauri's tray is **StatusNotifierItem (SNI)**
+  via `libayatana-appindicator3` — an icon+menu model, *not* an arbitrary popover
+  like RadioBar's SwiftUI panel. Ship `libayatana-appindicator3-1` as a runtime
+  dep. **GNOME gotcha:** Debian's default GNOME needs the *AppIndicator* extension
+  or the icon never appears (KDE/XFCE/Cinnamon/MATE show SNI natively) — document
+  it. **Wayland** has no absolute window geometry, so a tray-anchored popover is
+  unreliable: menu-first is the portable choice.
+- **Favorites v1 (local, per the companion doc).** ❤ writes the current track
+  (artist/title/station/timestamp) to a curated favorites list — no Nostr, no new
+  deps; the later kind:7/`mrk` reaction is a follow-up, not this phase.
+- **Autostart / login-item.** A `~/.config/autostart/ntune.desktop`
+  (`X-GNOME-Autostart-enabled`) or a `systemd --user` unit; a `--tray`/`--minimized`
+  launch flag so autostart comes up headless-to-tray. Slots into either the
+  `make install` (`~/.local`) path or a `.deb`.
+- **Packaging.** Tauri's bundler already emits a `.deb`; declare the appindicator
+  dep + autostart entry and it installs clean on Debian-based distros. **Scope
+  guard:** that is a *personal / GitHub-release* `.deb` — the official Debian
+  archive (lintian-clean, DFSG, policy) is a separate, much larger effort and is
+  **not** in scope here.
+- **Reconcile the now-playing source.** RadioBar watches the *logger's* JSONL
+  (`~/RadioTuner`, launchd `com.tigger.acidjazz`); ntune's tray reflects *ntune's
+  own tuned station* via U3. Settle that coupling here rather than inheriting
+  RadioBar's single-station wiring.
+- **Deliverable:** an always-there Linux/macOS/Windows tray showing what ntune is
+  playing, click-through to the window, quick ❤ on the current track — the suite's
+  first cross-platform menubar now-playing surface, and the natural **`airplay.v1`
+  emission point** (the scrobbler seam ntune + nplay + the logger will share).
+- *As scaffolded (2026-08-05, Linux-verified):* tray built behind `--tray`
+  (`src-tauri/src/tray.rs`; `tray-icon` cargo feature; SNI verified on GNOME with
+  the AppIndicator extension). Menu = now-playing readout · Show ntune · ♥ Favorite
+  current track · Quit, with tooltip. **The frontend is the single source of truth
+  for the tray** — App.tsx pushes `{label, canFavorite}` (`emitTrayNowPlaying`) on
+  every now-playing/stop, so the tray label clears on stop and the ♥ enables/disables
+  exactly like the in-window heart (`disabled={!nowPlaying}`); the ♥ click hands back
+  a `tray-favorite` event that runs the *same* `toggleFavorite` (`onTrayFavorite`).
+  **The installed desktop entry defaults to `ntune --tray`** (`ntune.desktop.in`) so
+  the app-menu icon launches with the tray. *Compatibility escape hatch:* on a
+  desktop that can't host an SNI tray, drop `--tray` from the `Exec` line (or the
+  `make install` invocation) and it launches as a plain window — no rebuild; the
+  deeper opt-out is building without the `tray-icon` feature. Still open: `--tray`
+  currently opens the tray *alongside* the window (headless-to-tray start unbuilt),
+  and the ❤→kind:7/`mrk` reaction is the post-`airplay.v1` follow-up.
+
 ---
 
 ## Repo layout delta (grows around P0)
@@ -254,7 +309,7 @@ reads `airplay.v1` off the relays.
    the natural `airplay.v1` emission point → the suite's menubar
    now-playing/scrobbler pattern (ntune + nplay + the logger). Direction:
    [`../gui/tauri/docs/menubar-companion-2026-08-04.md`](../gui/tauri/docs/menubar-companion-2026-08-04.md).
-   Sequence: **U3 → tray companion → `airplay.v1`**.
+   Sequence: **U3 → tray companion → `airplay.v1`** — now scoped as **U6** below.
 2. **Repo home vs dev machine.** Stays `macos-node/radio-scan` (sensor identity);
    L4 builds/runs cross-platform, developed on Linux. *Recommend: confirm as-is;
    no split.*

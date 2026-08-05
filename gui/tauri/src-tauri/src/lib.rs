@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
 mod proxy;
+mod tray;
 
 // --- loopback stream proxy ---------------------------------------------------
 
@@ -660,6 +661,12 @@ pub fn run() {
             // The app handle lets it emit now-playing events parsed from ICY (U3).
             let port = proxy::start(app.handle().clone())?;
             app.manage(ProxyPort(port));
+            // U6 scaffold — opt-in menubar/tray now-playing companion. Off unless
+            // launched with `--tray`, so the default app is unchanged. Also the
+            // headless-to-tray autostart entry point (see the U6 build-map notes).
+            if std::env::args().any(|a| a == "--tray") {
+                tray::init(app.handle())?;
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
