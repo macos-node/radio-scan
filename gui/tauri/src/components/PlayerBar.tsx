@@ -1,13 +1,14 @@
-import { Loader2, Pause, Play, Radio, Volume2 } from "lucide-react";
-import type { Station } from "../lib/tauri";
+import { Loader2, Music, Pause, Play, Radio, Volume2 } from "lucide-react";
+import type { NowPlaying, Station } from "../lib/tauri";
 import { cn } from "../lib/cn";
 
-/** The bottom transport. In U0 it shows the tuned station and a live indicator;
- *  the now-playing "Artist – Title" label arrives in U3 off the loopback ICY
- *  proxy (or `airplay.v1` off the relays). Playback is driven by the parent's
- *  hidden <audio> element — this is presentation + controls only. */
+/** The bottom transport. Shows the tuned station, a live indicator, and the
+ *  now-playing "Artist – Title" (U3) parsed from the stream's ICY metadata by
+ *  the loopback proxy. Playback is driven by the parent's hidden <audio>
+ *  element — this is presentation + controls only. */
 export function PlayerBar({
   station,
+  nowPlaying,
   playing,
   buffering,
   volume,
@@ -15,6 +16,7 @@ export function PlayerBar({
   onVolume,
 }: {
   station: Station | null;
+  nowPlaying: NowPlaying | null;
   playing: boolean;
   buffering: boolean;
   volume: number;
@@ -57,12 +59,29 @@ export function PlayerBar({
                 </span>
               )}
             </div>
-            {/* Placeholder for the U3 now-playing ticker. */}
-            <div className="truncate text-xs text-muted">
-              {station.fmt ?? "stream"}
-              {station.bitrate != null ? ` · ${station.bitrate}k` : ""}
-              <span className="text-muted/60"> · track metadata in U3</span>
-            </div>
+            {/* Now-playing from ICY metadata (U3), else the stream format. */}
+            {nowPlaying ? (
+              <div className="flex items-center gap-1.5 truncate text-xs">
+                <Music size={11} className="shrink-0 text-mauve" />
+                {nowPlaying.artist && (
+                  <span className="shrink-0 truncate text-mauve">
+                    {nowPlaying.artist}
+                  </span>
+                )}
+                <span className="truncate text-fg">
+                  {nowPlaying.artist ? "— " : ""}
+                  {nowPlaying.title}
+                </span>
+              </div>
+            ) : (
+              <div className="truncate text-xs text-muted">
+                {station.fmt ?? "stream"}
+                {station.bitrate != null ? ` · ${station.bitrate}k` : ""}
+                {playing ? (
+                  <span className="text-muted/60"> · waiting for track info…</span>
+                ) : null}
+              </div>
+            )}
           </>
         ) : (
           <span className="text-sm text-muted">Select a station to tune in</span>

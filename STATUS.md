@@ -124,8 +124,17 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   `Depends: gstreamer1.0-plugins-bad, gstreamer1.0-libav, libwebkit2gtk-4.1-0,
   libgtk-3-0` and packages `usr/bin/ntune` + `.desktop` + icons. Ships `.deb`
   (Linux) + `.dmg` (macOS).
-- **Next — U3:** now-playing via a Rust loopback ICY proxy (port of
-  `radioscan.py`), then U4 podcast/npub feed tabs.
+- **U3 (done, Linux-verified):** now-playing via the loopback ICY proxy. The
+  proxy now requests `Icy-MetaData: 1`, parses the interleaved `StreamTitle`
+  (decode ladder UTF-8→Windows-1251→Latin-1, ported from `radioscan.py`), strips
+  the metadata so the webview gets clean audio, and emits a `now-playing`
+  {url,artist,title} event per track change; the player bar shows ♪ Artist —
+  Title. **http-only** (proxied streams); `https` plays direct and shows none.
+  Verified on Linux — Acid Jazz shows live track updates, audio stays clean
+  (ffprobe). `Needs-verify: macos` (ICY parse on WKWebView).
+- **Next — U4:** podcast RSS (`feed-rs`) + per-npub `1063` feed tabs. (Possible
+  U3 follow-ups: now-playing for `https` via a TLS proxy path; `airplay.v1`
+  emission from the same tap — see the menubar-companion direction.)
 
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +

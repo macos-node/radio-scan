@@ -371,7 +371,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // The proxy runs on its own thread + runtime; grab its port for the UI.
-            let port = proxy::start()?;
+            // The app handle lets it emit now-playing events parsed from ICY (U3).
+            let port = proxy::start(app.handle().clone())?;
             app.manage(ProxyPort(port));
             Ok(())
         })

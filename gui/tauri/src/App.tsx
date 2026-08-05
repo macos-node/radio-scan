@@ -9,10 +9,12 @@ import { AddStationDialog } from "./components/AddStationDialog";
 import {
   getIdentity,
   getProxyPort,
+  onNowPlaying,
   seedStations,
   streamUrl,
   unfollowStation,
   type Identity,
+  type NowPlaying,
   type Station,
 } from "./lib/tauri";
 import { OWNER_PUBKEY } from "./lib/station";
@@ -63,6 +65,12 @@ export default function App() {
   const [volume, setVolume] = useState<number>(loadVolume);
   const [version, setVersion] = useState("");
   const [proxyPort, setProxyPort] = useState<number | null>(null);
+  // Now-playing parsed from the stream's ICY metadata (U3), or null when the
+  // stream carries none / nothing's tuned. Cleared on stop and station change.
+  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
+  // The tuned station's URL, in a ref so the now-playing listener (registered
+  // once) always matches against the current station without re-subscribing.
+  const currentUrlRef = useRef<string | null>(null);
   // Stations just published this session — shown immediately (optimistic insert)
   // because the live subscription doesn't reliably echo your own fresh publish.
   const [optimistic, setOptimistic] = useState<Station[]>([]);
@@ -112,6 +120,25 @@ export default function App() {
       .catch((e) => console.error("proxy_port failed", e));
   }, []);
 
+  // Keep the current-station URL in a ref for the now-playing listener below.
+  useEffect(() => {
+    currentUrlRef.current = current?.url ?? null;
+  }, [current]);
+
+  // Subscribe once to ICY now-playing events; keep only those for the station
+  // we're currently tuned to (the proxy tags each event with its upstream url).
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    onNowPlaying((np) => {
+      if (np.url === currentUrlRef.current) setNowPlaying(np);
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch((e) => console.error("now-playing listen failed", e));
+    return () => unlisten?.();
+  }, []);
+
   // Unfollow = publish a kind:5 delete; the live subscription drops it on read.
   const unfollow = useCallback(
     (s: Station) => {
@@ -138,6 +165,7 @@ export default function App() {
     a.load();
     setPlaying(false);
     setBuffering(false);
+    setNowPlaying(null);
   }, []);
 
   const tune = useCallback(
@@ -150,6 +178,7 @@ export default function App() {
         return;
       }
       setCurrent(s);
+      setNowPlaying(null);
       setBuffering(true);
       // Only http:// streams need the loopback proxy (mixed-content on a secure
       // origin); https:// plays directly. Fall back to direct if the port isn't
@@ -257,6 +286,7 @@ export default function App() {
 
       <PlayerBar
         station={current}
+        nowPlaying={nowPlaying}
         playing={playing}
         buffering={buffering}
         volume={volume}

@@ -8,6 +8,7 @@
 // nsec never leaves Rust except once on generate.
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { Station } from "./station";
 import { RELAYS } from "./relays";
 
@@ -18,6 +19,22 @@ export type { Station };
 /** The loopback proxy's port for this run (src-tauri/src/proxy.rs). */
 export function getProxyPort(): Promise<number> {
   return invoke<number>("proxy_port");
+}
+
+/** A now-playing update the proxy parsed from the stream's ICY metadata (U3).
+ *  `url` is the upstream, so the UI can ignore events for a station it left. */
+export interface NowPlaying {
+  url: string;
+  title: string;
+  artist: string;
+}
+
+/** Subscribe to `now-playing` events emitted by the ICY proxy. Returns the
+ *  unlisten fn. */
+export function onNowPlaying(
+  cb: (np: NowPlaying) => void,
+): Promise<UnlistenFn> {
+  return listen<NowPlaying>("now-playing", (e) => cb(e.payload));
 }
 
 /** The URL the <audio> element should load for an upstream stream: a loopback
