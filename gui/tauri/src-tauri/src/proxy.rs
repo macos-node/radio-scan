@@ -75,81 +75,133 @@ pub fn start(app: AppHandle) -> std::io::Result<u16> {
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "proxy thread exited"))?
 }
 
+const MAX_REDIRECTS: u8 = 6;
+
 async fn handle(mut client: TcpStream, app: AppHandle) {
-    let target = read_target(&mut client).await;
-    let Some((authority, path)) = target.as_deref().and_then(split_http_url) else {
+    let Some(orig_url) = read_target(&mut client).await else {
         let _ = client
             .write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n")
             .await;
         return;
     };
-    let upstream_url = target.unwrap_or_default();
+    // Follow redirects ourselves — podcast enclosures almost always go through a
+    // tracking/CDN 30x, and radio mounts sometimes do too. `orig_url` stays fixed
+    // for the now-playing event so the UI still matches the station it tuned.
+    let mut url = orig_url.clone();
 
-    let mut upstream = match TcpStream::connect(authority.as_str()).await {
-        Ok(s) => s,
-        Err(_) => {
+    for _ in 0..=MAX_REDIRECTS {
+        let Some((authority, path)) = split_http_url(&url) else {
+            let _ = client
+                .write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n")
+                .await;
+            return;
+        };
+
+        let mut upstream = match TcpStream::connect(authority.as_str()).await {
+            Ok(s) => s,
+            Err(_) => {
+                let _ = client
+                    .write_all(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+                    .await;
+                return;
+            }
+        };
+
+        // Ask for inline ICY metadata (Icy-MetaData: 1) so we can surface
+        // now-playing (U3). HTTP/1.0 + Connection: close = stream the body until
+        // the connection drops, exactly how Icecast serves an endless stream.
+        let host = authority.split(':').next().unwrap_or(&authority);
+        let req = format!(
+            "GET {path} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: ntune (radio-scan)\r\nIcy-MetaData: 1\r\nConnection: close\r\n\r\n"
+        );
+        if upstream.write_all(req.as_bytes()).await.is_err() {
+            return;
+        }
+
+        let Some(head) = read_upstream_head(&mut upstream).await else {
             let _ = client
                 .write_all(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
                 .await;
             return;
-        }
-    };
+        };
 
-    // Ask for inline ICY metadata (Icy-MetaData: 1) so we can surface now-playing
-    // (U3). HTTP/1.0 + Connection: close = stream the body until the connection
-    // drops, which is exactly how Icecast serves an endless stream.
-    let host = authority.split(':').next().unwrap_or(&authority);
-    let req = format!(
-        "GET {path} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: ntune (radio-scan)\r\nIcy-MetaData: 1\r\nConnection: close\r\n\r\n"
-    );
-    if upstream.write_all(req.as_bytes()).await.is_err() {
-        return;
-    }
-
-    // Read the upstream's response head, then send our OWN clean HTTP/1.1 head to
-    // the webview — its media loader is fussier than curl about HTTP/1.0 +
-    // Connection: Close. When the stream carries inline metadata, it is stripped
-    // in relay_icy so the webview only ever sees clean audio.
-    let Some((content_type, metaint, body_head)) = read_upstream_head(&mut upstream).await else {
-        let _ = client
-            .write_all(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
-            .await;
-        return;
-    };
-    // The two webviews want OPPOSITE MIMEs for the same HE-AAC stream:
-    //   • webkit2gtk (Linux) refuses the legacy SHOUTcast `audio/aacp` alias and
-    //     needs the standard `audio/aac`.
-    //   • WKWebView (macOS) plays `audio/aacp` but FAILS on `audio/aac` for the
-    //     same payload.
-    // So remap `audio/aacp` -> `audio/aac` on Linux ONLY; pass it through on
-    // macOS. Both verified on real hardware 2026-08-04. Only this alias is
-    // touched; everything else passes through untouched.
-    let content_type = if cfg!(target_os = "linux")
-        && content_type.eq_ignore_ascii_case("audio/aacp")
-    {
-        "audio/aac".to_string()
-    } else {
-        content_type
-    };
-    let resp = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n"
-    );
-    if client.write_all(resp.as_bytes()).await.is_err() {
-        return;
-    }
-
-    match metaint {
-        // Inline metadata: strip it, relay clean audio, emit now-playing titles.
-        Some(n) if n > 0 => {
-            relay_icy(&mut upstream, &mut client, n, body_head, &app, &upstream_url).await;
-        }
-        // No inline metadata: straight passthrough (e.g. many MP3 streams, or
-        // servers that ignored Icy-MetaData). Audio still plays; no now-playing.
-        _ => {
-            if !body_head.is_empty() && client.write_all(&body_head).await.is_err() {
+        // Redirect handling: http -> http we follow ourselves; http -> https we
+        // hand off to the webview (https from its secure origin is fine — unlike
+        // the plain http this proxy exists to work around — and needs no TLS here).
+        if matches!(head.status, 301 | 302 | 303 | 307 | 308) {
+            let Some(loc) = head.location.as_deref().map(|l| resolve_location(l, &url)) else {
+                let _ = client
+                    .write_all(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+                    .await;
+                return;
+            };
+            if loc.starts_with("https://") {
+                let resp =
+                    format!("HTTP/1.1 302 Found\r\nLocation: {loc}\r\nConnection: close\r\n\r\n");
+                let _ = client.write_all(resp.as_bytes()).await;
                 return;
             }
-            let _ = tokio::io::copy(&mut upstream, &mut client).await;
+            url = loc;
+            continue;
+        }
+
+        // Non-redirect (2xx): relay to the webview with our OWN clean HTTP/1.1
+        // head (its media loader is fussier than curl about HTTP/1.0 + close).
+        // The two webviews want OPPOSITE MIMEs for the same HE-AAC stream:
+        // webkit2gtk (Linux) needs `audio/aac`; WKWebView (macOS) needs the legacy
+        // `audio/aacp` — so remap only on Linux. Everything else passes through.
+        let content_type = if cfg!(target_os = "linux")
+            && head.content_type.eq_ignore_ascii_case("audio/aacp")
+        {
+            "audio/aac".to_string()
+        } else {
+            head.content_type
+        };
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n"
+        );
+        if client.write_all(resp.as_bytes()).await.is_err() {
+            return;
+        }
+
+        match head.metaint {
+            // Inline metadata: strip it, relay clean audio, emit now-playing.
+            Some(n) if n > 0 => {
+                relay_icy(&mut upstream, &mut client, n, head.body_head, &app, &orig_url).await;
+            }
+            // No inline metadata: straight passthrough (podcast files, or servers
+            // that ignored Icy-MetaData). Audio still plays; no now-playing.
+            _ => {
+                if !head.body_head.is_empty()
+                    && client.write_all(&head.body_head).await.is_err()
+                {
+                    return;
+                }
+                let _ = tokio::io::copy(&mut upstream, &mut client).await;
+            }
+        }
+        return;
+    }
+
+    let _ = client
+        .write_all(b"HTTP/1.1 508 Loop Detected\r\nConnection: close\r\n\r\n")
+        .await;
+}
+
+/// Resolve a redirect `Location` against the current URL: absolute as-is,
+/// root-relative against the host, otherwise joined to the base's directory.
+fn resolve_location(loc: &str, base: &str) -> String {
+    if loc.starts_with("http://") || loc.starts_with("https://") {
+        loc.to_string()
+    } else if let Some(rest) = loc.strip_prefix('/') {
+        match split_http_url(base) {
+            Some((authority, _)) => format!("http://{authority}/{rest}"),
+            None => loc.to_string(),
+        }
+    } else {
+        match base.rsplit_once('/') {
+            Some((dir, _)) => format!("{dir}/{loc}"),
+            None => loc.to_string(),
         }
     }
 }
@@ -266,10 +318,20 @@ fn split_artist_title(raw: &str) -> (String, String) {
     }
 }
 
-/// Read the upstream HTTP response head; return (Content-Type, icy-metaint if the
-/// stream carries inline metadata, and any body bytes already buffered past the
-/// `\r\n\r\n` header terminator).
-async fn read_upstream_head(up: &mut TcpStream) -> Option<(String, Option<usize>, Vec<u8>)> {
+/// The parsed upstream response head.
+struct Head {
+    status: u16,
+    content_type: String,
+    /// icy-metaint, when the stream carries inline metadata.
+    metaint: Option<usize>,
+    /// Location, on a redirect.
+    location: Option<String>,
+    /// Body bytes already read past the `\r\n\r\n` terminator.
+    body_head: Vec<u8>,
+}
+
+/// Read + parse the upstream HTTP (or ICY) response head.
+async fn read_upstream_head(up: &mut TcpStream) -> Option<Head> {
     let mut buf = Vec::with_capacity(2048);
     let mut tmp = [0u8; 2048];
     loop {
@@ -280,6 +342,13 @@ async fn read_upstream_head(up: &mut TcpStream) -> Option<(String, Option<usize>
         buf.extend_from_slice(&tmp[..n]);
         if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
             let head = String::from_utf8_lossy(&buf[..pos]);
+            // Status line: "HTTP/1.x CODE …" or SHOUTcast "ICY CODE …".
+            let status = head
+                .lines()
+                .next()
+                .and_then(|l| l.split_whitespace().nth(1))
+                .and_then(|c| c.parse::<u16>().ok())
+                .unwrap_or(200);
             let header = |name: &str| {
                 head.lines()
                     .filter_map(|l| l.split_once(':'))
@@ -289,7 +358,14 @@ async fn read_upstream_head(up: &mut TcpStream) -> Option<(String, Option<usize>
             let content_type =
                 header("content-type").unwrap_or_else(|| "application/octet-stream".to_string());
             let metaint = header("icy-metaint").and_then(|v| v.parse::<usize>().ok());
-            return Some((content_type, metaint, buf[pos + 4..].to_vec()));
+            let location = header("location");
+            return Some(Head {
+                status,
+                content_type,
+                metaint,
+                location,
+                body_head: buf[pos + 4..].to_vec(),
+            });
         }
         if buf.len() > 16384 {
             return None;
