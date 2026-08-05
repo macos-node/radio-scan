@@ -252,8 +252,10 @@ parallel with U4/U5; do **not** wait on U5.
   desktop that can't host an SNI tray, drop `--tray` from the `Exec` line (or the
   `make install` invocation) and it launches as a plain window — no rebuild; the
   deeper opt-out is building without the `tray-icon` feature. Still open: `--tray`
-  currently opens the tray *alongside* the window (headless-to-tray start unbuilt),
-  and the ❤→kind:7/`mrk` reaction is the post-`airplay.v1` follow-up.
+  currently opens the tray *alongside* the window (headless-to-tray start unbuilt);
+  the ❤→kind:7/`mrk` reaction is the post-`airplay.v1` follow-up; and the ❤ needs
+  **acted-on feedback** (stored / logged / published) plus a **richer menu mirroring
+  macOS RadioBar** — see the companion doc's open decisions.
 
 ---
 

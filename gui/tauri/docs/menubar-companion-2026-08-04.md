@@ -86,3 +86,12 @@ ntune's now-playing + "mark favorite" in the logger. One primitive, three surfac
   *work*).
 - `airplay.v1` emission point + privacy posture (local-by-default per the schema draft).
 - Where the suite-wide pattern lives long-term (the ndisc `SUITE.md` hub) once it spans repos.
+- **Favorite feedback + a richer menu (future iteration).** The tray's "Favorite
+  current track" currently fires **silently** — no confirmation the track was
+  stored / logged / (later) published. It needs visible acted-on feedback: a
+  transient "♥ Saved" state on the item, a checkmark, or a toast, and eventually a
+  distinct signal for the local-save vs the kind:7/`airplay.v1` publish step. Tied
+  to this: **grow the menu to carry richer data** — now-playing detail, recent
+  tracks, listening status — moving the Linux tray from a bare menu toward the
+  parity of macOS **RadioBar**'s popover. (Scaffolded state is in the L4 build
+  map's **U6** entry.)
