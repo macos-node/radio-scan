@@ -1,8 +1,9 @@
-# ntune — cross-session change contract v1.0
+# ntune — cross-session change contract v1.1
 
-> Status: ACCEPTED v1.0 2026-08-04 (macOS + Linux sessions). Adapted from
-> `xjmzx/pong` CONTRIBUTING-cross-session v1.0. Amend in place; major changes get
-> a new version header.
+> Status: v1.0 ACCEPTED 2026-08-04 (macOS + Linux). **v1.1 (§7 CI hygiene, §8
+> release cadence) PROPOSED 2026-08-05 by Linux (`adjmx`) — pending macOS
+> acceptance.** Adapted from `xjmzx/pong`. Amend in place; major changes get a new
+> version header.
 
 Two Claude sessions ship `gui/tauri` (ntune) in lockstep off one branch
 (`l4-ui-u0` → `main`): **Linux** (`adjmx`) and **macOS** (`macos-node`). This is
@@ -80,6 +81,33 @@ OS you run it on). Dev loop: `scripts/dev.sh`.
 - **State paths.** Use Tauri's app-data / app-config dirs — never hardcode
   `~/.config` or `~/Library`.
 
+## 7. CI hygiene — `main` stays green
+`.github/workflows/ci.yml` runs three jobs on every push: **Python core**,
+**ntune** (Linux `tsc` + `cargo check`), **RadioBar** (macOS `swift build`). A
+green `main` is an **invariant**, not a nicety — a red baseline hides the *next*
+real break, which is exactly how the RadioBar Swift-6 / macos-14 failure sat
+unnoticed for days while ntune had no CI at all.
+- **You red it, you fix it.** A push that turns CI red is the top priority for the
+  session that pushed — fix forward or revert before more feature work or handoff.
+- **No `ntune-v*` tag on a red `main`** (extends §3, alongside the open-`Needs-verify`
+  gate). CI proves *compile + bundle*; it still can't hear (§4), so it gates the
+  tag, it doesn't replace the human plays-on-my-platform check.
+- **Never normalize red.** If a job is genuinely not our concern, fix or remove it —
+  don't leave it failing as "known noise."
+
+## 8. Release cadence — a beta per phase
+Walk the release path often so it can't quietly rot (packaging drift — the AppImage
+GStreamer gap, the `.deb` codec Depends — should surface per phase, not at a big
+release).
+- **Cut a `-beta.N` pre-release at the end of each phase/feature** (U4b, U5, …). The
+  `-beta` hyphen auto-marks it a GitHub pre-release; `ntune-release.yml` builds both
+  `.deb` + `.dmg` each time, so each session gets an installable artifact to smoke-test.
+- **Promote to a stable `0.x.0`** once a batch of betas is validated on both platforms
+  (features → `-beta.N` → stable minor).
+- **Pre-tag checklist:** CI green (§7) · no open release-critical `Needs-verify` (§3) ·
+  version bumped across the manifests + a `CHANGELOG.md` entry · each platform has run
+  the plays-on-my-platform check (§4 / §5).
+
 ## Acceptance log
 - **v1.0** (macOS `macos-node`, 2026-08-04) — initial proposal, adapted from
   `xjmzx/pong` CONTRIBUTING-cross-session v1.0. Pending Linux (`adjmx`)
@@ -87,3 +115,7 @@ OS you run it on). Dev loop: `scripts/dev.sh`.
 - **v1.0 accepted** (Linux `adjmx`, 2026-08-04) — adopted as of ntune U2; the U2
   commit follows §2 (header) and §1 (`Needs-verify: linux/macos` on the keyring
   path). Both sessions now bound to v1.0.
+- **v1.1 proposed** (Linux `adjmx`, 2026-08-05) — adds §7 (CI hygiene: green
+  `main` invariant, no tag on red) and §8 (release cadence: `-beta.N` per phase),
+  after the 0.1.1-beta.1 convergence exposed a long-red CI (RadioBar Swift-6 vs
+  macos-14; ntune had no CI). Pending macOS acceptance.
