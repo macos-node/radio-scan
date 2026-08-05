@@ -3,17 +3,12 @@
 radio-scan's L4 desktop tuner/player. Notable changes per release. Dates are the
 tag date; unreleased work sits under the top heading until tagged.
 
-## 0.1.1-beta.1 — unreleased
+## 0.1.1-beta.2 — unreleased
 
-The listening surface grows from radio-only to **radio + podcasts**, with live
-track info. Verified on Linux; macOS verification of U4a in progress.
+Station/podcast list management: adds persist locally with no key, and both
+lists are copyable + exportable.
 
 ### Added
-- **Copy URL + JSON export (stations & podcasts).** Every station and podcast row
-  gets a hover **copy** button (stream / feed URL → clipboard, brief ✓). Each list
-  has an **Export** button that writes the list as pretty JSON via a native Save
-  dialog (`ntune-stations.json` / `ntune-podcasts.json`). New Tauri plugins:
-  `clipboard-manager` + `dialog`; the file is written by an `export_file` command.
 - **Local station store.** Added stations now save to a **local, no-key store**
   (`stations.json` in the app-data dir — Linux `~/.local/share/uk.fizx.ntune`,
   macOS `~/Library/Application Support/uk.fizx.ntune`), so an add persists across
@@ -23,6 +18,18 @@ track info. Verified on Linux; macOS verification of U4a in progress.
   an add still also publishes a `station.v1` to the relays (best-effort — a relay
   failure never loses the local save), so the Nostr layer is now an optional
   overlay on top of the always-available local list.
+- **Copy URL + JSON export (stations & podcasts).** Every station and podcast row
+  gets a hover **copy** button (stream / feed URL → clipboard, brief ✓). Each list
+  has an **Export** button that writes the list as pretty JSON via a native Save
+  dialog (`ntune-stations.json` / `ntune-podcasts.json`). New Tauri plugins:
+  `clipboard-manager` + `dialog`; the file is written by an `export_file` command.
+
+## 0.1.1-beta.1 — 2026-08-05
+
+The listening surface grows from radio-only to **radio + podcasts**, with live
+track info. Verified on Linux and macOS.
+
+### Added
 - **Now-playing (U3).** The player bar shows the live **♪ Artist — Title**,
   parsed from the stream's ICY metadata by the loopback proxy (decode ladder
   UTF-8 → Windows-1251 → Latin-1). Updates on every track change. *Currently

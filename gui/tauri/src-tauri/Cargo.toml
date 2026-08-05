@@ -1,6 +1,6 @@
 [package]
 name = "ntune"
-version = "0.1.1-beta.1"
+version = "0.1.1-beta.2"
 description = "radio-scan L4 desktop UI — tuner / player / subscription surface (n-suite)"
 authors = ["macos-node"]
 edition = "2021"
