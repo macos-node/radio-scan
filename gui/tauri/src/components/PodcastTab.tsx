@@ -10,12 +10,14 @@ import {
   Play,
   Plus,
   Rss,
+  Upload,
   X,
 } from "lucide-react";
 import {
   copyText,
   exportJson,
   fetchPodcast,
+  importJson,
   type Episode,
   type Podcast,
 } from "../lib/tauri";
@@ -84,6 +86,34 @@ export function PodcastTab({
     exportJson("ntune-podcasts.json", subs).catch((e) =>
       console.error("export podcasts failed", e),
     );
+  };
+
+  // Import subscriptions from a JSON file and merge into the list (deduped by
+  // url, imported first). Accepts our export shape [{url,title}]; a missing
+  // title falls back to the url. Feeds are fetched lazily on expand as usual.
+  const importSubs = async () => {
+    setError(null);
+    try {
+      const data = await importJson<unknown>();
+      if (data == null) return; // cancelled
+      if (!Array.isArray(data)) throw new Error("expected a JSON array");
+      const incoming: Sub[] = data
+        .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+        .map((r) => {
+          const url = String(r.url ?? "").trim();
+          return { url, title: String(r.title ?? "").trim() || url };
+        })
+        .filter((s) => s.url);
+      if (incoming.length === 0) throw new Error("no valid podcasts in file");
+      setSubs((prev) => {
+        const urls = new Set(incoming.map((s) => s.url));
+        const next = [...incoming, ...prev.filter((s) => !urls.has(s.url))];
+        saveSubs(next);
+        return next;
+      });
+    } catch (e) {
+      setError(String(e));
+    }
   };
 
   const fetchInto = async (url: string) => {
@@ -169,6 +199,14 @@ export function PodcastTab({
             <Plus size={13} />
           )}
           Add
+        </button>
+        <button
+          type="button"
+          onClick={importSubs}
+          title="Import podcasts from JSON"
+          className="flex items-center gap-1 rounded-sm border border-surface px-2 py-1.5 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+        >
+          <Upload size={13} />
         </button>
         <button
           type="button"

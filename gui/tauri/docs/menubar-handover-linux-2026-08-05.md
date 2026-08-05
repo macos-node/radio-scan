@@ -64,6 +64,12 @@ Merged to `main` this session (`b57e041`; branch `l4-ui-u6`), **macOS-verified**
   track (enabled only when there's a live now-playing track) · Quit ntune.
 - **Deps added:** `tauri` feature `tray-icon`; Linux `.deb` depend
   `libayatana-appindicator3-1` (already in `tauri.conf.json`).
+- **GNOME prerequisite (Linux):** `libayatana-appindicator3-1` alone renders the
+  tray on KDE/XFCE/Cinnamon/MATE, but **GNOME also needs the shell AppIndicator
+  extension** (e.g. `gnome-shell-extension-appindicator` →
+  `ubuntu-appindicators@ubuntu.com`, enabled) or no icon appears. A `Depends`
+  can't install a shell extension, so this is an **environment prerequisite, not
+  a bug** — verified on Ubuntu 24.04 GNOME/X11.
 - **No version bump** — still `0.1.1-beta.2`, so this did NOT disturb that tag.
 
 ---

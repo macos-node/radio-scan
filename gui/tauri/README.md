@@ -41,3 +41,20 @@ Stack: Tauri 2 · React 19 · TypeScript · Tailwind v3 — matching the rest of
 suite (`nplay`/`ndisc`). Cross-platform, developed on Linux even though the
 repo's home is `macos-node` (the sensor's macOS service is the reason for that
 home; the UI is not macOS-bound).
+
+## Menubar / tray companion (`--tray`)
+
+An opt-in menubar/tray now-playing companion (U6). Launch with the flag:
+
+```bash
+npx tauri dev -- -- --tray     # dev — note the DOUBLE `--` (npm/npx → tauri → cargo → app)
+ntune --tray                   # installed build
+```
+
+The installed Linux desktop entry launches with `--tray` by default; macOS is
+opt-in (pass the flag). **GNOME users:** the tray icon needs the shell
+AppIndicator extension (`gnome-shell-extension-appindicator`, e.g.
+`ubuntu-appindicators@ubuntu.com`) enabled in addition to the packaged
+`libayatana-appindicator3-1` — without it no icon shows (it's an environment
+prerequisite, not a bug). Other desktops (KDE/XFCE/Cinnamon/MATE) need only the
+library.

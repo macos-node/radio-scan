@@ -8,6 +8,7 @@ import {
   Palette,
   Plus,
   Radio,
+  Upload,
 } from "lucide-react";
 import { ToolbarIconButton } from "./components/ToolbarIconButton";
 import { StationList } from "./components/StationList";
@@ -22,6 +23,8 @@ import {
   exportJson,
   getIdentity,
   getProxyPort,
+  importJson,
+  importLocalStations,
   listFavorites,
   listLocalStations,
   onNowPlaying,
@@ -37,7 +40,7 @@ import {
   type Station,
 } from "./lib/tauri";
 import { resumePosition, savePosition, type Playing } from "./lib/player";
-import { OWNER_PUBKEY } from "./lib/station";
+import { OWNER_PUBKEY, slugify } from "./lib/station";
 import { useStations } from "./hooks/useStations";
 import { shortVersion } from "./lib/format";
 import { cn } from "./lib/cn";
@@ -83,6 +86,8 @@ export default function App() {
   // list. Seeded from the Rust seed set on first run; user adds/removes persist
   // to disk. The Nostr station.v1 list (relayStations) is an optional overlay.
   const [localStations, setLocalStations] = useState<Station[]>([]);
+  // Transient status shown by the stations header (import result / error).
+  const [stationMsg, setStationMsg] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("stations");
   // Unified "what's playing" — a live station or a seekable episode (U4).
   const [current, setCurrent] = useState<Playing | null>(null);
@@ -211,6 +216,44 @@ export default function App() {
       })),
     ).catch((e) => console.error("export stations failed", e));
   }, [stations]);
+
+  const flashStationMsg = useCallback((m: string) => {
+    setStationMsg(m);
+    setTimeout(() => setStationMsg((cur) => (cur === m ? null : cur)), 3500);
+  }, []);
+
+  // Import stations from a JSON file (native Open dialog) and merge into the
+  // local store. Accepts our own export shape or a minimal [{name,url}] — a
+  // missing slug is derived from the name, descriptive fields default.
+  const importStations = useCallback(async () => {
+    try {
+      const data = await importJson<unknown>();
+      if (data == null) return; // cancelled
+      if (!Array.isArray(data)) throw new Error("expected a JSON array");
+      const incoming: Station[] = data
+        .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+        .map((r) => {
+          const url = String(r.url ?? "").trim();
+          const name = String(r.name ?? "").trim() || url;
+          const slug = String(r.slug ?? "").trim() || slugify(name);
+          return {
+            slug,
+            name,
+            url,
+            fmt: r.fmt != null ? String(r.fmt) : null,
+            bitrate: Number.isFinite(Number(r.bitrate)) ? Number(r.bitrate) : null,
+            tags: Array.isArray(r.tags) ? r.tags.map(String) : [],
+          };
+        })
+        .filter((s) => s.url && s.slug);
+      if (incoming.length === 0) throw new Error("no valid stations in file");
+      const merged = await importLocalStations(incoming);
+      setLocalStations(merged);
+      flashStationMsg(`imported ${incoming.length}`);
+    } catch (e) {
+      flashStationMsg(`import failed: ${e}`);
+    }
+  }, [flashStationMsg]);
 
   useEffect(() => applyTheme(theme), [theme]);
 
@@ -484,12 +527,24 @@ export default function App() {
                   Stations
                 </h2>
                 <span className="font-mono text-[10px] text-muted/60">{source}</span>
+                {stationMsg && (
+                  <span className="font-mono text-[10px] text-accent">{stationMsg}</span>
+                )}
+                <button
+                  type="button"
+                  onClick={importStations}
+                  title="Import stations from JSON"
+                  className="ml-auto flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+                >
+                  <Upload size={12} />
+                  Import
+                </button>
                 <button
                   type="button"
                   onClick={exportStations}
                   disabled={stations.length === 0}
                   title="Export stations as JSON"
-                  className="ml-auto flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-fg disabled:pointer-events-none disabled:opacity-40"
+                  className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-fg disabled:pointer-events-none disabled:opacity-40"
                 >
                   <Download size={12} />
                   Export

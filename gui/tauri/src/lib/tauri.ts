@@ -10,13 +10,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import type { Station } from "./station";
 import { RELAYS } from "./relays";
 
 export type { Station };
 
-// --- clipboard + JSON export (stations / podcasts) --------------------------
+// --- clipboard + JSON import/export (stations / podcasts) -------------------
 
 /** Copy text (a stream / feed URL) to the OS clipboard. */
 export function copyText(text: string): Promise<void> {
@@ -39,6 +39,20 @@ export async function exportJson(
     contents: JSON.stringify(data, null, 2),
   });
   return path;
+}
+
+/** Prompt for a JSON file with a native Open dialog, read + parse it. Returns
+ *  the parsed value, or null if the user cancelled. Throws on read / parse
+ *  failure (invalid JSON) — the caller surfaces the message. */
+export async function importJson<T = unknown>(): Promise<T | null> {
+  const path = await open({
+    multiple: false,
+    directory: false,
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  if (typeof path !== "string") return null; // cancelled
+  const text = await invoke<string>("read_text_file", { path });
+  return JSON.parse(text) as T;
 }
 
 // --- loopback stream proxy ---------------------------------------------------
@@ -132,6 +146,13 @@ export function addLocalStation(input: {
 /** Remove a local station by slug. Idempotent. */
 export function removeLocalStation(slug: string): Promise<void> {
   return invoke("remove_local_station", { slug });
+}
+
+/** Merge imported stations into the local store; returns the full merged list
+ *  (deduped by slug + url, imported entries first). Each must have at least
+ *  slug/name/url — descriptive fields default. */
+export function importLocalStations(stations: Station[]): Promise<Station[]> {
+  return invoke<Station[]>("import_local_stations", { stations });
 }
 
 // --- podcast RSS (U4) --------------------------------------------------------

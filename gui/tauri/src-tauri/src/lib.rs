@@ -49,8 +49,13 @@ pub struct Station {
     pub slug: String,
     pub name: String,
     pub url: String,
+    // Optional/descriptive fields default when absent, so an imported JSON with
+    // only the required slug/name/url still deserializes (see import_local_stations).
+    #[serde(default)]
     pub fmt: Option<String>,
+    #[serde(default)]
     pub bitrate: Option<u32>,
+    #[serde(default)]
     pub tags: Vec<String>,
 }
 
@@ -221,12 +226,39 @@ fn remove_local_station(app: tauri::AppHandle, slug: String) -> Result<(), Strin
     write_local_stations(&app, &kept)
 }
 
+/// Merge imported stations into the local store and return the full list. Each
+/// incoming station replaces any existing one with the same slug or url (deduped
+/// exactly like add_local_station); imported entries sort to the top, newest
+/// first. The renderer parses the JSON file (see importJson) so this takes the
+/// already-typed Vec — a malformed file fails deserialization at the IPC layer.
+#[tauri::command]
+fn import_local_stations(
+    app: tauri::AppHandle,
+    stations: Vec<Station>,
+) -> Result<Vec<Station>, String> {
+    let mut current = list_local_stations(app.clone())?;
+    // Newest-first: apply incoming in reverse so the first file entry ends up on top.
+    for station in stations.into_iter().rev() {
+        current.retain(|s| s.slug != station.slug && s.url != station.url);
+        current.insert(0, station);
+    }
+    write_local_stations(&app, &current)?;
+    Ok(current)
+}
+
 /// Write `contents` to `path` — the write half of the JSON export. `path` comes
 /// from the plugin Save dialog (a user-chosen location), so this just commits
 /// the bytes; the renderer builds the JSON.
 #[tauri::command]
 fn export_file(path: String, contents: String) -> Result<(), String> {
     std::fs::write(&path, contents).map_err(|e| e.to_string())
+}
+
+/// Read a text file — the read half of JSON import. `path` comes from the plugin
+/// Open dialog (a user-chosen file); the renderer parses the returned string.
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
 // --- nostr identity (OS keychain) -------------------------------------------
@@ -675,7 +707,9 @@ pub fn run() {
             list_local_stations,
             add_local_station,
             remove_local_station,
+            import_local_stations,
             export_file,
+            read_text_file,
             get_identity,
             generate_identity,
             import_identity,
