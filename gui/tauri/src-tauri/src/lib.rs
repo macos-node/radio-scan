@@ -530,7 +530,25 @@ struct Episode {
 struct Podcast {
     title: String,
     description: Option<String>,
+    /// Cover-art URL. Kept and surfaced to the frontend, but display is deferred
+    /// (U4 decision 2026-08-06) — store the link, decide rendering/caching later.
     image: Option<String>,
+    // --- Tier-A harvest (feed-rs already parses these; we simply stopped
+    //     discarding them, per the 2026-08-06 11-feed measurement). All are
+    //     channel-level show identity, feed-authoritative; the user-authored
+    //     enrichment overlay only fills whichever of these the feed left empty.
+    /// `itunes:author` / `<managingEditor>` names, de-duped, joined.
+    author: Option<String>,
+    /// `itunes:owner` email (first author carrying one) → `mailto:` link-out.
+    owner_email: Option<String>,
+    /// Channel `<link>` — the show website.
+    website: Option<String>,
+    /// `itunes:category` / `<category>` terms, de-duped, in feed order.
+    categories: Vec<String>,
+    /// `<language>` (e.g. "en", "it").
+    language: Option<String>,
+    /// `<copyright>` / `rights`.
+    copyright: Option<String>,
     episodes: Vec<Episode>,
 }
 
@@ -591,10 +609,53 @@ async fn fetch_podcast(url: String) -> Result<Podcast, String> {
         })
         .collect();
 
+    // --- Tier-A harvest: pull the channel-level identity feed-rs already parsed.
+    // Borrows below all end before the struct literal moves title/description/logo.
+    let author = {
+        let mut seen = std::collections::HashSet::new();
+        let names: Vec<String> = feed
+            .authors
+            .iter()
+            .map(|p| p.name.trim().to_string())
+            .filter(|n| !n.is_empty() && seen.insert(n.clone()))
+            .collect();
+        (!names.is_empty()).then(|| names.join(", "))
+    };
+    let owner_email = feed
+        .authors
+        .iter()
+        .find_map(|p| p.email.as_ref().map(|e| e.trim().to_string()))
+        .filter(|e| !e.is_empty());
+    let website = feed
+        .links
+        .iter()
+        .find(|l| {
+            let rel = l.rel.as_deref();
+            rel != Some("self") && rel != Some("enclosure") && rel != Some("hub")
+                && l.href.starts_with("http")
+        })
+        .map(|l| l.href.clone());
+    let categories = {
+        let mut seen = std::collections::HashSet::new();
+        feed.categories
+            .iter()
+            .map(|c| c.label.clone().unwrap_or_else(|| c.term.clone()).trim().to_string())
+            .filter(|s| !s.is_empty() && seen.insert(s.clone()))
+            .collect()
+    };
+    let language = feed.language.clone();
+    let copyright = feed.rights.as_ref().map(|t| t.content.trim().to_string());
+
     Ok(Podcast {
         title: feed.title.map(|t| t.content).unwrap_or_else(|| "Untitled".to_string()),
         description: feed.description.map(|t| t.content),
         image: feed.logo.or(feed.icon).map(|i| i.uri),
+        author,
+        owner_email,
+        website,
+        categories,
+        language,
+        copyright,
         episodes,
     })
 }

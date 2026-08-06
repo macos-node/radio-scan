@@ -171,7 +171,16 @@ export interface Episode {
 export interface Podcast {
   title: string;
   description: string | null;
+  /** Cover-art URL — stored/surfaced, but rendering deferred (U4 decision). */
   image: string | null;
+  // Tier-A harvest — channel-level show identity, feed-authoritative. Enrichment
+  // fills only whichever of these the feed left empty; it never overrides them.
+  author: string | null;
+  ownerEmail: string | null;
+  website: string | null;
+  categories: string[];
+  language: string | null;
+  copyright: string | null;
   episodes: Episode[];
 }
 
