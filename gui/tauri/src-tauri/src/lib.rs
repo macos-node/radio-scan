@@ -667,6 +667,56 @@ async fn fetch_podcast(url: String) -> Result<Podcast, String> {
     })
 }
 
+// --- station ICY probe (win #2) ---------------------------------------------
+// Read a stream's static ICY headers (icy-name/genre/br/url) WITHOUT playing it,
+// so a tuned station can be enriched with the metadata the stream advertises —
+// notably icy-url (a homepage stations otherwise lack). Header-only: send()
+// resolves at the response head; we read the headers and drop the (endless) body.
+// Works for http AND https (reqwest/rustls), unlike the http-only audio proxy.
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct IcyInfo {
+    /// icy-name — station name, often with a descriptive tagline.
+    name: Option<String>,
+    /// icy-genre — the stream's self-declared genre(s).
+    genre: Option<String>,
+    /// icy-br — advertised bitrate in kbps.
+    bitrate: Option<u32>,
+    /// icy-url — the station homepage.
+    homepage: Option<String>,
+    /// Content-Type — the codec (audio/mpeg, audio/aac, …).
+    fmt: Option<String>,
+}
+
+#[tauri::command]
+async fn station_icy(url: String) -> Result<IcyInfo, String> {
+    let resp = reqwest::Client::new()
+        .get(&url)
+        .header("Icy-MetaData", "1")
+        .header("User-Agent", "ntune (radio-scan)")
+        .timeout(std::time::Duration::from_secs(8))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let h = resp.headers();
+    let get = |k: &str| {
+        h.get(k)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+    let info = IcyInfo {
+        name: get("icy-name"),
+        genre: get("icy-genre"),
+        bitrate: get("icy-br").and_then(|v| v.parse().ok()),
+        homepage: get("icy-url"),
+        fmt: get("content-type"),
+    };
+    // `resp` (with its unread streaming body) drops here, closing the connection.
+    Ok(info)
+}
+
 // --- favorites (local curated log) ------------------------------------------
 // A favorite is a track you liked while listening (from U3's now-playing).
 // v1 is local-first: appended to favorites.jsonl in the app-data dir. The later
@@ -785,6 +835,7 @@ pub fn run() {
             publish_station,
             unfollow_station,
             fetch_podcast,
+            station_icy,
             add_favorite,
             list_favorites,
             remove_favorite,

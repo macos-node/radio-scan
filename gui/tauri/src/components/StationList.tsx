@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Copy, LayoutGrid, List, Loader2, Radio, X } from "lucide-react";
-import { copyText, type Station } from "../lib/tauri";
+import { copyText, type IcyInfo, type Station } from "../lib/tauri";
 import { stationIconKey } from "../lib/mediaIcon";
 import { MediaGlyph } from "./MediaGlyph";
 import { cn } from "../lib/cn";
@@ -24,6 +24,7 @@ export function StationList({
   loading,
   onTune,
   onRemove,
+  icy,
 }: {
   stations: Station[];
   currentSlug: string | null;
@@ -31,10 +32,22 @@ export function StationList({
   loading: boolean;
   onTune: (s: Station) => void;
   onRemove?: (s: Station) => void;
+  icy?: Record<string, IcyInfo>;
 }) {
   const [view, setView] = useState<View>(loadView);
   // Slug of the row whose URL was just copied — briefly shows a ✓.
   const [copied, setCopied] = useState<string | null>(null);
+
+  // Merge the harvested station.v1 description with ICY headers captured on
+  // tune-in (win #2). Gap-fill only — the station's own description wins; ICY's
+  // icy-name backfills it, and icy-url adds a homepage stations otherwise lack.
+  const enrich = (s: Station) => {
+    const info = icy?.[s.url];
+    const homepage = info?.homepage
+      ? info.homepage.replace(/^https?:\/\//, "").replace(/\/+$/, "")
+      : null;
+    return { description: s.description || info?.name || null, homepage };
+  };
 
   const chooseView = (v: View) => {
     setView(v);
@@ -102,6 +115,7 @@ export function StationList({
         <ul className="flex flex-col">
           {stations.map((s) => {
             const current = s.slug === currentSlug;
+            const meta = enrich(s);
             return (
               <li key={s.slug} className="group relative flex items-stretch">
                 <button
@@ -135,12 +149,20 @@ export function StationList({
                         {s.tags.join(" · ")}
                       </span>
                     )}
-                    {s.description && (
+                    {meta.description && (
                       <span
                         className="mt-0.5 block truncate pl-6 text-xs text-muted/70"
-                        title={s.description}
+                        title={meta.description}
                       >
-                        {s.description}
+                        {meta.description}
+                      </span>
+                    )}
+                    {meta.homepage && (
+                      <span
+                        className="mt-0.5 block truncate pl-6 font-mono text-[10px] text-muted/60"
+                        title={meta.homepage}
+                      >
+                        {meta.homepage}
                       </span>
                     )}
                   </span>
@@ -187,6 +209,7 @@ export function StationList({
           <div className="flex items-stretch gap-2">
             {stations.map((s) => {
               const current = s.slug === currentSlug;
+              const meta = enrich(s);
               return (
                 <div
                   key={s.slug}
@@ -213,12 +236,20 @@ export function StationList({
                         .filter(Boolean)
                         .join(" · ")}
                     </span>
-                    {s.description && (
+                    {meta.description && (
                       <span
                         className="line-clamp-2 max-w-full text-[10px] leading-tight text-muted/70"
-                        title={s.description}
+                        title={meta.description}
                       >
-                        {s.description}
+                        {meta.description}
+                      </span>
+                    )}
+                    {meta.homepage && (
+                      <span
+                        className="max-w-full truncate font-mono text-[9px] text-muted/60"
+                        title={meta.homepage}
+                      >
+                        {meta.homepage}
                       </span>
                     )}
                   </button>

@@ -191,6 +191,21 @@ export function fetchPodcast(url: string): Promise<Podcast> {
   return invoke<Podcast>("fetch_podcast", { url });
 }
 
+/** Static ICY headers a stream advertises — captured on tune-in to enrich a
+ *  station (win #2). All optional; a plain file or a non-ICY server yields nulls. */
+export interface IcyInfo {
+  name: string | null;
+  genre: string | null;
+  bitrate: number | null;
+  homepage: string | null;
+  fmt: string | null;
+}
+
+/** Probe a stream's ICY headers without playing it (header-only read). */
+export function stationIcy(url: string): Promise<IcyInfo> {
+  return invoke<IcyInfo>("station_icy", { url });
+}
+
 // --- nostr identity (OS keychain) -------------------------------------------
 
 export interface Identity {

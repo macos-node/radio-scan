@@ -31,11 +31,13 @@ import {
   onTrayFavorite,
   removeFavorite,
   removeLocalStation,
+  stationIcy,
   streamUrl,
   unfollowStation,
   type Episode,
   type Favorite,
   type Identity,
+  type IcyInfo,
   type NowPlaying,
   type Station,
 } from "./lib/tauri";
@@ -91,6 +93,8 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("stations");
   // Unified "what's playing" — a live station or a seekable episode (U4).
   const [current, setCurrent] = useState<Playing | null>(null);
+  // Win #2: ICY headers captured per stream URL when tuned (homepage/genre/etc).
+  const [icyByUrl, setIcyByUrl] = useState<Record<string, IcyInfo>>({});
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
   const [position, setPosition] = useState(0);
@@ -314,8 +318,15 @@ export default function App() {
         return;
       }
       play({ kind: "station", key: s.slug, title: s.name, url: s.url, seekable: false });
+      // Win #2: probe the stream's ICY headers once to enrich the station
+      // (homepage / live genre / description). Best-effort; failures are ignored.
+      if (!icyByUrl[s.url]) {
+        stationIcy(s.url)
+          .then((info) => setIcyByUrl((m) => ({ ...m, [s.url]: info })))
+          .catch(() => {});
+      }
     },
-    [current, playing, stop, play],
+    [current, playing, stop, play, icyByUrl],
   );
 
   const playEpisode = useCallback(
@@ -559,6 +570,7 @@ export default function App() {
                 loading={loading}
                 onTune={tune}
                 onRemove={removeStation}
+                icy={icyByUrl}
               />
             </section>
           ) : (
