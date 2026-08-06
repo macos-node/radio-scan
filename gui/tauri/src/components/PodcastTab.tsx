@@ -8,7 +8,6 @@ import {
   LayoutGrid,
   List,
   Loader2,
-  Music,
   Play,
   Plus,
   Rss,
@@ -102,15 +101,23 @@ function EpisodeList({
                 isCurrent && "bg-surface",
               )}
             >
+              {/* Now-playing cue mirrors Stations: a green "live" dot for the
+                  playing episode; a muted play triangle for the rest. */}
               {isCurrent && playing ? (
-                <Music size={12} className="shrink-0 text-mauve" />
+                <span className="grid w-3 shrink-0 place-items-center" aria-hidden>
+                  <span className="h-2 w-2 rounded-full bg-ok" />
+                </span>
               ) : (
                 <Play size={12} className="shrink-0 text-muted" />
               )}
               <span
                 className={cn(
                   "min-w-0 flex-1 truncate text-xs",
-                  isCurrent ? "text-fg" : "text-muted",
+                  isCurrent && playing
+                    ? "text-ok"
+                    : isCurrent
+                      ? "text-fg"
+                      : "text-muted",
                 )}
               >
                 {ep.title}
