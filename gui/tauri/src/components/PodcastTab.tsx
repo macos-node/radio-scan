@@ -128,6 +128,32 @@ function EpisodeList({
   );
 }
 
+/** Harvested Tier-A identity: author byline + category chips. Feed-authoritative
+ *  (2026-08-06 harvest). Shared by both expand views so they can't drift —
+ *  `indent` aligns it under a list row; unindented it sits in the card-detail
+ *  header band. Renders nothing when the feed carries neither field. */
+function IdentityRow({ pod, indent = false }: { pod: Podcast; indent?: boolean }) {
+  if (!pod.author && pod.categories.length === 0) return null;
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-x-2 gap-y-1",
+        indent ? "px-9 pb-1.5 pt-0.5" : "border-b border-surface px-3 py-2",
+      )}
+    >
+      {pod.author && <span className="text-xs text-muted">{pod.author}</span>}
+      {pod.categories.map((c) => (
+        <span
+          key={c}
+          className="rounded-sm bg-surface px-1.5 py-0.5 text-[10px] text-muted"
+        >
+          {c}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /** Podcasts tab (U4): subscribe by RSS URL (localStorage), browse episodes
  *  fetched via Rust feed-rs, play through the shared player. Two views — a dense
  *  list and a glyph card grid (icons matched by title, see lib/mediaIcon). */
@@ -396,14 +422,17 @@ export function PodcastTab({
                     </div>
 
                     {open && pod && (
-                      <EpisodeList
-                        pod={pod}
-                        podcastTitle={s.title}
-                        currentKey={currentKey}
-                        playing={playing}
-                        onPlayEpisode={onPlayEpisode}
-                        indent
-                      />
+                      <>
+                        <IdentityRow pod={pod} indent />
+                        <EpisodeList
+                          pod={pod}
+                          podcastTitle={s.title}
+                          currentKey={currentKey}
+                          playing={playing}
+                          onPlayEpisode={onPlayEpisode}
+                          indent
+                        />
+                      </>
                     )}
                   </li>
                 );
@@ -472,6 +501,7 @@ export function PodcastTab({
                       )}
                     </button>
                   </div>
+                  <IdentityRow pod={cache[expandedSub.url]} />
                   <EpisodeList
                     pod={cache[expandedSub.url]}
                     podcastTitle={expandedSub.title}
