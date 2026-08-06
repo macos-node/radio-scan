@@ -128,12 +128,20 @@ function EpisodeList({
   );
 }
 
-/** Harvested Tier-A identity: author byline + category chips. Feed-authoritative
- *  (2026-08-06 harvest). Shared by both expand views so they can't drift —
- *  `indent` aligns it under a list row; unindented it sits in the card-detail
- *  header band. Renders nothing when the feed carries neither field. */
+/** Harvested Tier-A identity: author byline + category / website / email chips.
+ *  Feed-authoritative (2026-08-06 harvest). Shared by both expand views so they
+ *  can't drift — `indent` aligns it under a list row; unindented it sits in the
+ *  card-detail header band. Website/email are static chips for now (no link-out
+ *  yet). Renders nothing when the feed carries none of these fields. */
 function IdentityRow({ pod, indent = false }: { pod: Podcast; indent?: boolean }) {
-  if (!pod.author && pod.categories.length === 0) return null;
+  if (
+    !pod.author &&
+    pod.categories.length === 0 &&
+    !pod.website &&
+    !pod.ownerEmail
+  )
+    return null;
+  const chip = "rounded-sm bg-surface px-1.5 py-0.5 text-[10px] text-muted";
   return (
     <div
       className={cn(
@@ -143,13 +151,16 @@ function IdentityRow({ pod, indent = false }: { pod: Podcast; indent?: boolean }
     >
       {pod.author && <span className="text-xs text-muted">{pod.author}</span>}
       {pod.categories.map((c) => (
-        <span
-          key={c}
-          className="rounded-sm bg-surface px-1.5 py-0.5 text-[10px] text-muted"
-        >
+        <span key={c} className={chip}>
           {c}
         </span>
       ))}
+      {pod.website && (
+        <span className={chip}>
+          {pod.website.replace(/^https?:\/\//, "").replace(/\/+$/, "")}
+        </span>
+      )}
+      {pod.ownerEmail && <span className={chip}>{pod.ownerEmail}</span>}
     </div>
   );
 }
