@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -180,6 +180,10 @@ function IdentityRow({ pod, indent = false }: { pod: Podcast; indent?: boolean }
   );
 }
 
+/** Session-scoped feed cache shared across mounts, so switching tabs doesn't
+ *  refetch every feed. Lives for the app session (cleared on restart). */
+const podCache: Record<string, Podcast> = {};
+
 /** Podcasts tab (U4): subscribe by RSS URL (localStorage), browse episodes
  *  fetched via Rust feed-rs, play through the shared player. Two views — a dense
  *  list and a glyph card grid (icons matched by title, see lib/mediaIcon). */
@@ -198,7 +202,9 @@ export function PodcastTab({
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [cache, setCache] = useState<Record<string, Podcast>>({});
+  const [cache, setCache] = useState<Record<string, Podcast>>(() => ({
+    ...podCache,
+  }));
   const [loadingUrl, setLoadingUrl] = useState<string | null>(null);
   // Feed URL just copied to the clipboard — briefly shows a ✓ on that row.
   const [copied, setCopied] = useState<string | null>(null);
@@ -251,12 +257,43 @@ export function PodcastTab({
     }
   };
 
+  // Write both the module-level session cache and React state.
+  const putCache = (url: string, p: Podcast) => {
+    podCache[url] = p;
+    setCache((c) => ({ ...c, [url]: p }));
+  };
+
+  // Prefetch every subscription's feed in the background so card/list metadata
+  // (language, copyright, identity) shows without expanding. Runs on mount and
+  // when subs change; skips anything already in the session cache; errors are
+  // swallowed here (expanding a feed re-fetches via fetchInto and surfaces them).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (const s of subs) {
+        if (cancelled) return;
+        if (podCache[s.url]) continue;
+        try {
+          const p = await fetchPodcast(s.url);
+          if (cancelled) return;
+          putCache(s.url, p);
+        } catch {
+          /* ignore prefetch errors */
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subs]);
+
   const fetchInto = async (url: string) => {
     setLoadingUrl(url);
     setError(null);
     try {
       const p = await fetchPodcast(url);
-      setCache((c) => ({ ...c, [url]: p }));
+      putCache(url, p);
       return p;
     } catch (e) {
       setError(String(e));
@@ -273,7 +310,7 @@ export function PodcastTab({
     setError(null);
     try {
       const p = await fetchPodcast(url);
-      setCache((c) => ({ ...c, [url]: p }));
+      putCache(url, p);
       setSubs((prev) => {
         const next = [{ url, title: p.title }, ...prev.filter((s) => s.url !== url)];
         saveSubs(next);
