@@ -211,7 +211,10 @@ seam is stable.
     `podcast:guid`, `podcast:funding` (a support URL → link-out), and the top
     `podcast:value` `lnaddress` recipient (6/11) — **read as metadata/credits,
     never a pay path**; this is also where a Lightning address auto-fills without
-    nostr. A **wide/permissive field** stashes anything else seen (including any
+    nostr. **Build this `quick-xml` walker item-aware from the start** (per-`<item>`,
+    not channel-only) so per-episode Podcasting-2.0 tags — chapters (U5),
+    transcripts, soundbites — extend it instead of forcing a rewrite later. A
+    **wide/permissive field** stashes anything else seen (including any
     stray `npub`) — stored, **non-authoritative, never trusted or scraped-for**.
   - *Enrich — user-authored, gap-fill only.* A per-show overlay where the user
     adds `npub` / `NIP-05` / `email` / `lightning` **when the feed lacks them**.
@@ -250,6 +253,25 @@ seam is stable.
   nledger's curated JSON-overlay pattern. **This is the first read-*and-write* use
   of identity beyond station ownership — deliberately deferred; the U4 contact
   card stays strictly read-only.**
+- **Podcast chapters *(candidate — a real goal, recorded early to shape the P2.0
+  harvest)*.** Podcasting 2.0's `<podcast:chapters>` is a per-`<item>` tag pointing
+  to an external **jsonChapters** file (`type="application/json+chapters"`):
+  `{ chapters: [{ startTime, title, img?, url?, endTime?, toc? }] }`. It's a real,
+  stable **open community spec** (Podcast Namespace, Phase 1; `podcastindex-org/
+  podcast-namespace`) — *not* an IETF/W3C standard; ID3v2 `CHAP` frames embedded in
+  the MP3 are the older, non-P2.0 fallback.
+  - *What it needs:* (a) the U4 `quick-xml` walker reaching per-`<item>` to pull the
+    `<podcast:chapters url>` (why it's built item-aware up front); (b) a **lazy second
+    fetch** of that JSON per episode (on open/play, cached), behind a
+    `fetch_chapters(url)` command mirroring `fetch_podcast`/`station_icy`; (c)
+    **player integration** — chapter markers on the scrubber + a jump-to-chapter list,
+    riding the existing seekable episode player (`seekable: true`).
+  - *Why record it now:* it's the first feature that touches **per-episode** structure
+    and the **scrubber**, so decisions before it (the item-aware harvest walker, the
+    episode/player data shape, and — with persistence — whether episode-level data gets
+    stored) should be made with chapters in view rather than retrofitted. A candidate to
+    graduate into its own build arc when the slow burn reaches it. See also transcripts
+    and soundbites, which ride the same item-level machinery.
 
 ### U6 — Menubar / tray now-playing companion  *(depends on U3, not U5)*
 The cross-platform answer to Open decision #1: **ntune grows a tray *mode***, so

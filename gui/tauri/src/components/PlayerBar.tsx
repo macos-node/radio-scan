@@ -57,8 +57,8 @@ export function PlayerBar({
         type="button"
         onClick={onToggle}
         disabled={!current}
-        title={playing ? "Stop" : "Play"}
-        aria-label={playing ? "Stop" : "Play"}
+        title={playing ? (isEpisode ? "Pause" : "Stop") : "Play"}
+        aria-label={playing ? (isEpisode ? "Pause" : "Stop") : "Play"}
         className={cn(
           "grid h-10 w-10 shrink-0 place-items-center rounded-full",
           "bg-accent text-bg transition-opacity",
@@ -77,15 +77,22 @@ export function PlayerBar({
       <div className="min-w-0 flex-1">
         {current ? (
           <>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               {isEpisode ? (
                 <Headphones size={13} className="shrink-0 text-accent" />
               ) : (
                 <Radio size={13} className="shrink-0 text-accent" />
               )}
-              <span className="truncate text-sm text-fg">{current.title}</span>
+              <span className="min-w-0 truncate text-sm text-fg">
+                {current.title}
+              </span>
+              {isEpisode && current.subtitle && (
+                <span className="shrink-0 max-w-[45%] truncate text-xs text-muted">
+                  {current.subtitle}
+                </span>
+              )}
               {!isEpisode && playing && (
-                <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide text-ok">
+                <span className="flex shrink-0 items-center gap-1 font-mono text-[10px] uppercase tracking-wide text-ok">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ok" />
                   live
                 </span>
@@ -106,16 +113,11 @@ export function PlayerBar({
                   value={Math.min(position, duration || 0)}
                   onChange={(e) => onSeek(Number(e.target.value))}
                   aria-label="Seek"
-                  className="h-1 flex-1 cursor-pointer accent-accent"
+                  className="h-1 flex-1 cursor-pointer accent-fg"
                 />
                 <span className="w-9 shrink-0 font-mono text-[10px] text-muted">
                   {duration ? fmtTime(duration) : "—"}
                 </span>
-                {current.subtitle && (
-                  <span className="ml-1 hidden max-w-[40%] truncate text-xs text-muted sm:inline">
-                    {current.subtitle}
-                  </span>
-                )}
               </div>
             ) : nowPlaying ? (
               /* Station: ICY now-playing (U3). */

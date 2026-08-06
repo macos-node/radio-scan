@@ -349,8 +349,23 @@ export default function App() {
 
   const togglePlay = useCallback(() => {
     if (!current) return;
-    if (playing) stop();
-    else play(current);
+    const a = audioRef.current;
+    if (playing) {
+      // Episodes PAUSE in place — keep the src + position so the progress bar
+      // holds its fill and marker. Stations STOP (clearing src halts the live
+      // stream's download; there's no progress to preserve).
+      if (current.kind === "episode" && a) {
+        savePosition(current.url, a.currentTime, a.duration || undefined);
+        a.pause();
+      } else {
+        stop();
+      }
+    } else if (current.kind === "episode" && a && a.getAttribute("src")) {
+      // Resume a paused episode where it left off, without reloading.
+      a.play().catch(() => play(current));
+    } else {
+      play(current);
+    }
   }, [current, playing, stop, play]);
 
   const seek = useCallback((secs: number) => {
