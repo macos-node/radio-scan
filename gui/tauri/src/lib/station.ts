@@ -37,6 +37,9 @@ export interface Station {
   bitrate: number | null;
   /** Genre / topic slugs (the `t` tags). */
   tags: string[];
+  /** Optional human description — the station.v1 event *content* (plain text).
+   *  Feed-authoritative like the podcast harvest; absent on bare follows. */
+  description: string | null;
 }
 
 /** Derive a stable, filesystem-safe slug (the `d` suffix) from a station name.
@@ -74,6 +77,7 @@ export function parseStation(ev: NostrEvent): Station | null {
     fmt: tag(ev, "fmt") ?? null,
     bitrate: Number.isFinite(br) ? br : null,
     tags: all(ev, "t"),
+    description: ev.content?.trim() || null,
   };
 }
 

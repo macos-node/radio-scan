@@ -135,6 +135,14 @@ export function StationList({
                         {s.tags.join(" · ")}
                       </span>
                     )}
+                    {s.description && (
+                      <span
+                        className="mt-0.5 block truncate pl-6 text-xs text-muted/70"
+                        title={s.description}
+                      >
+                        {s.description}
+                      </span>
+                    )}
                   </span>
                   {s.bitrate != null && (
                     <span className="shrink-0 font-mono text-xs text-muted">
@@ -205,6 +213,14 @@ export function StationList({
                         .filter(Boolean)
                         .join(" · ")}
                     </span>
+                    {s.description && (
+                      <span
+                        className="line-clamp-2 max-w-full text-[10px] leading-tight text-muted/70"
+                        title={s.description}
+                      >
+                        {s.description}
+                      </span>
+                    )}
                   </button>
                   {/* Live dot for the playing station */}
                   {current && playing && (

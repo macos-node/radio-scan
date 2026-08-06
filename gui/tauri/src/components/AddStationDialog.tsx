@@ -20,6 +20,7 @@ export function AddStationDialog({
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [genres, setGenres] = useState("");
+  const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +37,7 @@ export function AddStationDialog({
       const slug = slugify(name);
       const trimmedName = name.trim();
       const trimmedUrl = url.trim();
+      const trimmedDescription = description.trim();
 
       // Local save first — this is the durable one and must not depend on relays.
       const station = await addLocalStation({
@@ -43,6 +45,7 @@ export function AddStationDialog({
         name: trimmedName,
         url: trimmedUrl,
         tags,
+        description: trimmedDescription || null,
       });
       onAdded(station);
 
@@ -55,7 +58,7 @@ export function AddStationDialog({
             name: trimmedName,
             url: trimmedUrl,
             tags,
-            description: "",
+            description: trimmedDescription,
           });
         } catch (e) {
           console.error("publish_station failed (saved locally)", e);
@@ -103,6 +106,18 @@ export function AddStationDialog({
             value={genres}
             onChange={(e) => setGenres(e.target.value)}
             placeholder="acid-jazz, funk, soul"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="block text-xs text-muted">
+            Description <span className="text-muted/60">(optional)</span>
+          </label>
+          <textarea
+            className={`${field} resize-none`}
+            rows={2}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="A nicely chilled plate of ambient beats…"
           />
         </div>
         {name.trim() && (

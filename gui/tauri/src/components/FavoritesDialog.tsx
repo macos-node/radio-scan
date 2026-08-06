@@ -64,6 +64,7 @@ export function FavoritesDialog({
                     fmt: null,
                     bitrate: null,
                     tags: [],
+                    description: null,
                   })
                 }
                 className="shrink-0 rounded-sm p-1 text-muted opacity-0 transition hover:text-accent group-hover:opacity-100"

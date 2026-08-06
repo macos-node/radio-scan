@@ -57,6 +57,10 @@ pub struct Station {
     pub bitrate: Option<u32>,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Optional human description — the station.v1 event *content*. Kept in the
+    /// local store and surfaced like the podcast harvest.
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 fn station(
@@ -74,6 +78,7 @@ fn station(
         fmt: Some(fmt.to_string()),
         bitrate: Some(bitrate),
         tags: tags.iter().map(|t| t.to_string()).collect(),
+        description: None,
     }
 }
 
@@ -201,6 +206,7 @@ fn add_local_station(
     fmt: Option<String>,
     bitrate: Option<u32>,
     tags: Vec<String>,
+    description: Option<String>,
 ) -> Result<Station, String> {
     let station = Station {
         slug,
@@ -209,6 +215,7 @@ fn add_local_station(
         fmt,
         bitrate,
         tags,
+        description,
     };
     // Ensure the store is materialised (seeds on first run) before mutating.
     let mut stations = list_local_stations(app.clone())?;

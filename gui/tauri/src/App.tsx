@@ -213,6 +213,7 @@ export default function App() {
         fmt: s.fmt,
         bitrate: s.bitrate,
         tags: s.tags,
+        description: s.description,
       })),
     ).catch((e) => console.error("export stations failed", e));
   }, [stations]);
@@ -243,6 +244,7 @@ export default function App() {
             fmt: r.fmt != null ? String(r.fmt) : null,
             bitrate: Number.isFinite(Number(r.bitrate)) ? Number(r.bitrate) : null,
             tags: Array.isArray(r.tags) ? r.tags.map(String) : [],
+            description: r.description != null ? String(r.description) : null,
           };
         })
         .filter((s) => s.url && s.slug);

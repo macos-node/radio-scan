@@ -132,6 +132,7 @@ export function addLocalStation(input: {
   fmt?: string | null;
   bitrate?: number | null;
   tags: string[];
+  description?: string | null;
 }): Promise<Station> {
   return invoke<Station>("add_local_station", {
     slug: input.slug,
@@ -140,6 +141,7 @@ export function addLocalStation(input: {
     fmt: input.fmt ?? null,
     bitrate: input.bitrate ?? null,
     tags: input.tags,
+    description: input.description ?? null,
   });
 }
 
