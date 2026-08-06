@@ -141,7 +141,11 @@ function IdentityRow({ pod, indent = false }: { pod: Podcast; indent?: boolean }
     !pod.ownerEmail
   )
     return null;
-  const chip = "rounded-sm bg-surface px-1.5 py-0.5 text-[10px] text-muted";
+  // Every chip caps at the row width and truncates with an ellipsis; the full
+  // value is on the title tooltip (hover) until fields get real link-outs — so no
+  // long copyright / URL / sentence can blow out the layout.
+  const chip =
+    "max-w-full truncate rounded-sm bg-surface px-1.5 py-0.5 text-[10px] text-muted";
   return (
     <div
       className={cn(
@@ -149,18 +153,29 @@ function IdentityRow({ pod, indent = false }: { pod: Podcast; indent?: boolean }
         indent ? "px-9 pb-1.5 pt-0.5" : "border-b border-surface px-3 py-2",
       )}
     >
-      {pod.author && <span className="text-xs text-muted">{pod.author}</span>}
+      {pod.author && (
+        <span
+          className="max-w-full truncate text-xs text-muted"
+          title={pod.author}
+        >
+          {pod.author}
+        </span>
+      )}
       {pod.categories.map((c) => (
-        <span key={c} className={chip}>
+        <span key={c} className={chip} title={c}>
           {c}
         </span>
       ))}
       {pod.website && (
-        <span className={chip}>
+        <span className={chip} title={pod.website}>
           {pod.website.replace(/^https?:\/\//, "").replace(/\/+$/, "")}
         </span>
       )}
-      {pod.ownerEmail && <span className={chip}>{pod.ownerEmail}</span>}
+      {pod.ownerEmail && (
+        <span className={chip} title={pod.ownerEmail}>
+          {pod.ownerEmail}
+        </span>
+      )}
     </div>
   );
 }
@@ -398,9 +413,30 @@ export function PodcastTab({
                         ) : (
                           <ChevronRight size={14} className="shrink-0 text-muted" />
                         )}
-                        <span className="truncate text-sm text-fg">{s.title}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm text-fg">
+                          {s.title}
+                        </span>
                         {loadingUrl === s.url && (
                           <Loader2 size={12} className="animate-spin text-muted" />
+                        )}
+                        {/* Harvested language + copyright — the row has the width
+                            for it; populates once the feed is fetched (on expand). */}
+                        {pod && (pod.language || pod.copyright) && (
+                          <span className="flex shrink-0 items-center gap-2 pl-2 text-[10px] text-muted/60">
+                            {pod.copyright && (
+                              <span
+                                className="max-w-[16rem] truncate text-muted/85"
+                                title={pod.copyright}
+                              >
+                                {pod.copyright}
+                              </span>
+                            )}
+                            {pod.language && (
+                              <span className="font-mono uppercase text-fg/80">
+                                {pod.language}
+                              </span>
+                            )}
+                          </span>
                         )}
                       </button>
                       <button
@@ -451,9 +487,11 @@ export function PodcastTab({
             </ul>
           ) : (
             <div className="px-3 pb-3">
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(116px,1fr))] gap-2">
+              <div className="overflow-x-auto">
+              <div className="grid grid-cols-10 gap-2 min-w-[1120px]">
                 {subs.map((s) => {
                   const open = expanded === s.url;
+                  const pod = cache[s.url];
                   return (
                     <div key={s.url} className="group relative">
                       <button
@@ -468,12 +506,28 @@ export function PodcastTab({
                             : "border-surface hover:bg-surfaceHover",
                         )}
                       >
-                        <MediaGlyph iconKey={podcastIconKey(s.title)} />
+                        <MediaGlyph iconKey={podcastIconKey(s.title)} size={48} />
                         <span className="line-clamp-2 text-xs leading-snug text-fg">
                           {s.title}
                         </span>
                         {loadingUrl === s.url && (
                           <Loader2 size={12} className="animate-spin text-muted" />
+                        )}
+                        {/* Harvested language + copyright, each centered on its
+                            own line — populates once the feed is fetched (on
+                            expand); copyright truncated, full value on hover. */}
+                        {pod?.language && (
+                          <span className="font-mono text-[10px] uppercase text-fg/80">
+                            {pod.language}
+                          </span>
+                        )}
+                        {pod?.copyright && (
+                          <span
+                            className="line-clamp-1 max-w-full text-[9px] leading-tight text-muted/85"
+                            title={pod.copyright}
+                          >
+                            {pod.copyright}
+                          </span>
                         )}
                       </button>
                       <button
@@ -488,6 +542,7 @@ export function PodcastTab({
                     </div>
                   );
                 })}
+              </div>
               </div>
 
               {/* Detail panel for the selected card */}

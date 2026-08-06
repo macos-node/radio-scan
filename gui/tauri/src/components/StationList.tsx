@@ -175,7 +175,8 @@ export function StationList({
         </ul>
       ) : (
         <div className="px-3 pb-3">
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(116px,1fr))] gap-2">
+          <div className="overflow-x-auto">
+          <div className="grid grid-cols-10 gap-2 min-w-[1120px]">
             {stations.map((s) => {
               const current = s.slug === currentSlug;
               return (
@@ -192,7 +193,7 @@ export function StationList({
                         : "border-surface hover:bg-surfaceHover",
                     )}
                   >
-                    <MediaGlyph iconKey={stationIconKey(s.name, s.tags)} />
+                    <MediaGlyph iconKey={stationIconKey(s.name, s.tags)} size={48} />
                     <span className="line-clamp-2 text-xs leading-snug text-fg">
                       {s.name}
                     </span>
@@ -223,6 +224,7 @@ export function StationList({
                 </div>
               );
             })}
+          </div>
           </div>
         </div>
       )}
