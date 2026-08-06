@@ -193,12 +193,47 @@ seam is stable.
 - **Nostr-feeds tab:** per followed npub, read `1063` (+ optionally kind-1 audio
   links, the castr.me heuristic) → episodes. Reuse `ntree`'s `FeedPanel`/`1063`
   reader rather than reinventing it.
-- **Deliverable:** one library, three source types, resume-anywhere playback.
+- **Identity / contact card *(read-only, no signer, no payments)*.** A thin
+  resolve-and-display layer whose whole purpose is a **richer show dataset** —
+  as much source identity as we can harvest, minus Podcasting-2.0 payments and
+  minus any write path. Not a new `SourceType`; an optional `identity` block on
+  the existing `lib/source.ts` `Source`. Three pieces:
+  - *Parse* — while `feed-rs` walks the `podcast:` namespace, harvest
+    `podcast:person` / `podcast:value` / `podcast:txt` (+ `podcast:guid`) into the
+    identity block. **`podcast:value` recipients are read as credits/metadata,
+    never a pay path** — ntune has no payment surface. Manual npub-attach is the
+    fallback when a feed declares none.
+  - *Resolve* — a small new lib over the **U1 relay client** (`SimplePool`,
+    reused): npub → kind-0 → name, avatar, `lud16`/`lud06` (derived Lightning
+    address), website, latest *N* notes. **No keyring, no write path** — it lives
+    entirely on the read side; the sign-in key stays unused here (for now).
+  - *Display* — one `ContactCard` component beside `NowPlaying`, `--c-nostr`
+    styled: copyable npub + `nostr:`/njump link, the derived Lightning address as
+    copyable text + a `lightning:` hand-off (the OS/wallet handles it, ntune never
+    does), website, and the ambient latest-notes strip.
+  Because a `station.v1` already carries its owner pubkey (U2), the **station-only
+  card is landable right after U2** — before podcasts exist — then podcast feeds
+  extend the *same* card here. Orthogonal to Open decision #7: identity resolves
+  the same whether audio is `1063` or kind-1. A show and its matched Nostr
+  identity sit at **equal hierarchy** — both are a `Source` with an `identity`
+  block rendering one card; existing visuals are unchanged, the card is an
+  additive expander.
+- **Deliverable:** one library, three source types, resume-anywhere playback —
+  each source resolving to a read-only contact card that enriches the show
+  dataset without a single payment or write.
 
 ### U5 — Polish *(optional, parallel)*
 - Spectrum visualiser (triggers the rodio path — decide in #3); gapless;
   NIP-46 bunker login parity (mirror the suite signing table); `feed.v1` notes
   ("heavy rotation this week"); "heard it → add to ndisc" candidate action.
+- **Feed collections *(forward arc)*.** Read-only now: a JSON/**OPML** bundle of
+  feeds (the U4 import/export seam) — shareable as a file, no key. Later, when the
+  sign-in key wakes up beyond U2's station publishing: publish a collection as a
+  **NIP-51 list** (30000/30001-family — the suite already uses 30000 for
+  contributors), an addressable, npub-discoverable subscription set; mirrors
+  nledger's curated JSON-overlay pattern. **This is the first read-*and-write* use
+  of identity beyond station ownership — deliberately deferred; the U4 contact
+  card stays strictly read-only.**
 
 ### U6 — Menubar / tray now-playing companion  *(depends on U3, not U5)*
 The cross-platform answer to Open decision #1: **ntune grows a tray *mode***, so
@@ -336,6 +371,17 @@ reads `airplay.v1` off the relays.
    shared core — does that now pull the L2 publisher toward Rust, or stay Python?
    *Recommend: leave L2 Python for now; the Rust ICY parser is the first shared
    piece, port more only if duplication bites.*
+9. **Read-only vs NIP-51 boundary.** The U4 identity contact card is strictly
+   **read-only** (resolve npub → kind-0 → card; `podcast:value` as metadata, no
+   payments, no writes — the sign-in key stays unused). The U5 forward arc would
+   cross that line: publishing a **feed collection** as a NIP-51 list
+   (30000/30001-family) is the first read-*and-write* use of identity beyond U2's
+   station publishing. Where does the boundary sit — does ntune stay a pure
+   *reader* of others' identity (collections shared as OPML/JSON files only), or
+   does it become an *author* of nostr-native collection lists too?
+   *Recommend: hold read-only through U4; keep OPML/JSON collections keyless in
+   U5; gate NIP-51 authoring behind an explicit later phase, reusing U2's keyring
+   signer — don't let it leak into the read-only card.*
 
 ---
 
