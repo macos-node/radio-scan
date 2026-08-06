@@ -175,19 +175,22 @@ export function StationList({
         </ul>
       ) : (
         <div className="px-3 pb-3">
-          <div className="overflow-x-auto">
-          <div className="grid grid-cols-10 gap-2 min-w-[1120px]">
+          <div className="overflow-x-auto pb-1">
+          <div className="flex items-stretch gap-2">
             {stations.map((s) => {
               const current = s.slug === currentSlug;
               return (
-                <div key={s.slug} className="group relative">
+                <div
+                  key={s.slug}
+                  className="group relative shrink-0 min-w-[136px] basis-[calc((100%_-_4.5rem)/10)]"
+                >
                   <button
                     type="button"
                     onClick={() => onTune(s)}
                     title={s.name}
                     aria-pressed={current}
                     className={cn(
-                      "flex w-full flex-col items-center gap-2 rounded-sm border p-3 text-center transition-colors",
+                      "flex h-full w-full flex-col items-center gap-2 rounded-sm border p-3 text-center transition-colors",
                       current
                         ? "border-accent bg-surface"
                         : "border-surface hover:bg-surfaceHover",
