@@ -193,34 +193,50 @@ seam is stable.
 - **Nostr-feeds tab:** per followed npub, read `1063` (+ optionally kind-1 audio
   links, the castr.me heuristic) → episodes. Reuse `ntree`'s `FeedPanel`/`1063`
   reader rather than reinventing it.
-- **Identity / contact card *(read-only, no signer, no payments)*.** A thin
-  resolve-and-display layer whose whole purpose is a **richer show dataset** —
-  as much source identity as we can harvest, minus Podcasting-2.0 payments and
-  minus any write path. Not a new `SourceType`; an optional `identity` block on
-  the existing `lib/source.ts` `Source`. Three pieces:
-  - *Parse* — while `feed-rs` walks the `podcast:` namespace, harvest
-    `podcast:person` / `podcast:value` / `podcast:txt` (+ `podcast:guid`) into the
-    identity block. **`podcast:value` recipients are read as credits/metadata,
-    never a pay path** — ntune has no payment surface. Manual npub-attach is the
-    fallback when a feed declares none.
-  - *Resolve* — a small new lib over the **U1 relay client** (`SimplePool`,
-    reused): npub → kind-0 → name, avatar, `lud16`/`lud06` (derived Lightning
-    address), website, latest *N* notes. **No keyring, no write path** — it lives
-    entirely on the read side; the sign-in key stays unused here (for now).
-  - *Display* — one `ContactCard` component beside `NowPlaying`, `--c-nostr`
-    styled: copyable npub + `nostr:`/njump link, the derived Lightning address as
-    copyable text + a `lightning:` hand-off (the OS/wallet handles it, ntune never
-    does), website, and the ambient latest-notes strip.
-  Because a `station.v1` already carries its owner pubkey (U2), the **station-only
+- **Identity / contact card *(read-only, no payments, no publish)*.** A **richer
+  show dataset** built from three layers — harvest what the feed carries, let the
+  user *fill the gaps* by hand, render the merge as link-outs. Not a new
+  `SourceType`; an optional `identity` block on the existing `lib/source.ts`
+  `Source`, so a show and its matched identity sit at **equal hierarchy** and the
+  existing visuals are unchanged (the card is an additive expander). Measured
+  against an 11-feed test set (2026-08-06), the fruit is **iTunes + Podcasting 2.0,
+  not auto-nostr** — real feeds carry ~no clean structured npub, so nostr is
+  enrichment-only, never scraped.
+  - *Harvest — from the feed, refreshed every fetch.* The cheap **Tier-A** fields
+    `feed-rs` already parses and we currently discard: `author`, `website`
+    (`<link>`), `categories`, `language` (11/11 on the test set) + owner name/email
+    (~5/11). **Keep the `image` URL in the model and persist it — but don't render
+    it yet** (store the link / optionally cache to disk; revisit display later). A
+    targeted `quick-xml` pass over the channel block adds **Podcasting 2.0**:
+    `podcast:guid`, `podcast:funding` (a support URL → link-out), and the top
+    `podcast:value` `lnaddress` recipient (6/11) — **read as metadata/credits,
+    never a pay path**; this is also where a Lightning address auto-fills without
+    nostr. A **wide/permissive field** stashes anything else seen (including any
+    stray `npub`) — stored, **non-authoritative, never trusted or scraped-for**.
+  - *Enrich — user-authored, gap-fill only.* A per-show overlay where the user
+    adds `npub` / `NIP-05` / `email` / `lightning` **when the feed lacks them**.
+    **Feed always wins: enrichment never overrides a harvested field** — it only
+    populates what the feed left empty, and stays dormant-but-stored if the feed
+    later starts carrying that field. It lives in a **separate overlay keyed by
+    `podcast:guid` when present, else feed URL** (guid is the stable id; on 6/11),
+    so a re-fetch overwrites harvest freely and **never touches enrichment** —
+    the same curated-JSON-overlay pattern nledger uses and the seam the U5 NIP-51
+    collections build on.
+  - *Link-out — read-only hand-off.* One `ContactCard` beside `NowPlaying`,
+    `--c-nostr` styled, rendering `merge(harvest ‖ enrich)`: copyable npub +
+    `nostr:`/njump link, Lightning address as copyable text + a `lightning:`
+    hand-off, `mailto:` for owner/enriched email, website. **ntune never signs,
+    pays, or publishes** — external apps handle the links. `NIP-05` is resolved
+    **lazily** (`.well-known/nostr.json` GET) only when a `nostr:` link is actually
+    built, not on entry.
+  Because a `station.v1` already carries its owner pubkey (U2), a **station-only
   card is landable right after U2** — before podcasts exist — then podcast feeds
-  extend the *same* card here. Orthogonal to Open decision #7: identity resolves
-  the same whether audio is `1063` or kind-1. A show and its matched Nostr
-  identity sit at **equal hierarchy** — both are a `Source` with an `identity`
-  block rendering one card; existing visuals are unchanged, the card is an
-  additive expander.
+  extend the *same* card here. Orthogonal to Open decision #7. Bounded by Open
+  decision #9: this whole layer stays read-only; authoring (NIP-51) is deferred.
 - **Deliverable:** one library, three source types, resume-anywhere playback —
-  each source resolving to a read-only contact card that enriches the show
-  dataset without a single payment or write.
+  each source resolving to a read-only contact card whose feed-harvested identity
+  the user can enrich (never override) into `nostr:`/`lightning:`/`mailto:`
+  link-outs, without a single payment or write.
 
 ### U5 — Polish *(optional, parallel)*
 - Spectrum visualiser (triggers the rodio path — decide in #3); gapless;
