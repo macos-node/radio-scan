@@ -1,6 +1,6 @@
 # radio-scan — project status
 
-_Last updated: 2026-08-04_
+_Last updated: 2026-08-10_
 
 A snapshot of where this project stands, for picking it back up (in Claude Code
 or elsewhere). Grew from a personal playlist logger into the seed of an
@@ -60,10 +60,62 @@ icon reflects logging state. Not a stream reader. macOS-only (SwiftUI/AppKit).
   (unsigned, local-dev); installed at `/Applications/RadioBar.app`.
 - CI (`.github/workflows/ci.yml`) builds it on macOS and byte-compiles the Python
   core on Linux.
+- **Multi-show toggle (2026-08-10):** RadioBar is no longer single-station. A
+  `Show.all` registry drives a picker in the menu (choice persisted in
+  UserDefaults). Each show declares `serviceLabel` + `logFile` + a `kind`:
+  - `.stream` — a 24/7 Icecast scrape (acidjazz, `com.tigger.acidjazz`,
+    `acidjazz_log.jsonl`). Live "now playing"; status **Logging/Paused**;
+    **Pause/Resume**.
+  - `.episodic` — a weekly archived show whose full tracklist is published per
+    episode (On The Wire, `com.tigger.otwradio`, `otw_log.jsonl`, fed by
+    `~/RadioTuner/otw_playlist.py`). No live stream: the menu shows the **latest
+    captured episode** (name/date/tracks in running order) and **holds it until a
+    newer one is captured**. Status **Scheduled/Off**; adds a **Fetch now** button
+    (`launchctl start`) to pull this week on demand. The same link/prose filter as
+    the parser's `--clean` pass is applied inline so artifacts don't render.
+  - Adding a show = one line in `Show.all`. The unified `Track` decoder carries
+    both schemas as optionals (stream `local/epoch`, episodic
+    `episode/episode_date/pos/label/album`).
+- **Third source: "A Duck in a Tree" (2026-08-10).** A weekly ~59-min continuous
+  mix podcast by :zoviet\*france: on Podbean, whose show-notes carry a full
+  tracklist per episode. Added as a `.episodic` source (`duck`,
+  `com.tigger.duckradio`, `duck_log.jsonl`, fed by `~/RadioTuner/duck_playlist.py`,
+  weekly Wed 09:00). Unlike On The Wire's Blogger feed, Podbean ships the **entire
+  700+ episode archive in one RSS document** — backfill needs no pagination.
+  Backfilled **8,301 tracks / 696 episodes, 2012-2026**; the parser mirrors
+  `otw_playlist.py` (`--all` / `--no-write` / `--clean`, where `--clean` drops the
+  `[anonymous]` intro/outro markers). 40 of 736 (early) episodes predate the
+  tracklist format and yield nothing.
+- **⚠ `pos` gotcha — episodic logs carry int OR string.** otw's `pos` is an
+  integer (`1,2,3`); duck's is a string (`"00","01","++"` — 2-digit index + intro/
+  outro markers). RadioBar's `Track.pos` therefore decodes via a `FlexPos` type
+  that accepts either, exposing `num` (numeric part, for sorting) and `text`
+  (original label, for display). Type `pos` as plain `Int?` and every duck row
+  silently fails to decode. Any future episodic source must round-trip through
+  `FlexPos`.
+- **How the sources behave on launch (independent of RadioBar):** each is a
+  per-user LaunchAgent; at login launchd auto-loads every non-disabled plist in
+  `~/Library/LaunchAgents`. acidjazz (`RunAtLoad`+`KeepAlive`) starts immediately
+  and is kept alive 24/7; otwradio and duckradio (`RunAtLoad`+weekly
+  `StartCalendarInterval`, Mon/Wed 09:00) each run once at login then wait for
+  their day. All are fully independent processes writing separate logs — RadioBar
+  is not required for any of them to log.
+- **Pause durability is per-kind (2026-08-10).** RadioBar's toggle chooses the
+  `-w` flag by `kind`:
+  - `.episodic` → `launchctl load/unload -w` — a pause sets a persistent Disabled
+    override and **sticks across reboots** ("pause this show indefinitely"). This
+    is the intended default for a weekly show you may want off for a while.
+  - `.stream` → `launchctl load/unload` (no `-w`) — a pause is **session-scoped**;
+    the next login/reboot auto-loads the plist and the 24/7 logger **resumes**.
+    Intentional: an always-on logger should come back on boot.
+  `Fetch now` loads episodic jobs with `-w`. So the durable state lives in
+  launchd's Disabled override, not in the app — matches the observed machine
+  state (otwradio `-w` enabled; acidjazz paused without `-w`, resumes on boot).
 - **Coupling to fix:** RadioBar targets the personal deployment (`~/RadioTuner`,
-  label `com.tigger.acidjazz`), not `radioscan.py`'s own layout
+  labels `com.tigger.*`), not `radioscan.py`'s own layout
   (`~/radio-scan-data/<name>/`, label `com.radioscan`) — reconcile when
-  generalising to multi-station.
+  generalising to multi-station. The `Show.all` registry is the natural seam to
+  move into a `config.json` later.
 
 ## 6. L4 desktop UI — ntune (building)
 The suite-level tuner/player at `gui/tauri/` (Tauri 2 + React 19 + TS + Tailwind,
@@ -144,6 +196,22 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   **Known limit:** full **seek on `http` enclosures** needs the proxy to forward
   `Content-Length` + honour `Range` (206); `https` feeds seek fully today.
   `Needs-verify: macos`.
+- **Stations vs Podcasts — the two tabs take DIFFERENT URLs (2026-08-10).** A
+  **Station** is an audio **stream URL** (Icecast/Shoutcast mount, e.g.
+  `http://host:8000/mount`) played straight through `<audio>`. A **Podcast** is an
+  **RSS feed URL** parsed by `feed-rs`; you play its per-episode enclosures. Pasting
+  a feed/blog URL into *Add station* creates a **dead row** that fails on tune —
+  which is exactly how On The Wire (`…blogspot.com/feeds/...?alt=rss`) and A Duck in
+  a Tree (`feed.podbean.com/zovietfrance/feed.xml`) got mis-added as stations (both
+  removed 2026-08-10). Guard added in `AddStationDialog.tsx`: on Add it probes the
+  URL's content-type (reusing `station_icy`); an **explicitly non-audio** type
+  (`*/xml`, `rss`, `html`, `json`) shows an amber warning ("looks like a feed… goes
+  in the Podcasts tab") and the button becomes **"Add anyway"** (soft block, always
+  overridable); **inconclusive** probes (no content-type / probe error) never block
+  a genuine stream. So the three logged sources map to ntune as: **Acid Jazz →
+  Station** (stream), **A Duck in a Tree → Podcast** (feed; its enclosure URL is the
+  join key to `duck_log.audio_url` for the planned bridge), **On The Wire →
+  neither** (no raw audio stream exists — log-only in RadioBar).
 - **Next — U4b:** per-npub `1063` feed tab (reuse the episode model + relay
   layer). Follow-ups: reqwest-based proxy (TLS upstreams + `Range`/seek + `https`
   now-playing); `airplay.v1` emission (menubar-companion direction).

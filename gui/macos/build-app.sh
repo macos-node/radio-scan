@@ -3,7 +3,8 @@
 # executable. No Xcode, no signing (local dev only).
 #
 #   ./build-app.sh                 # build ./RadioBar.app
-#   ./build-app.sh /Applications   # build, then install a copy there
+#   ./build-app.sh /Applications   # build, then install a plain copy there
+#   ./build-app.sh --install       # build, then quit → install to /Applications → relaunch
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -12,6 +13,16 @@ APP="RadioBar.app"
 BIN="RadioBar"
 ID="com.tigger.radiobar"
 VERSION="0.1.0"
+
+# Arg parsing: --install is the ergonomic "swap the running app" path;
+# a bare positional dir keeps the old plain-copy behaviour.
+INSTALL_RELAUNCH=0
+DEST=""
+case "${1:-}" in
+    --install) INSTALL_RELAUNCH=1; DEST="/Applications" ;;
+    "")        ;;
+    *)         DEST="$1" ;;
+esac
 
 echo "--- Building release binary ---"
 swift build -c release
@@ -43,12 +54,22 @@ PLIST
 
 echo "Built: $(pwd)/$APP"
 
-if [ "${1:-}" != "" ]; then
-    DEST="$1"
+if [ -n "$DEST" ]; then
+    if [ "$INSTALL_RELAUNCH" -eq 1 ]; then
+        echo "--- Quitting running RadioBar (if any) ---"
+        osascript -e 'quit app "RadioBar"' 2>/dev/null || pkill -x "$BIN" 2>/dev/null || true
+        sleep 1
+    fi
     echo "--- Installing to $DEST ---"
     rm -rf "$DEST/$APP"
     cp -R "$APP" "$DEST/"
     echo "Installed: $DEST/$APP"
+    if [ "$INSTALL_RELAUNCH" -eq 1 ]; then
+        echo "--- Relaunching ---"
+        open "$DEST/$APP"
+        echo "Relaunched: $DEST/$APP"
+        exit 0
+    fi
 fi
 
 echo
