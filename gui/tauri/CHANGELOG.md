@@ -3,6 +3,23 @@
 radio-scan's L4 desktop tuner/player. Notable changes per release. Dates are the
 tag date; unreleased work sits under the top heading until tagged.
 
+## 0.2.0 — unreleased
+
+Harvested station & podcast metadata becomes **durable state** — export reflects
+exactly what's stored, and identity survives a restart. The "make it durable"
+minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../../docs/radio-scan-v0.2.0-direction-2026-08-10.md).
+
+### Planned
+- **Metadata persistence (U4.5).** Harvested station (`station.v1` description +
+  ICY-on-tune-in) and podcast (Tier-A identity: author, categories, language,
+  copyright, website, email, `podcast:guid`, `podcast:funding`, top
+  `podcast:value` `lnaddress`, `image` URL) fields persist to the local store.
+  Harvest and user **enrich** stay separate slices — re-fetch overwrites harvest
+  freely, **feed always wins**, enrichment is gap-fill-only and never clobbered.
+  Keyed by `podcast:guid`‖feed-url (podcasts) and slug+url (stations) — a
+  compatibility contract for import/export from here on. `image` URL stored, not
+  yet rendered. **Export == persisted state**, closing the serializer-drift.
+
 ## 0.1.1-beta.3 — unreleased
 
 A cross-platform menubar/tray companion, and JSON import to round-trip the

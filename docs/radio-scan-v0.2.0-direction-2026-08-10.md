@@ -1,0 +1,128 @@
+# ntune — v0.2.0 direction (the "make it durable" minor)
+
+> **Status: DIRECTION — a versioned worklist, not settled spec.** This pins the
+> next **minor** of ntune (radio-scan's L4 tuner/player). It sits *below* the
+> [L4 UI build map](./radio-scan-ui-2026-08-04.md) — that doc owns the U-milestone
+> arc and the standing **Open decisions**; this doc names which slices of it become
+> **v0.2.0** and in what order. Suite conventions: **[SUITE.md](../SUITE.md)**.
+> Wire contract: **[schema/airplay-design-2026-07-28.md](../schema/airplay-design-2026-07-28.md)**.
+> Treat the checklist as the worklist; treat the Open decisions as gates to settle
+> *inside* this minor, not after it.
+
+Date: 2026-08-10 · current version: **0.1.1-beta.3** (unreleased) · branch:
+`l4-podcast-cards` · this note proposes the **0.1.1 → 0.2.0** cut.
+
+---
+
+## Why a minor, and why *now*
+
+Through the 0.1.1 line ntune grew from radio-only to **radio + podcasts + tray**,
+and U4 taught it to **harvest** a lot of identity/metadata from feeds and ICY
+headers. But that harvested data is **ephemeral** — recomputed each session, never
+written. The concrete symptom driving this minor is **export serializer-drift**:
+what Export writes can diverge from what the UI shows, because nothing durable sits
+between harvest and render. 0.2.0's headline is therefore a single theme —
+
+> **Harvested metadata becomes durable state.** Everything ntune learns about a
+> station or show survives a restart, backs the export byte-for-byte, and gives
+> per-episode features (chapters, transcripts) something real to attach to.
+
+This is deliberately a **plumbing minor**, not a feature splash. It's the seam every
+later arc (U5 chapters, feed collections, NIP-51) has been written to wait for.
+
+---
+
+## The headline: metadata persistence (U4.5)
+
+Call it **U4.5** — it slots between U4 (harvest) and U5 (polish) and is the thing
+the U4 notes kept saying "…persist it — revisit display later" about.
+
+### Scope
+1. **Stations.** Harvested `station.v1` description + ICY-on-tune-in headers
+   (`station_icy` probe) persist to the local store alongside the existing
+   `stations.json` fields. A re-probe overwrites the harvested slice; user edits
+   never get clobbered.
+2. **Podcasts.** The full Tier-A harvest (author, categories, language, copyright,
+   website, email, `podcast:guid`, `podcast:funding`, top `podcast:value`
+   `lnaddress`, the wide/permissive stash) persists per subscription. Re-fetch
+   overwrites the **harvest** slice freely.
+3. **The `image` URL** finally lands where U4 said it should: **stored, not
+   rendered** (link kept, optional disk cache deferred). Display stays a later call.
+
+### The rule that makes it safe (carried verbatim from U4)
+- **Harvest and enrich live in separate slices.** Harvest is overwrite-on-refetch;
+  enrich is user-authored, **gap-fill only**, and **never overridden by harvest**.
+- **Keying:** podcasts by **`podcast:guid` when present, else feed URL**; stations by
+  **slug + url** (matches the existing dedupe key). This is the same curated-JSON-
+  overlay pattern nledger uses, and the exact seam U5's NIP-51 collections build on.
+- **Feed always wins** over enrichment for any field the feed carries; enrichment
+  stays dormant-but-stored if the feed later starts carrying it.
+
+### Definition of done
+- [ ] Restart preserves every harvested station + podcast field (no re-fetch needed
+      to re-render identity).
+- [ ] **Export == persisted state** — the drift is gone by construction (export
+      serializes the stored slice, not a live recompute).
+- [ ] Re-fetch/re-probe overwrites only the harvest slice; a manual enrich survives.
+- [ ] `image` URL is in the persisted model and round-trips through export/import;
+      still unrendered.
+- [ ] Import merges into the persisted slices (harvest-vs-enrich preserved), deduped
+      by the keys above.
+
+---
+
+## Secondary slices (land if cheap, else defer to 0.3)
+
+These are **not** blockers for the 0.2.0 tag — the persistence seam alone justifies
+the minor. Pull them in only if they fall out naturally once state is durable.
+
+- **NIP-46 bunker login parity** (U5). Mirror the suite signing table so ntune's
+  write path (U2 station publish) isn't keyring-only. Independent of persistence;
+  cut here or in 0.3.
+- **`feed.v1` "heavy rotation"** (U5). Now *feasible* because listening history can
+  finally persist — but it's a genuine feature, not plumbing. Record the intent;
+  don't gate the tag on it.
+- **OPML export/import** for feed collections (U5 forward arc, **read-only half**).
+  A keyless JSON/OPML bundle rides the existing U4 import/export seam. NIP-51
+  **authoring** stays out — that's the Open-decision-#9 line and does not cross in
+  this minor.
+
+---
+
+## Open decisions to settle *inside* 0.2.0
+
+Persistence forces answers to questions the UI map left open. Settle these as part
+of the work, not after:
+
+- **#5 — now-playing source of truth.** Once observations can persist, "proxy when
+  tuned, relay otherwise" stops being hand-wavy. *Lean: both, proxy preferred;
+  persist the last-known per-source so the card isn't blank on reopen.*
+- **#4 — does L4 emit `airplay.v1`?** Durable local observations make L4 a real
+  de-facto sensor. *Lean: still write to the bridge/`airplay.json`, one publisher —
+  but 0.2.0 is where the persisted observation store that would feed it gets built.
+  Decide emit-vs-handoff here even if emission ships later.*
+- **#7 — npub-audio scope.** Not triggered by persistence; leave at `1063`-first.
+  Note it only so 0.2.0 doesn't accidentally widen the harvest schema for kind-1.
+
+## Explicitly out of scope for 0.2.0
+
+- **NIP-51 collection authoring** (the read→write identity boundary, #9) — deferred
+  to a later, explicitly-gated phase.
+- **Podcast chapters / transcripts / soundbites** (U5) — these are *why* persistence
+  goes first, but they attach to per-episode state that 0.2.0 only makes *possible*.
+  The 0.2.0 harvest walker should stay **item-aware** (already the U4 stance) so
+  chapters extend it rather than force a rewrite — but no chapter UI here.
+- **Spectrum visualiser / rodio tap** (#3) — no audio-engine change this minor.
+
+---
+
+## Suggested tag & CHANGELOG shape
+
+- Cut **0.1.1** (final) from the current beta line first, *or* roll beta.3's tray +
+  import work straight into the 0.2.0 notes — either is fine; recommend rolling up so
+  there's one clean "durable state" story.
+- CHANGELOG headline for **0.2.0**: *"Harvested station & podcast metadata is now
+  persistent — export reflects exactly what's stored, and identity survives a
+  restart."*
+- Pin the persistence key rules (guid‖url, slug+url) in the CHANGELOG body — they're
+  a compatibility contract for import/export from here on.
