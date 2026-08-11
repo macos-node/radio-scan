@@ -76,9 +76,12 @@ function applyTheme(t: Theme) {
 }
 
 function loadVolume(): number {
-  // getSetting returns null for an unset key, exactly like the old
-  // localStorage.getItem — behaviour preserved (Number(null) === 0).
-  const v = Number(getSetting(VOLUME_KEY));
+  // Unset (fresh install) → the 0.9 default, NOT muted. The old code read
+  // localStorage directly and let `Number(null) === 0` slip past the range
+  // guard, so a first run started silent; guard the empty case explicitly.
+  const raw = getSetting(VOLUME_KEY);
+  if (raw == null || raw === "") return 0.9;
+  const v = Number(raw);
   return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 0.9;
 }
 

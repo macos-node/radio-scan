@@ -38,6 +38,9 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   reset on a non-graceful exit. `localStorage` stays a mirror (the `index.html`
   pre-paint theme read needs a synchronous source); the store is authoritative on
   load and migrates existing prefs on first launch. Needs-verify: macos, linux.
+- **Fresh install no longer starts muted.** `loadVolume` let an unset value slip
+  past its range guard (`Number(null) === 0`), so a first run defaulted to 0
+  instead of the intended 0.9. An unset volume now returns 0.9.
 
 ## 0.1.1-beta.3 — unreleased
 
