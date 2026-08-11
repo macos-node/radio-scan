@@ -338,6 +338,14 @@ struct ContentView: View {
 
     private var isEpisodic: Bool { model.show.kind == .episodic }
 
+    /// True when the "▶ Playing in ntune" banner is already showing the SELECTED
+    /// show's latest episode — so the "LATEST EPISODE" section below would just
+    /// repeat it. Suppress that section and let the banner own the tracklist.
+    private var bannerCoversSelected: Bool {
+        guard let b = model.bridge, b.playing, let loc = model.located else { return false }
+        return loc.show == model.show.name && loc.episode == (model.latestEpisode?.name ?? "")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             // Show switcher + status
@@ -358,35 +366,37 @@ struct ContentView: View {
 
             bridgeBanner
 
-            if isEpisodic { episodicHeader } else { streamHeader }
+            if !bannerCoversSelected {
+                if isEpisodic { episodicHeader } else { streamHeader }
 
-            Divider()
+                Divider()
 
-            if isEpisodic {
-                section(episodeTrackHeader)
-                ForEach(Array(episodeRows.enumerated()), id: \.offset) { _, t in
-                    HStack(spacing: 8) {
-                        Text(t.pos.map { "\($0.text)." } ?? "•")
-                            .font(.caption2.monospaced()).foregroundStyle(.secondary)
-                            .frame(width: 26, alignment: .trailing)
-                        Text(t.display).font(.caption).lineLimit(1)
-                        Spacer(minLength: 0)
+                if isEpisodic {
+                    section(episodeTrackHeader)
+                    ForEach(Array(episodeRows.enumerated()), id: \.offset) { _, t in
+                        HStack(spacing: 8) {
+                            Text(t.pos.map { "\($0.text)." } ?? "•")
+                                .font(.caption2.monospaced()).foregroundStyle(.secondary)
+                                .frame(width: 26, alignment: .trailing)
+                            Text(t.display).font(.caption).lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                } else {
+                    section("RECENT")
+                    ForEach(Array(model.recentStream.enumerated()), id: \.offset) { _, t in
+                        HStack(spacing: 8) {
+                            Text(t.timeHM)
+                                .font(.caption2.monospaced()).foregroundStyle(.secondary)
+                                .frame(width: 38, alignment: .leading)
+                            Text(t.display).font(.caption).lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
                     }
                 }
-            } else {
-                section("RECENT")
-                ForEach(Array(model.recentStream.enumerated()), id: \.offset) { _, t in
-                    HStack(spacing: 8) {
-                        Text(t.timeHM)
-                            .font(.caption2.monospaced()).foregroundStyle(.secondary)
-                            .frame(width: 38, alignment: .leading)
-                        Text(t.display).font(.caption).lineLimit(1)
-                        Spacer(minLength: 0)
-                    }
-                }
+
+                Divider()
             }
-
-            Divider()
 
             section("TOP ARTISTS")
             ForEach(model.topArtists, id: \.name) { row in
@@ -445,7 +455,7 @@ struct ContentView: View {
                     Text("\(loc.show) · \(loc.episode)  (\(loc.tracks.count) tracks)")
                         .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
                         .padding(.top, 1)
-                    ForEach(Array(loc.tracks.prefix(12).enumerated()), id: \.offset) { _, t in
+                    ForEach(Array(loc.tracks.enumerated()), id: \.offset) { _, t in
                         HStack(spacing: 8) {
                             Text(t.pos.map { "\($0.text)." } ?? "•")
                                 .font(.caption2.monospaced()).foregroundStyle(.secondary)
