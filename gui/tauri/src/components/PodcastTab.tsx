@@ -22,82 +22,25 @@ import {
   type Episode,
   type Podcast,
 } from "../lib/tauri";
+import {
+  loadSubs,
+  mergeSubs,
+  parseOpml,
+  parseSubsJson,
+  saveSubs,
+  PODCASTS_EVENT,
+  type Sub,
+} from "../lib/podcasts";
 import { podcastIconKey } from "../lib/mediaIcon";
 import { MediaGlyph } from "./MediaGlyph";
 import { cn } from "../lib/cn";
 
-interface Sub {
-  url: string;
-  title: string;
-  /** Set when the feed is served from a Nostr npub (see detectNpub). */
-  npub?: string;
-}
-
-const NPUB_RE = /npub1[a-z0-9]{58}/i;
-
-/** A feed served from a Nostr npub — e.g. the castr.me bridge
- *  (`castr.me/npub1…/rss.xml`) that turns a npub's audio events into a podcast
- *  RSS. Detected on import so these subs are tagged now and can later upgrade
- *  from the RSS bridge to native per-npub `1063` reading (ntune U4b) — same
- *  npub, better source. Today they still import + play as ordinary RSS. */
-function detectNpub(url: string): string | undefined {
-  return url.match(NPUB_RE)?.[0].toLowerCase();
-}
-
-const SUBS_KEY = "ntune.podcasts";
 const VIEW_KEY = "ntune.podcastView";
 
 type View = "list" | "cards";
 
-function loadSubs(): Sub[] {
-  try {
-    return JSON.parse(localStorage.getItem(SUBS_KEY) || "[]");
-  } catch {
-    return [];
-  }
-}
-function saveSubs(s: Sub[]) {
-  localStorage.setItem(SUBS_KEY, JSON.stringify(s));
-}
-
 function loadView(): View {
   return localStorage.getItem(VIEW_KEY) === "cards" ? "cards" : "list";
-}
-
-/** Parse an OPML subscription list (the universal feed-reader export, e.g. from
- *  narr) into {url,title} subs. `querySelectorAll` recurses, so category groups
- *  (nested <outline>s) are flattened; every outline with an xmlUrl is a feed.
- *  Mixed content is expected — an OPML from a general RSS reader carries blogs
- *  and release feeds too; non-audio ones simply show "no audio episodes" once
- *  fetched, exactly like adding them by hand. */
-function parseOpml(xml: string): Sub[] {
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  if (doc.querySelector("parsererror")) throw new Error("not valid OPML/XML");
-  const out: Sub[] = [];
-  doc.querySelectorAll("outline[xmlUrl]").forEach((o) => {
-    const url = (o.getAttribute("xmlUrl") || "").trim();
-    if (!url) return;
-    const title = (o.getAttribute("text") || o.getAttribute("title") || url).trim();
-    const npub = detectNpub(url);
-    out.push(npub ? { url, title, npub } : { url, title });
-  });
-  return out;
-}
-
-/** Parse the app's own JSON export shape: [{url, title?}]. */
-function parseSubsJson(text: string): Sub[] {
-  const data = JSON.parse(text);
-  if (!Array.isArray(data)) throw new Error("expected a JSON array");
-  return data
-    .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
-    .map((r) => {
-      const url = String(r.url ?? "").trim();
-      const npub =
-        detectNpub(url) ?? (typeof r.npub === "string" ? r.npub : undefined);
-      const title = String(r.title ?? "").trim() || url;
-      return npub ? { url, title, npub } : { url, title };
-    })
-    .filter((s) => s.url);
 }
 
 function fmtDuration(secs: number | null): string {
@@ -265,6 +208,14 @@ export function PodcastTab({
   // Feed URL just copied to the clipboard — briefly shows a ✓ on that row.
   const [copied, setCopied] = useState<string | null>(null);
 
+  // Re-sync when a restore (the app-level Backup dialog) writes subs from
+  // outside this tab — same-document localStorage writes don't fire `storage`.
+  useEffect(() => {
+    const onChange = () => setSubs(loadSubs());
+    window.addEventListener(PODCASTS_EVENT, onChange);
+    return () => window.removeEventListener(PODCASTS_EVENT, onChange);
+  }, []);
+
   const chooseView = (v: View) => {
     setView(v);
     localStorage.setItem(VIEW_KEY, v);
@@ -285,12 +236,9 @@ export function PodcastTab({
     );
   };
 
-  // Import subscriptions from a JSON file and merge into the list (deduped by
-  // url, imported first). Accepts our export shape [{url,title}]; a missing
-  // title falls back to the url. Feeds are fetched lazily on expand as usual.
   // Import subscriptions from OPML (feed-reader export) or the app's JSON shape —
   // auto-detected by content (leading '<' => OPML) with the extension as a
-  // fallback. Feeds are flattened, deduped by url, and merged (imported first);
+  // fallback. Feeds are flattened, deduped by url, merged (imported first), and
   // fetched lazily on expand as usual.
   const importSubs = async () => {
     setError(null);
@@ -298,18 +246,13 @@ export function PodcastTab({
       const file = await openImportFile();
       if (file == null) return; // cancelled
       const looksXml =
-        /^\s*</.test(file.text) ||
-        /\.(opml|xml)$/i.test(file.path);
-      const parsed = looksXml ? parseOpml(file.text) : parseSubsJson(file.text);
-      // Dedup within the incoming set (an OPML can list a feed under two groups).
-      const seen = new Set<string>();
-      const incoming = parsed.filter((s) =>
-        s.url && !seen.has(s.url) ? (seen.add(s.url), true) : false,
-      );
-      if (incoming.length === 0) throw new Error("no feeds found in file");
+        /^\s*</.test(file.text) || /\.(opml|xml)$/i.test(file.path);
+      const parsed = looksXml
+        ? parseOpml(file.text)
+        : parseSubsJson(JSON.parse(file.text));
+      if (parsed.length === 0) throw new Error("no feeds found in file");
       setSubs((prev) => {
-        const urls = new Set(incoming.map((s) => s.url));
-        const next = [...incoming, ...prev.filter((s) => !urls.has(s.url))];
+        const next = mergeSubs(prev, parsed);
         saveSubs(next);
         return next;
       });

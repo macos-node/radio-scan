@@ -42,6 +42,31 @@ export interface Station {
   description: string | null;
 }
 
+/** Parse an imported JSON array into Stations — accepts the app's own export
+ *  shape or a minimal `[{name,url}]`; a missing slug is derived from the name and
+ *  descriptive fields default. Entries without a url/slug are dropped. Shared by
+ *  the Stations-tab import and the app-level Backup/Restore router. */
+export function parseStationsJson(data: unknown): Station[] {
+  if (!Array.isArray(data)) throw new Error("expected a JSON array of stations");
+  return data
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+    .map((r) => {
+      const url = String(r.url ?? "").trim();
+      const name = String(r.name ?? "").trim() || url;
+      const slug = String(r.slug ?? "").trim() || slugify(name);
+      return {
+        slug,
+        name,
+        url,
+        fmt: r.fmt != null ? String(r.fmt) : null,
+        bitrate: Number.isFinite(Number(r.bitrate)) ? Number(r.bitrate) : null,
+        tags: Array.isArray(r.tags) ? r.tags.map(String) : [],
+        description: r.description != null ? String(r.description) : null,
+      };
+    })
+    .filter((s) => s.url && s.slug);
+}
+
 /** Derive a stable, filesystem-safe slug (the `d` suffix) from a station name.
  *  Lowercased, non-alphanumerics collapsed to single hyphens, trimmed. */
 export function slugify(name: string): string {

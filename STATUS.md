@@ -1,6 +1,6 @@
 # radio-scan — project status
 
-_Last updated: 2026-08-10_
+_Last updated: 2026-08-11_
 
 A snapshot of where this project stands, for picking it back up (in Claude Code
 or elsewhere). Grew from a personal playlist logger into the seed of an
@@ -223,10 +223,24 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   served from a Nostr npub (bridges like `castr.me/npub1…/rss.xml`) are detected
   (`/npub1[a-z0-9]{58}/`) and tagged with a subtle **`nostr`** chip. Today they
   still import + play as ordinary RSS via the bridge; the tag is the on-ramp to
-  **U4b** (native per-npub `1063` reading — same npub, better source). Import/Export
-  are still **per-tab** (Stations ↔ `stations.json`, Podcasts ↔ `ntune.podcasts`
-  localStorage), each treating the whole file as its own type — no cross-routing. A
-  unified app-level backup/restore that routes by shape is an open idea, not built.
+  **U4b** (native per-npub `1063` reading — same npub, better source). The per-tab
+  Import/Export remain (Stations ↔ `stations.json`, Podcasts ↔ `ntune.podcasts`
+  localStorage), each treating the whole file as its own type.
+- **App-level Backup & Restore (2026-08-11, v0.1.1-beta.4).** A header **Archive**
+  button opens a `BackupDialog` on top of the per-tab imports. **Backup:** *Full
+  backup (.json)* = `{app,version,stations,podcasts}` (both stores, one file), or
+  *Podcasts (.opml)* = portable OPML for any feed app (`exportText` → same
+  `export_file` command, no Rust change). **Restore:** routes **by shape** so the
+  user never picks the wrong tab — OPML ⇒ podcasts; a `{stations,podcasts}` object
+  ⇒ both stores; a bare array ⇒ stations if entries carry `name`/`slug` (no
+  `title`), else podcasts. All merges dedupe by url. Podcast subs moved to a shared
+  `lib/podcasts.ts` (Sub type, load/save, `parseOpml`/`parseSubsJson`/`buildOpml`/
+  `mergeSubs`, `detectNpub`); `setPodcasts` fires a `ntune:podcasts-changed` window
+  event so an open Podcasts tab re-reads after a restore (same-doc localStorage
+  writes don't fire `storage`). Station parsing extracted to
+  `station.ts::parseStationsJson` (shared by the tab import + restore router).
+  Frontend + `cargo` build green; installed. `Needs-verify` in-app: OPML backup
+  round-trip, full-backup restore into both stores.
 - **Next — U4b:** per-npub `1063` feed tab (reuse the episode model + relay
   layer). Follow-ups: reqwest-based proxy (TLS upstreams + `Range`/seek + `https`
   now-playing); `airplay.v1` emission (menubar-companion direction).

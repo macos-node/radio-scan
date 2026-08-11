@@ -55,6 +55,23 @@ export async function importJson<T = unknown>(): Promise<T | null> {
   return JSON.parse(text) as T;
 }
 
+/** Save arbitrary text to a chosen path (native Save dialog). `ext` sets the
+ *  filter + default extension (e.g. "opml"). Same `export_file` command as
+ *  exportJson, just without the JSON.stringify. */
+export async function exportText(
+  defaultName: string,
+  contents: string,
+  ext: string,
+): Promise<string | null> {
+  const path = await save({
+    defaultPath: defaultName,
+    filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+  });
+  if (!path) return null; // cancelled
+  await invoke("export_file", { path, contents });
+  return path;
+}
+
 /** Open a subscriptions file (OPML or JSON) and return its raw text + path, so
  *  the caller can parse either format (podcasts import accepts both). Reuses the
  *  same `read_text_file` command as importJson — no new Rust needed. */

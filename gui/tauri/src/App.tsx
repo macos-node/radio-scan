@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import {
+  Archive,
   Download,
   Headphones,
   Heart,
@@ -17,6 +18,7 @@ import { PlayerBar } from "./components/PlayerBar";
 import { IdentityDialog } from "./components/IdentityDialog";
 import { AddStationDialog } from "./components/AddStationDialog";
 import { FavoritesDialog } from "./components/FavoritesDialog";
+import { BackupDialog } from "./components/BackupDialog";
 import {
   addFavorite,
   emitTrayNowPlaying,
@@ -42,7 +44,7 @@ import {
   type Station,
 } from "./lib/tauri";
 import { resumePosition, savePosition, type Playing } from "./lib/player";
-import { OWNER_PUBKEY, slugify } from "./lib/station";
+import { OWNER_PUBKEY, parseStationsJson } from "./lib/station";
 import { useStations } from "./hooks/useStations";
 import { shortVersion } from "./lib/format";
 import { cn } from "./lib/cn";
@@ -115,6 +117,7 @@ export default function App() {
   const [showAdd, setShowAdd] = useState(false);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [showFavorites, setShowFavorites] = useState(false);
+  const [showBackup, setShowBackup] = useState(false);
 
   // The local store is the base list; any Nostr station.v1 events (for signed-in
   // users) overlay on top, deduped by url. Local-first so an add always shows.
@@ -234,24 +237,7 @@ export default function App() {
     try {
       const data = await importJson<unknown>();
       if (data == null) return; // cancelled
-      if (!Array.isArray(data)) throw new Error("expected a JSON array");
-      const incoming: Station[] = data
-        .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
-        .map((r) => {
-          const url = String(r.url ?? "").trim();
-          const name = String(r.name ?? "").trim() || url;
-          const slug = String(r.slug ?? "").trim() || slugify(name);
-          return {
-            slug,
-            name,
-            url,
-            fmt: r.fmt != null ? String(r.fmt) : null,
-            bitrate: Number.isFinite(Number(r.bitrate)) ? Number(r.bitrate) : null,
-            tags: Array.isArray(r.tags) ? r.tags.map(String) : [],
-            description: r.description != null ? String(r.description) : null,
-          };
-        })
-        .filter((s) => s.url && s.slug);
+      const incoming = parseStationsJson(data);
       if (incoming.length === 0) throw new Error("no valid stations in file");
       const merged = await importLocalStations(incoming);
       setLocalStations(merged);
@@ -260,6 +246,12 @@ export default function App() {
       flashStationMsg(`import failed: ${e}`);
     }
   }, [flashStationMsg]);
+
+  // App-level restore (Backup dialog): merge stations into the local store.
+  const restoreStations = useCallback(async (incoming: Station[]) => {
+    const merged = await importLocalStations(incoming);
+    setLocalStations(merged);
+  }, []);
 
   useEffect(() => applyTheme(theme), [theme]);
 
@@ -516,6 +508,11 @@ export default function App() {
             onClick={() => setShowFavorites(true)}
           />
           <ToolbarIconButton
+            icon={<Archive size={15} />}
+            title="Backup & Restore"
+            onClick={() => setShowBackup(true)}
+          />
+          <ToolbarIconButton
             icon={<Palette size={15} />}
             title={`Theme: ${theme} (click to cycle)`}
             onClick={cycleTheme}
@@ -676,6 +673,13 @@ export default function App() {
           hasIdentity={!!identity}
           onClose={() => setShowAdd(false)}
           onAdded={onAdded}
+        />
+      )}
+      {showBackup && (
+        <BackupDialog
+          stations={stations}
+          onRestoreStations={restoreStations}
+          onClose={() => setShowBackup(false)}
         />
       )}
     </div>
