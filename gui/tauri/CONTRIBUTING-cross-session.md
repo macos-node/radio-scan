@@ -3,6 +3,15 @@
 > Status: **v1.1 ACCEPTED 2026-08-05 (macOS + Linux)** — adds §7 (CI hygiene) + §8
 > (release cadence) on top of v1.0 (accepted 2026-08-04). Adapted from
 > `xjmzx/pong`. Amend in place; major changes get a new version header.
+>
+> **Note 2026-08-11 (macOS `macos-node`) — pending Linux/Windows ack.** (1) A
+> **Windows** build is being prototyped — add a Windows row to the §5 matrix when
+> its tray/bridge path is built. (2) The **now-playing bridge** is a §2
+> design-review-first item:
+> [`docs/nowplaying-bridge-2026-08-11.md`](docs/nowplaying-bridge-2026-08-11.md) is
+> authoritative, and its shared-state **path + payload must be agreed across all
+> three sessions BEFORE any platform menubar/tray build** (a mismatch means the
+> surfaces silently never see each other).
 
 Two Claude sessions ship `gui/tauri` (ntune) in lockstep off one branch
 (`l4-ui-u0` → `main`): **Linux** (`adjmx`) and **macOS** (`macos-node`). This is

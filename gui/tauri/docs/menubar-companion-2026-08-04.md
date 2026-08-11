@@ -5,6 +5,12 @@
 > intent, not a spec — open decisions are called out. Phase context: the L4 UI
 > build map (`docs/radio-scan-ui-2026-08-04.md`). Cross-session contract:
 > [`../CONTRIBUTING-cross-session.md`](../CONTRIBUTING-cross-session.md).
+>
+> **→ The concrete, cross-platform mechanism now lives in
+> [`nowplaying-bridge-2026-08-11.md`](nowplaying-bridge-2026-08-11.md)** (shared
+> `nowplaying.json` file; macOS / Linux / **Windows**). Read it before building any
+> platform's tray surface — it resolves this doc's "Linux task-bar question" into a
+> file contract and names the path/payload decision to settle first.
 
 ## The idea
 The macOS menubar app **RadioBar** (`gui/macos/`) began as a personal tool to grab
