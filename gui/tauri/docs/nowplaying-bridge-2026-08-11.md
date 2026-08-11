@@ -8,6 +8,10 @@
 > is built yet; the seams named below already exist as of **v0.1.1-beta.4**.
 > Supersedes the open question in [`menubar-companion-2026-08-04.md`](menubar-companion-2026-08-04.md)
 > with a concrete, cross-platform mechanism.
+>
+> **Path table 2026-08-11 — Windows FROZEN/ACKED; macOS + Linux acks pending.**
+> See "THE decision" for the frozen table and the *Acknowledgement log* at the
+> bottom. `write_nowplaying` stays blocked until all three ack.
 
 ## Aim (one sentence)
 **One now-playing "fabric": whatever ntune is playing is reflected on a small
@@ -79,12 +83,35 @@ tracklist.
 **Where does `nowplaying.json` live, and how is the path resolved per-OS?**
 This is the one thing all three sessions must agree on *first*, because a
 mismatch means the surfaces silently never see each other.
-- macOS: RadioBar currently reads `~/RadioTuner`; radio-scan's own layout is
-  `~/radio-scan-data/<name>` (the §5 RadioBar coupling note). Pick one.
-- Linux: `$XDG_STATE_HOME` / `$XDG_DATA_HOME` (`~/.local/state|share/…`).
-- Windows: `%LOCALAPPDATA%\…`.
-Proposal: a single resolver (Tauri's `app_data_dir`/`app_local_data_dir` on the
-producer side; the native reader mirrors it) writing `…/radio-scan/nowplaying.json`.
+
+### Resolution — one product-scoped constant, resolved off the OS *base* dir
+`nowplaying.json` lives under a **product-scoped `radio-scan/` directory**: one
+shared path constant (`radio-scan/nowplaying.json`) appended to each OS's *base*
+local-data dir. Deliberately **not** the per-app bundle-id dir (`uk.fizx.ntune`):
+the producer is Tauri, but a consumer is **native Swift (RadioBar)** with no
+knowledge of the Tauri identifier, so the rendezvous path must be derivable
+without it. Producer resolves the **base** dir (Tauri `local_data_dir()` /
+`%LOCALAPPDATA%` / XDG — *not* `app_local_data_dir()`, which would append the
+bundle id) and joins the constant. The native reader hardcodes the same constant
+off its own base dir.
+
+| Session | OS base dir | Frozen path to `nowplaying.json` | State |
+|---|---|---|---|
+| **Windows** (`macos-node`, prototyping) | `%LOCALAPPDATA%` | `%LOCALAPPDATA%\radio-scan\nowplaying.json` | **FROZEN / ACKED 2026-08-11** |
+| macOS (`macos-node`) | `~/Library/Application Support` | `~/Library/Application Support/radio-scan/nowplaying.json` | proposed — **pending macOS ack** |
+| Linux (`adjmx`) | `$XDG_DATA_HOME` (`~/.local/share`) | `$XDG_DATA_HOME/radio-scan/nowplaying.json` | proposed — **pending Linux ack** |
+
+Consistency argues for `local_data_dir()` on all three (the `%LOCALAPPDATA%` /
+Application Support analogue). Linux (`adjmx`) may instead prefer `$XDG_STATE_HOME`
+(`~/.local/state`) for a transient live-state file — its call to freeze on ack.
+
+**Open sub-question kicked to macOS.** RadioBar today reads `~/RadioTuner`
+(personal deployment) / `~/radio-scan-data/<name>` (radioscan layout) — the §5
+"coupling to fix." When RadioBar moves off `~/RadioTuner` to the shared
+`…/radio-scan/` dir, does it relocate **only the live `nowplaying.json`** (tier 1),
+or **also the tally loggers** `*_log.jsonl` (tier 2)? macOS owns that call — it
+decides whether live + history share one root or stay split.
+
 **Agree this path + the payload shape in this doc before writing code.**
 
 ## Per-platform aims (build to these)
@@ -116,3 +143,20 @@ producer side; the native reader mirrors it) writing `…/radio-scan/nowplaying.
 _That's ~1 Rust command + one line in an existing effect + one poller/join.
 Nothing here should be built until the path + payload above are agreed across the
 macOS / Linux / Windows sessions._
+
+## Acknowledgement log (path table + payload)
+The round-trip that unblocks `write_nowplaying`. Grep-able like the CONTRIBUTING
+acceptance log.
+- **Windows (`macos-node`, prototyping) — ACK 2026-08-11.** Acks the path table
+  and the product-scoped-constant resolution: `nowplaying.json` under a shared
+  `radio-scan/` dir off the OS *base* local-data dir, **not** the `uk.fizx.ntune`
+  bundle-id dir (a native Swift consumer can't derive that). Windows row **frozen**:
+  `%LOCALAPPDATA%\radio-scan\nowplaying.json`. Payload shape (airplay.v1-adjacent
+  `{kind,key,r,title,subtitle,artist,track,playing,ts}`) acked as-is — no counter.
+  Kicked to macOS: whether dropping `~/RadioTuner` relocates the `*_log.jsonl`
+  tallies too, or only the live file.
+- **macOS (`macos-node`) — PENDING.** Ack the frozen table (Application Support row)
+  and settle the logger-relocation sub-question above.
+- **Linux (`adjmx`) — PENDING.** Ack the frozen table; confirm `$XDG_DATA_HOME` vs
+  `$XDG_STATE_HOME` for the live file.
+- **All three ack ⇒ `write_nowplaying` unblocked** (see "Smallest first step").
