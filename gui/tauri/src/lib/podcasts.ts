@@ -2,6 +2,17 @@
 // tab and the app-level Backup/Restore both go through here, so a restore made
 // from the header reflects in an open Podcasts tab (a lightweight window event
 // nudges it to re-read — same-document localStorage writes don't fire `storage`).
+//
+// DURABILITY: subscriptions persist in Rust (`podcasts.json`, a synchronous
+// `std::fs::write`), NOT webview localStorage. WebView2 only flushes localStorage
+// on a graceful shutdown, so a crash / force-kill / OS sign-out / the tray "Quit"
+// silently dropped every unflushed change — imported podcasts vanished on reopen
+// while file-backed stations survived (docs/podcast-persistence-2026-08-11.md).
+// A sync in-memory `cache` fronts the async Rust store so the existing sync
+// callers (loadSubs) keep working; localStorage is kept only as the one-time
+// migration source and a same-session fallback until initSubs() has run.
+
+import { invoke } from "@tauri-apps/api/core";
 
 export interface Sub {
   url: string;
@@ -10,11 +21,15 @@ export interface Sub {
   npub?: string;
 }
 
+/** Legacy webview key — now only a migration source + pre-init fallback mirror. */
 export const PODCASTS_KEY = "ntune.podcasts";
 /** Dispatched after a programmatic subs write so a mounted Podcasts tab re-reads. */
 export const PODCASTS_EVENT = "ntune:podcasts-changed";
 
-export function loadSubs(): Sub[] {
+/** Sync view of the durable store, populated by initSubs(); null until then. */
+let cache: Sub[] | null = null;
+
+function readLocalStorage(): Sub[] {
   try {
     return JSON.parse(localStorage.getItem(PODCASTS_KEY) || "[]");
   } catch {
@@ -22,14 +37,58 @@ export function loadSubs(): Sub[] {
   }
 }
 
+/** Current subscriptions (sync). Returns the durable cache once initSubs() has
+ *  run; before that, the legacy localStorage mirror so the first paint isn't
+ *  empty. */
+export function loadSubs(): Sub[] {
+  return cache ?? readLocalStorage();
+}
+
+/** Persist subscriptions to the durable Rust store (`podcasts.json`) and mirror
+ *  to localStorage. The Rust write hits disk synchronously, so nothing is lost on
+ *  a non-graceful exit. */
 export function saveSubs(subs: Sub[]): void {
-  localStorage.setItem(PODCASTS_KEY, JSON.stringify(subs));
+  cache = subs;
+  localStorage.setItem(PODCASTS_KEY, JSON.stringify(subs)); // offline mirror / fallback
+  void invoke("save_local_podcasts", { subs }).catch((e) =>
+    console.error("save_local_podcasts failed", e),
+  );
 }
 
 /** Save + notify — for writes OUTSIDE the Podcasts tab (Backup restore) so the
  *  tab, if open, re-syncs. */
 export function setPodcasts(subs: Sub[]): void {
   saveSubs(subs);
+  window.dispatchEvent(new Event(PODCASTS_EVENT));
+}
+
+/** Load the durable store once at startup, migrating any legacy localStorage
+ *  subs on the first launch after the Rust store landed. Idempotent; dispatches
+ *  PODCASTS_EVENT so a mounted Podcasts tab re-reads the now-authoritative list. */
+export async function initSubs(): Promise<void> {
+  let stored: Sub[] = [];
+  try {
+    stored = await invoke<Sub[]>("list_local_podcasts");
+  } catch (e) {
+    console.error("list_local_podcasts failed", e);
+  }
+  if (stored.length > 0) {
+    cache = stored;
+  } else {
+    const legacy = readLocalStorage();
+    if (legacy.length > 0) {
+      // First launch after the fix: migrate localStorage → the durable store.
+      cache = legacy;
+      try {
+        await invoke("save_local_podcasts", { subs: legacy });
+      } catch (e) {
+        console.error("podcast migration failed", e);
+      }
+    } else {
+      cache = [];
+    }
+  }
+  localStorage.setItem(PODCASTS_KEY, JSON.stringify(cache));
   window.dispatchEvent(new Event(PODCASTS_EVENT));
 }
 

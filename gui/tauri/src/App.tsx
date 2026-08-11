@@ -43,6 +43,7 @@ import {
   type NowPlaying,
   type Station,
 } from "./lib/tauri";
+import { initSubs } from "./lib/podcasts";
 import { resumePosition, savePosition, type Playing } from "./lib/player";
 import { OWNER_PUBKEY, parseStationsJson } from "./lib/station";
 import { useStations } from "./hooks/useStations";
@@ -151,6 +152,9 @@ export default function App() {
     listLocalStations()
       .then(setLocalStations)
       .catch((e) => console.error("list_local_stations failed", e));
+    // Load the durable podcast store (podcasts.json) and migrate any legacy
+    // localStorage subs on the first launch after the Rust store landed.
+    initSubs().catch((e) => console.error("initSubs failed", e));
     getIdentity()
       .then(setIdentity)
       .catch((e) => console.error("get_identity failed", e));

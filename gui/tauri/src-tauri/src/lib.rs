@@ -253,6 +253,49 @@ fn import_local_stations(
     Ok(current)
 }
 
+// --- local podcast store (podcasts.json) ------------------------------------
+// Podcast subscriptions, persisted as a JSON array next to stations.json in the
+// app-data dir. Mirrors the station store: a synchronous `std::fs::write`, so a
+// sub lands on disk the instant it's added and survives ANY exit. This replaces
+// the old webview `localStorage` path, whose writes WebView2 only flushed on a
+// graceful shutdown — a crash, force-kill, OS sign-out, or the tray's "Quit"
+// (which calls app.exit) dropped every unflushed change, so imported podcasts
+// vanished on reopen while file-backed stations survived. Diagnosis + evidence:
+// docs/podcast-persistence-2026-08-11.md. No first-run seed — an empty list is
+// the honest fresh state; the renderer migrates any pre-existing localStorage
+// subs into this store on the first launch after the change.
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct PodcastSub {
+    url: String,
+    title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    npub: Option<String>,
+}
+
+fn podcasts_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    Ok(app_data_dir(app)?.join("podcasts.json"))
+}
+
+/// The persisted subscriptions — `[]` on first run (file absent). No seed; the
+/// renderer owns migration from the legacy localStorage list.
+#[tauri::command]
+fn list_local_podcasts(app: tauri::AppHandle) -> Result<Vec<PodcastSub>, String> {
+    match std::fs::read_to_string(podcasts_path(&app)?) {
+        Ok(t) => serde_json::from_str::<Vec<PodcastSub>>(&t).map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Replace the whole subscription list. The renderer owns merge/dedupe (exactly
+/// as it did against localStorage); this command just makes the write durable.
+#[tauri::command]
+fn save_local_podcasts(app: tauri::AppHandle, subs: Vec<PodcastSub>) -> Result<(), String> {
+    let body = serde_json::to_string_pretty(&subs).map_err(|e| e.to_string())?;
+    std::fs::write(podcasts_path(&app)?, body).map_err(|e| e.to_string())
+}
+
 /// Write `contents` to `path` — the write half of the JSON export. `path` comes
 /// from the plugin Save dialog (a user-chosen location), so this just commits
 /// the bytes; the renderer builds the JSON.
@@ -846,6 +889,8 @@ pub fn run() {
             add_local_station,
             remove_local_station,
             import_local_stations,
+            list_local_podcasts,
+            save_local_podcasts,
             export_file,
             read_text_file,
             write_nowplaying,

@@ -20,6 +20,19 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   compatibility contract for import/export from here on. `image` URL stored, not
   yet rendered. **Export == persisted state**, closing the serializer-drift.
 
+### Fixed
+- **Podcast subscriptions now persist durably.** They moved off webview
+  `localStorage` into a Rust-written `podcasts.json` (a synchronous `std::fs::write`
+  next to `stations.json`), so a subscription lands on disk the instant it's added
+  and survives **any** exit. WebView2 only flushed `localStorage` on a graceful
+  window-close, so a crash / force-kill / OS sign-out / the tray "Quit" dropped
+  every unflushed change — imported podcasts vanished on reopen while file-backed
+  stations survived (Windows-visible; fragile on all platforms). Legacy
+  `localStorage` subs migrate into the store on first launch. The subscription-list
+  precursor to the U4.5 harvest-metadata persistence above. Diagnosis + evidence:
+  [`docs/podcast-persistence-2026-08-11.md`](docs/podcast-persistence-2026-08-11.md).
+  Needs-verify: macos, linux.
+
 ## 0.1.1-beta.3 — unreleased
 
 A cross-platform menubar/tray companion, and JSON import to round-trip the
