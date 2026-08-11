@@ -9,9 +9,9 @@
 > Supersedes the open question in [`menubar-companion-2026-08-04.md`](menubar-companion-2026-08-04.md)
 > with a concrete, cross-platform mechanism.
 >
-> **Path table 2026-08-11 — Windows FROZEN/ACKED; macOS + Linux acks pending.**
+> **Path table 2026-08-11 — Windows + macOS FROZEN/ACKED; Linux ack pending.**
 > See "THE decision" for the frozen table and the *Acknowledgement log* at the
-> bottom. `write_nowplaying` stays blocked until all three ack.
+> bottom. `write_nowplaying` stays blocked until Linux acks.
 
 ## Aim (one sentence)
 **One now-playing "fabric": whatever ntune is playing is reflected on a small
@@ -98,7 +98,7 @@ off its own base dir.
 | Session | OS base dir | Frozen path to `nowplaying.json` | State |
 |---|---|---|---|
 | **Windows** (`macos-node`, prototyping) | `%LOCALAPPDATA%` | `%LOCALAPPDATA%\radio-scan\nowplaying.json` | **FROZEN / ACKED 2026-08-11** |
-| macOS (`macos-node`) | `~/Library/Application Support` | `~/Library/Application Support/radio-scan/nowplaying.json` | proposed — **pending macOS ack** |
+| macOS (`macos-node`) | `~/Library/Application Support` | `~/Library/Application Support/radio-scan/nowplaying.json` | **FROZEN / ACKED 2026-08-11** |
 | Linux (`adjmx`) | `$XDG_DATA_HOME` (`~/.local/share`) | `$XDG_DATA_HOME/radio-scan/nowplaying.json` | proposed — **pending Linux ack** |
 
 Consistency argues for `local_data_dir()` on all three (the `%LOCALAPPDATA%` /
@@ -111,6 +111,16 @@ Application Support analogue). Linux (`adjmx`) may instead prefer `$XDG_STATE_HO
 `…/radio-scan/` dir, does it relocate **only the live `nowplaying.json`** (tier 1),
 or **also the tally loggers** `*_log.jsonl` (tier 2)? macOS owns that call — it
 decides whether live + history share one root or stay split.
+
+**Resolved (macOS, 2026-08-11): only tier 1 relocates.** The live `nowplaying.json`
+is the sole cross-app rendezvous, so only it moves to
+`~/Library/Application Support/radio-scan/`. The tier-2 `*_log.jsonl` tallies **stay
+at `~/RadioTuner`**: they're the launchd-driven personal deployment (the
+`com.tigger.*` jobs, the parser output paths, and RadioBar's `Show.logFile` all
+point there), and no other process needs them at the shared path — RadioBar reads
+the **shared live file** for now-playing and its **own `~/RadioTuner/*_log.jsonl`**
+for the tracklist join. Live (shared) and history (local) stay **split**; the §5
+"coupling to fix" is a separate later refactor that does **not** gate the bridge.
 
 **Agree this path + the payload shape in this doc before writing code.**
 
@@ -155,8 +165,13 @@ acceptance log.
   `{kind,key,r,title,subtitle,artist,track,playing,ts}`) acked as-is — no counter.
   Kicked to macOS: whether dropping `~/RadioTuner` relocates the `*_log.jsonl`
   tallies too, or only the live file.
-- **macOS (`macos-node`) — PENDING.** Ack the frozen table (Application Support row)
-  and settle the logger-relocation sub-question above.
+- **macOS (`macos-node`) — ACK 2026-08-11.** Acks the frozen table (Application
+  Support row: `~/Library/Application Support/radio-scan/nowplaying.json`, resolved
+  off Tauri `local_data_dir()`; RadioBar derives the same base via
+  `.applicationSupportDirectory` — no bundle id). Payload acked as-is, no counter.
+  Sub-question resolved: **only the live file (tier 1) relocates**; the
+  `*_log.jsonl` tallies stay at `~/RadioTuner` (§5 coupling-to-fix is a separate
+  later refactor, doesn't gate the bridge). **Only Linux's ack remains.**
 - **Linux (`adjmx`) — PENDING.** Ack the frozen table; confirm `$XDG_DATA_HOME` vs
   `$XDG_STATE_HOME` for the live file.
 - **All three ack ⇒ `write_nowplaying` unblocked** (see "Smallest first step").
