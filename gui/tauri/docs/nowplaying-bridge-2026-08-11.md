@@ -18,9 +18,11 @@
 > `cfg`) fires on every now-playing change — **verified**: ntune wrote `playing:false`
 > to the frozen path on launch. RadioBar reads it and renders a "▶ Playing in ntune"
 > banner + the located episode's tracklist (`r`→`audio_url` join **verified** against
-> `duck_log`). **Needs-verify: linux + windows** (producer `local_data_dir()`
-> path/write there). Still to build: the **Tauri-tray consumer** (the Linux/Windows
-> surface — RadioBar covers macOS).
+> `duck_log`). **Verified linux 2026-08-11 (`adjmx`)**: ntune wrote `playing:false`
+> to `~/.local/share/radio-scan/nowplaying.json` (`local_data_dir()` → `$XDG_DATA_HOME`,
+> unset → `~/.local/share`) on launch — dir auto-created, valid JSON. **Needs-verify:
+> windows** (producer `local_data_dir()` → `%LOCALAPPDATA%` path/write there). Still to
+> build: the **Tauri-tray consumer** (the Linux/Windows surface — RadioBar covers macOS).
 
 ## Aim (one sentence)
 **One now-playing "fabric": whatever ntune is playing is reflected on a small
