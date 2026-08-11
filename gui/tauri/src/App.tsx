@@ -44,14 +44,19 @@ import {
   type Station,
 } from "./lib/tauri";
 import { initSubs } from "./lib/podcasts";
+import {
+  getSetting,
+  initSettings,
+  setSetting,
+  SETTINGS_EVENT,
+  THEME_KEY,
+  VOLUME_KEY,
+} from "./lib/settings";
 import { resumePosition, savePosition, type Playing } from "./lib/player";
 import { OWNER_PUBKEY, parseStationsJson } from "./lib/station";
 import { useStations } from "./hooks/useStations";
 import { shortVersion } from "./lib/format";
 import { cn } from "./lib/cn";
-
-const THEME_KEY = "ntune.theme";
-const VOLUME_KEY = "ntune.volume";
 
 /** Default = mono, like the rest of the suite; an existing choice is respected.
  *  Kept in step with the pre-paint script in index.html. */
@@ -60,7 +65,7 @@ const THEMES: Theme[] = ["mono", "fizx", "upleb"];
 type Tab = "stations" | "podcasts";
 
 function loadTheme(): Theme {
-  const v = localStorage.getItem(THEME_KEY);
+  const v = getSetting(THEME_KEY);
   return v === "upleb" || v === "fizx" ? v : "mono";
 }
 
@@ -71,7 +76,9 @@ function applyTheme(t: Theme) {
 }
 
 function loadVolume(): number {
-  const v = Number(localStorage.getItem(VOLUME_KEY));
+  // getSetting returns null for an unset key, exactly like the old
+  // localStorage.getItem — behaviour preserved (Number(null) === 0).
+  const v = Number(getSetting(VOLUME_KEY));
   return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 0.9;
 }
 
@@ -155,6 +162,8 @@ export default function App() {
     // Load the durable podcast store (podcasts.json) and migrate any legacy
     // localStorage subs on the first launch after the Rust store landed.
     initSubs().catch((e) => console.error("initSubs failed", e));
+    // Same for UI prefs (theme / volume / list-view) — settings.json.
+    initSettings().catch((e) => console.error("initSettings failed", e));
     getIdentity()
       .then(setIdentity)
       .catch((e) => console.error("get_identity failed", e));
@@ -258,6 +267,18 @@ export default function App() {
   }, []);
 
   useEffect(() => applyTheme(theme), [theme]);
+
+  // When the durable settings store finishes loading (initSettings), re-sync
+  // theme + volume to the now-authoritative values — covers a migration and the
+  // rare case a non-graceful exit left the localStorage mirror one change stale.
+  useEffect(() => {
+    const onSettings = () => {
+      setTheme(loadTheme());
+      setVolume(loadVolume());
+    };
+    window.addEventListener(SETTINGS_EVENT, onSettings);
+    return () => window.removeEventListener(SETTINGS_EVENT, onSettings);
+  }, []);
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume;
@@ -374,13 +395,13 @@ export default function App() {
 
   const changeVolume = useCallback((v: number) => {
     setVolume(v);
-    localStorage.setItem(VOLUME_KEY, String(v));
+    setSetting(VOLUME_KEY, String(v));
   }, []);
 
   const cycleTheme = useCallback(() => {
     setTheme((t) => {
       const next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length];
-      localStorage.setItem(THEME_KEY, next);
+      setSetting(THEME_KEY, next);
       return next;
     });
   }, []);

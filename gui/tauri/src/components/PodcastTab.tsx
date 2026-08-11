@@ -31,16 +31,20 @@ import {
   PODCASTS_EVENT,
   type Sub,
 } from "../lib/podcasts";
+import {
+  getSetting,
+  setSetting,
+  SETTINGS_EVENT,
+  PODCAST_VIEW_KEY,
+} from "../lib/settings";
 import { podcastIconKey } from "../lib/mediaIcon";
 import { MediaGlyph } from "./MediaGlyph";
 import { cn } from "../lib/cn";
 
-const VIEW_KEY = "ntune.podcastView";
-
 type View = "list" | "cards";
 
 function loadView(): View {
-  return localStorage.getItem(VIEW_KEY) === "cards" ? "cards" : "list";
+  return getSetting(PODCAST_VIEW_KEY) === "cards" ? "cards" : "list";
 }
 
 function fmtDuration(secs: number | null): string {
@@ -216,9 +220,16 @@ export function PodcastTab({
     return () => window.removeEventListener(PODCASTS_EVENT, onChange);
   }, []);
 
+  // Re-read the view pref once the durable settings store finishes loading.
+  useEffect(() => {
+    const onSettings = () => setView(loadView());
+    window.addEventListener(SETTINGS_EVENT, onSettings);
+    return () => window.removeEventListener(SETTINGS_EVENT, onSettings);
+  }, []);
+
   const chooseView = (v: View) => {
     setView(v);
-    localStorage.setItem(VIEW_KEY, v);
+    setSetting(PODCAST_VIEW_KEY, v);
   };
 
   const copy = (url: string) => {

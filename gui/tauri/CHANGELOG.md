@@ -32,6 +32,12 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   precursor to the U4.5 harvest-metadata persistence above. Diagnosis + evidence:
   [`docs/podcast-persistence-2026-08-11.md`](docs/podcast-persistence-2026-08-11.md).
   Needs-verify: macos, linux.
+- **UI preferences now persist durably too.** Theme, volume, and the list/card view
+  toggles moved off `localStorage` into a generic Rust settings store
+  (`settings.json`, same synchronous write) — same durability gap, so they could
+  reset on a non-graceful exit. `localStorage` stays a mirror (the `index.html`
+  pre-paint theme read needs a synchronous source); the store is authoritative on
+  load and migrates existing prefs on first launch. Needs-verify: macos, linux.
 
 ## 0.1.1-beta.3 — unreleased
 

@@ -1,15 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy, LayoutGrid, List, Loader2, Radio, X } from "lucide-react";
 import { copyText, type IcyInfo, type Station } from "../lib/tauri";
 import { stationIconKey } from "../lib/mediaIcon";
+import {
+  getSetting,
+  setSetting,
+  SETTINGS_EVENT,
+  STATION_VIEW_KEY,
+} from "../lib/settings";
 import { MediaGlyph } from "./MediaGlyph";
 import { cn } from "../lib/cn";
 
-const VIEW_KEY = "ntune.stationView";
 type View = "list" | "cards";
 
 function loadView(): View {
-  return localStorage.getItem(VIEW_KEY) === "cards" ? "cards" : "list";
+  return getSetting(STATION_VIEW_KEY) === "cards" ? "cards" : "list";
 }
 
 /** The tuner's station list. Rows are the local station store (seeded on first
@@ -38,6 +43,15 @@ export function StationList({
   // Slug of the row whose URL was just copied — briefly shows a ✓.
   const [copied, setCopied] = useState<string | null>(null);
 
+  // Re-read once the durable settings store finishes loading (initSettings),
+  // so a migrated / non-graceful-stale view pref lands even though this list is
+  // the default-mounted tab.
+  useEffect(() => {
+    const onSettings = () => setView(loadView());
+    window.addEventListener(SETTINGS_EVENT, onSettings);
+    return () => window.removeEventListener(SETTINGS_EVENT, onSettings);
+  }, []);
+
   // Merge the harvested station.v1 description with ICY headers captured on
   // tune-in (win #2). Gap-fill only — the station's own description wins; ICY's
   // icy-name backfills it, and icy-url adds a homepage stations otherwise lack.
@@ -51,7 +65,7 @@ export function StationList({
 
   const chooseView = (v: View) => {
     setView(v);
-    localStorage.setItem(VIEW_KEY, v);
+    setSetting(STATION_VIEW_KEY, v);
   };
   const copy = (s: Station) => {
     copyText(s.url)

@@ -296,6 +296,41 @@ fn save_local_podcasts(app: tauri::AppHandle, subs: Vec<PodcastSub>) -> Result<(
     std::fs::write(podcasts_path(&app)?, body).map_err(|e| e.to_string())
 }
 
+// --- local settings store (settings.json) -----------------------------------
+// Small key->string UI prefs (theme, volume, list/card views), persisted next to
+// stations.json so they survive ANY exit like the station/podcast stores do. They
+// used to live in webview localStorage, which WebView2 only flushes on a graceful
+// close — the same durability gap that lost podcasts (docs/podcast-persistence-
+// 2026-08-11.md). localStorage stays a mirror (the index.html pre-paint theme read
+// needs a synchronous source); this file is authoritative on load.
+
+fn settings_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    Ok(app_data_dir(app)?.join("settings.json"))
+}
+
+/// All persisted UI settings — `{}` on first run (file absent).
+#[tauri::command]
+fn get_settings(app: tauri::AppHandle) -> Result<std::collections::BTreeMap<String, String>, String> {
+    match std::fs::read_to_string(settings_path(&app)?) {
+        Ok(t) => serde_json::from_str(&t).map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Ok(std::collections::BTreeMap::new())
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Set one setting (read-modify-write, so concurrent single-key writes from
+/// different components don't clobber each other). Synchronous — on disk before
+/// it returns.
+#[tauri::command]
+fn set_setting(app: tauri::AppHandle, key: String, value: String) -> Result<(), String> {
+    let mut map = get_settings(app.clone())?;
+    map.insert(key, value);
+    let body = serde_json::to_string_pretty(&map).map_err(|e| e.to_string())?;
+    std::fs::write(settings_path(&app)?, body).map_err(|e| e.to_string())
+}
+
 /// Write `contents` to `path` — the write half of the JSON export. `path` comes
 /// from the plugin Save dialog (a user-chosen location), so this just commits
 /// the bytes; the renderer builds the JSON.
@@ -891,6 +926,8 @@ pub fn run() {
             import_local_stations,
             list_local_podcasts,
             save_local_podcasts,
+            get_settings,
+            set_setting,
             export_file,
             read_text_file,
             write_nowplaying,
