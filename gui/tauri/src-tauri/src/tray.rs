@@ -17,24 +17,33 @@ use serde::Deserialize;
 use tauri::{
     menu::{MenuBuilder, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Emitter, Listener, Manager,
+    AppHandle, Emitter, Manager, Wry,
 };
 
 const TRAY_ID: &str = "ntune-tray";
 const IDLE: &str = "Not playing";
 
-/// Tray now-playing state, pushed from the frontend (App.tsx) — the single source
-/// of truth. The UI already derives now-playing (ICY metadata, filtered to the
-/// tuned station and CLEARED on stop), so mirroring it here gives a correct label
-/// on stop and lets the tray ♥ gate on exactly what the in-window heart does:
-/// `can_favorite` == the PlayerBar heart's `!disabled` (nowPlaying present).
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TrayState {
-    /// "Artist — Title", the source title, or the idle label — already composed.
-    label: String,
-    /// Whether there's a favoritable track right now (a live ICY now-playing).
-    can_favorite: bool,
+/// The shared now-playing payload the tray READS from the bridge file (frozen
+/// contract: ../../docs/nowplaying-bridge-2026-08-11.md). The tray is a file-poll
+/// consumer — the very `nowplaying.json` ntune's `write_nowplaying` producer emits
+/// and RadioBar reads on macOS — so every OS reflects playback through one
+/// mechanism, not a second in-process source of truth. Only the tier-1 fields
+/// matter here; the episode tracklist join (`r`→`*_log.audio_url`) is macOS-only
+/// (no `*_log.jsonl` logger on Linux/Windows), so the tray shows banner-level info.
+#[derive(Deserialize, Default)]
+struct Bridge {
+    #[serde(default)]
+    kind: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    subtitle: Option<String>,
+    #[serde(default)]
+    artist: Option<String>,
+    #[serde(default)]
+    track: Option<String>,
+    #[serde(default)]
+    playing: bool,
 }
 
 /// Build the tray icon + menu and start reflecting now-playing into it.
@@ -79,24 +88,74 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
 
-    // Mirror the UI's derived now-playing into the tray: label + tooltip + whether
-    // the ♥ item is enabled. Frontend `emit` reaches Rust listeners in Tauri 2, so
-    // App.tsx pushing state here keeps the tray and the in-window heart identical.
-    let np_item = now_playing.clone();
-    let fav_item = favorite.clone();
-    let handle = app.clone();
-    app.listen("tray-now-playing", move |event| {
-        let Ok(state) = serde_json::from_str::<TrayState>(event.payload()) else {
-            return;
-        };
-        let _ = np_item.set_text(&state.label);
-        let _ = fav_item.set_enabled(state.can_favorite);
-        if let Some(tray) = handle.tray_by_id(TRAY_ID) {
-            let _ = tray.set_tooltip(Some(format!("ntune — {}", state.label)));
-        }
-    });
+    // Reflect now-playing into the tray by POLLING the shared bridge file — the
+    // same `nowplaying.json` the producer writes and RadioBar reads. Cross-app by
+    // construction, and the one now-playing source on every OS.
+    spawn_bridge_poller(app.clone(), now_playing.clone(), favorite.clone());
 
     Ok(())
+}
+
+/// Compose the tray label + ♥-enabled + tooltip from a bridge payload, matching
+/// RadioBar's tier-1 banner: station → the live ICY `artist — track`; episode →
+/// its title, with the podcast name in the tooltip. A ▶ prefix marks a live
+/// readout. The ♥ is enabled only for a live ICY track (station), exactly as the
+/// in-window heart gates on `nowPlaying` — episodes carry no ICY, so no favorite.
+fn compose(b: &Bridge) -> (String, bool, String) {
+    if !b.playing {
+        return (IDLE.to_string(), false, "ntune — not playing".to_string());
+    }
+    let icy = [b.artist.as_deref(), b.track.as_deref()]
+        .into_iter()
+        .flatten()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" \u{2014} ");
+    let primary = if icy.is_empty() { b.title.clone() } else { icy };
+    let can_favorite = b.artist.as_deref().is_some_and(|s| !s.is_empty())
+        || b.track.as_deref().is_some_and(|s| !s.is_empty());
+    let tooltip = match b.subtitle.as_deref().filter(|s| !s.is_empty()) {
+        Some(sub) if b.kind == "episode" => format!("ntune — {primary} \u{00B7} {sub}"),
+        _ => format!("ntune — {primary}"),
+    };
+    (format!("\u{25B6} {primary}"), can_favorite, tooltip)
+}
+
+/// Poll the bridge file every 3 s (RadioBar's cadence) on a worker thread; on a
+/// content change, push the composed label / ♥-enabled / tooltip to the tray.
+/// GTK requires menu + tray mutations on the main thread, so the file IO happens
+/// on the worker and the writes are marshalled back via `run_on_main_thread`.
+fn spawn_bridge_poller(app: AppHandle, np_item: MenuItem<Wry>, fav_item: MenuItem<Wry>) {
+    std::thread::spawn(move || {
+        let mut last = String::new();
+        loop {
+            // Same resolver as the producer: `local_data_dir()/radio-scan/…` (the OS
+            // base data dir, not the bundle-id dir) — no read until it's written.
+            let content = app
+                .path()
+                .local_data_dir()
+                .ok()
+                .map(|d| d.join("radio-scan").join("nowplaying.json"))
+                .and_then(|p| std::fs::read_to_string(p).ok())
+                .unwrap_or_default();
+            if content != last {
+                last = content.clone();
+                let b: Bridge = serde_json::from_str(&content).unwrap_or_default();
+                let (label, can_favorite, tooltip) = compose(&b);
+                let np = np_item.clone();
+                let fav = fav_item.clone();
+                let handle = app.clone();
+                let _ = app.run_on_main_thread(move || {
+                    let _ = np.set_text(&label);
+                    let _ = fav.set_enabled(can_favorite);
+                    if let Some(tray) = handle.tray_by_id(TRAY_ID) {
+                        let _ = tray.set_tooltip(Some(tooltip));
+                    }
+                });
+            }
+            std::thread::sleep(std::time::Duration::from_secs(3));
+        }
+    });
 }
 
 /// Show + unminimize + focus the main window (the tray's "Show ntune").
@@ -105,5 +164,58 @@ fn reveal_main_window(app: &AppHandle) {
         let _ = win.show();
         let _ = win.unminimize();
         let _ = win.set_focus();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bridge(kind: &str, title: &str, artist: Option<&str>, track: Option<&str>) -> Bridge {
+        Bridge {
+            kind: kind.into(),
+            title: title.into(),
+            artist: artist.map(Into::into),
+            track: track.map(Into::into),
+            playing: true,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn stopped_reads_idle_and_disables_favorite() {
+        let (label, can_fav, tip) = compose(&Bridge::default());
+        assert_eq!(label, "Not playing");
+        assert!(!can_fav);
+        assert_eq!(tip, "ntune — not playing");
+    }
+
+    #[test]
+    fn station_with_icy_shows_artist_track_and_enables_favorite() {
+        let b = bridge("station", "Acid Jazz", Some("Dana Bryant"), Some("Heat"));
+        let (label, can_fav, tip) = compose(&b);
+        assert_eq!(label, "\u{25B6} Dana Bryant \u{2014} Heat");
+        assert!(can_fav);
+        assert_eq!(tip, "ntune — Dana Bryant \u{2014} Heat");
+    }
+
+    #[test]
+    fn station_without_icy_falls_back_to_title_and_disables_favorite() {
+        // Playing but ICY hasn't arrived — mirror the in-window heart: no favorite
+        // until a live track exists.
+        let b = bridge("station", "Acid Jazz", None, None);
+        let (label, can_fav, _tip) = compose(&b);
+        assert_eq!(label, "\u{25B6} Acid Jazz");
+        assert!(!can_fav);
+    }
+
+    #[test]
+    fn episode_shows_title_with_podcast_in_tooltip_and_no_favorite() {
+        let mut b = bridge("episode", "Episode 12", None, None);
+        b.subtitle = Some("My Podcast".into());
+        let (label, can_fav, tip) = compose(&b);
+        assert_eq!(label, "\u{25B6} Episode 12");
+        assert!(!can_fav, "episodes carry no ICY, so no favoritable track");
+        assert_eq!(tip, "ntune — Episode 12 \u{00B7} My Podcast");
     }
 }

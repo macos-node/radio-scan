@@ -21,8 +21,20 @@
 > `duck_log`). **Verified linux 2026-08-11 (`adjmx`)**: ntune wrote `playing:false`
 > to `~/.local/share/radio-scan/nowplaying.json` (`local_data_dir()` → `$XDG_DATA_HOME`,
 > unset → `~/.local/share`) on launch — dir auto-created, valid JSON. **Needs-verify:
-> windows** (producer `local_data_dir()` → `%LOCALAPPDATA%` path/write there). Still to
-> build: the **Tauri-tray consumer** (the Linux/Windows surface — RadioBar covers macOS).
+> windows** (producer `local_data_dir()` → `%LOCALAPPDATA%` path/write there).
+>
+> **Build 2026-08-11 (Linux `adjmx`): Tauri-tray consumer SHIPPED.** `tray.rs` now
+> **polls** `local_data_dir()/radio-scan/nowplaying.json` every 3 s (RadioBar's
+> cadence) instead of listening to an in-process event — the file is the single
+> source on every OS. Renders RadioBar's tier-1 banner: station → `▶ artist — track`,
+> episode → `▶ title` (podcast in tooltip), stopped → "Not playing"; ♥ gated to a live
+> ICY track. The in-process `tray-now-playing` path (App.tsx `emitTrayNowPlaying`) is
+> **removed**. The episode tracklist join stays macOS-only (no `*_log.jsonl` on
+> Linux/Windows). **Verified linux**: 4/4 `compose()` unit tests green; ntune launched,
+> the poller consumed a live `playing:true` payload without panic, and the tray icon
+> renders in the GNOME top bar (ubuntu-appindicators). **Needs-verify: macos** (ntune's
+> own Tauri tray now file-polls too — RadioBar unaffected) **+ windows** (tray poll +
+> `%LOCALAPPDATA%`).
 
 ## Aim (one sentence)
 **One now-playing "fabric": whatever ntune is playing is reflected on a small

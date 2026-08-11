@@ -21,7 +21,6 @@ import { FavoritesDialog } from "./components/FavoritesDialog";
 import { BackupDialog } from "./components/BackupDialog";
 import {
   addFavorite,
-  emitTrayNowPlaying,
   exportJson,
   getIdentity,
   getProxyPort,
@@ -445,21 +444,13 @@ export default function App() {
     return () => unlisten?.();
   }, []);
 
-  // Push the derived now-playing state to the tray (U6). The UI owns this — it
-  // clears nowPlaying on stop and gates the ♥ on it — so the tray label and the
-  // ♥-enabled state mirror the in-window heart. Harmless if launched without a
-  // tray (nothing listens).
+  // Bridge: write the derived now-playing state to the shared file — the single
+  // source every surface reads. RadioBar (macOS) and ntune's own tray both poll
+  // `nowplaying.json`; for episodes a consumer joins `r` to a logged tracklist
+  // (macOS-only). The UI owns the derivation — it clears nowPlaying on stop and
+  // gates the ♥ on it — so the file faithfully reflects the in-window state.
+  // Best-effort: a failed write never disrupts playback.
   useEffect(() => {
-    const label = nowPlaying
-      ? [nowPlaying.artist, nowPlaying.title].filter(Boolean).join(" — ")
-      : playing && current
-        ? current.title
-        : "Not playing";
-    void emitTrayNowPlaying({ label, canFavorite: nowPlaying != null });
-
-    // Bridge: mirror the same derived state to the shared now-playing file so an
-    // out-of-process surface (RadioBar today; the tray tomorrow) can reflect it —
-    // and, for episodes, join `r` to a logged tracklist. Best-effort.
     void writeNowPlaying({
       kind: current?.kind ?? "station",
       key: current?.key ?? "",
