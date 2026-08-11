@@ -32,8 +32,13 @@
 > **removed**. The episode tracklist join stays macOS-only (no `*_log.jsonl` on
 > Linux/Windows). **Verified linux**: 4/4 `compose()` unit tests green; ntune launched,
 > the poller consumed a live `playing:true` payload without panic, and the tray icon
-> renders in the GNOME top bar (ubuntu-appindicators). **Needs-verify: macos** (ntune's
-> own Tauri tray now file-polls too — RadioBar unaffected) **+ windows** (tray poll +
+> renders in the GNOME top bar (ubuntu-appindicators). **Verified linux**: 4/4
+> `compose()` unit tests green; ntune launched, the poller consumed a live
+> `playing:true` payload without panic, tray icon renders (ubuntu-appindicators).
+> **Verified macos 2026-08-11 (`macos-node`)**: builds; `compose()` 4/4 green on
+> macOS; `ntune --tray` launched and the poller consumed a live `playing:true`
+> payload for ~2 cycles without panic (same `local_data_dir()` resolver as the
+> producer + RadioBar; RadioBar unaffected). **Needs-verify: windows** (tray poll +
 > `%LOCALAPPDATA%`).
 
 ## Aim (one sentence)

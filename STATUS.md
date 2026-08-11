@@ -251,9 +251,13 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   from the existing now-playing effect — verified on macOS (writes on launch/state
   change). **macOS consumer** = RadioBar polls the file (3 s), renders a "▶ Playing
   in ntune" banner, and for episodes joins `r`→`audio_url` to show the located
-  episode's tracklist (verified against `duck_log`). **Needs-verify: linux + windows**
-  (producer path/write). Still to build: the **Tauri-tray consumer** (Linux/Windows
-  surface). Full contract:
+  episode's tracklist (verified against `duck_log`). **Tauri-tray consumer** (the
+  Linux/Windows surface, `tray.rs`) also built — file-polls the same path every 3 s,
+  renders the tier-1 banner (no tracklist join off-mac); the in-process
+  `emitTrayNowPlaying` event is gone (file is the single source). Producer path
+  verified **linux** (`$XDG_DATA_HOME`); tray verified **linux + macos** (`compose()`
+  4/4, `--tray` poll no-panic). **Needs-verify: windows** (producer + tray path on
+  `%LOCALAPPDATA%`). Full contract:
   [`gui/tauri/docs/nowplaying-bridge-2026-08-11.md`](gui/tauri/docs/nowplaying-bridge-2026-08-11.md).
 
 ## Outstanding
