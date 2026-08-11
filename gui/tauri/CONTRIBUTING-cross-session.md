@@ -9,8 +9,10 @@
 > design-review-first item:
 > [`docs/nowplaying-bridge-2026-08-11.md`](docs/nowplaying-bridge-2026-08-11.md) is
 > authoritative; its shared-state path + payload must be agreed across all three
-> sessions BEFORE any tray build. **Status: Windows + macOS acked; Linux ack
-> pending** — `write_nowplaying` stays blocked until then.
+> sessions BEFORE any tray build. **Status: Windows + macOS + Linux all acked
+> 2026-08-11 — `write_nowplaying` UNBLOCKED.** Path constant
+> `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
+> is now frozen additive-only.
 
 Two Claude sessions ship `gui/tauri` (ntune) in lockstep off one branch
 (`l4-ui-u0` → `main`): **Linux** (`adjmx`) and **macOS** (`macos-node`). This is

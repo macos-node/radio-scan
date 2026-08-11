@@ -9,9 +9,9 @@
 > Supersedes the open question in [`menubar-companion-2026-08-04.md`](menubar-companion-2026-08-04.md)
 > with a concrete, cross-platform mechanism.
 >
-> **Path table 2026-08-11 — Windows + macOS FROZEN/ACKED; Linux ack pending.**
+> **Path table 2026-08-11 — all three FROZEN/ACKED (Windows · macOS · Linux).**
 > See "THE decision" for the frozen table and the *Acknowledgement log* at the
-> bottom. `write_nowplaying` stays blocked until Linux acks.
+> bottom. **`write_nowplaying` is UNBLOCKED** — build per "Smallest first step".
 
 ## Aim (one sentence)
 **One now-playing "fabric": whatever ntune is playing is reflected on a small
@@ -99,11 +99,16 @@ off its own base dir.
 |---|---|---|---|
 | **Windows** (`macos-node`, prototyping) | `%LOCALAPPDATA%` | `%LOCALAPPDATA%\radio-scan\nowplaying.json` | **FROZEN / ACKED 2026-08-11** |
 | macOS (`macos-node`) | `~/Library/Application Support` | `~/Library/Application Support/radio-scan/nowplaying.json` | **FROZEN / ACKED 2026-08-11** |
-| Linux (`adjmx`) | `$XDG_DATA_HOME` (`~/.local/share`) | `$XDG_DATA_HOME/radio-scan/nowplaying.json` | proposed — **pending Linux ack** |
+| Linux (`adjmx`) | `$XDG_DATA_HOME` (`~/.local/share`) | `$XDG_DATA_HOME/radio-scan/nowplaying.json` | **FROZEN / ACKED 2026-08-11** |
 
-Consistency argues for `local_data_dir()` on all three (the `%LOCALAPPDATA%` /
-Application Support analogue). Linux (`adjmx`) may instead prefer `$XDG_STATE_HOME`
-(`~/.local/state`) for a transient live-state file — its call to freeze on ack.
+**Frozen on `$XDG_DATA_HOME` (Linux, 2026-08-11).** Linux takes the consistency
+option: `local_data_dir()` on all three, so the producer is one uniform line —
+`local_data_dir().join("radio-scan/nowplaying.json")` — with **no per-OS `cfg`
+branch** in the shared `write_nowplaying` command. `$XDG_STATE_HOME`
+(`~/.local/state`) is the semantically "purer" home for a transient live-state
+file, but it would force a Linux-only resolver, and mac/Windows have no
+data-vs-state split to mirror anyway. Uniform resolver wins for a single tiny
+file. (`~/.local/share/radio-scan/nowplaying.json`.)
 
 **Open sub-question kicked to macOS.** RadioBar today reads `~/RadioTuner`
 (personal deployment) / `~/radio-scan-data/<name>` (radioscan layout) — the §5
@@ -172,6 +177,13 @@ acceptance log.
   Sub-question resolved: **only the live file (tier 1) relocates**; the
   `*_log.jsonl` tallies stay at `~/RadioTuner` (§5 coupling-to-fix is a separate
   later refactor, doesn't gate the bridge). **Only Linux's ack remains.**
-- **Linux (`adjmx`) — PENDING.** Ack the frozen table; confirm `$XDG_DATA_HOME` vs
-  `$XDG_STATE_HOME` for the live file.
-- **All three ack ⇒ `write_nowplaying` unblocked** (see "Smallest first step").
+- **Linux (`adjmx`) — ACK 2026-08-11.** Acks the frozen table and the
+  product-scoped-constant resolution. Linux row **frozen** on `$XDG_DATA_HOME`:
+  `~/.local/share/radio-scan/nowplaying.json`, resolved off Tauri
+  `local_data_dir()` — the *same resolver* mac + Windows use, so the producer needs
+  **no per-OS `cfg` branch** (chose `local_data_dir()` over the semantically-purer
+  `$XDG_STATE_HOME` for exactly this uniformity). Payload acked as-is, no counter;
+  the tier-1-only relocation (macOS) doesn't touch Linux (no native logger).
+- **All three ACKED 2026-08-11 ⇒ `write_nowplaying` UNBLOCKED** (see "Smallest
+  first step"). Contract now frozen additive-only; the path constant
+  `radio-scan/nowplaying.json` + the payload shape are the compatibility surface.
