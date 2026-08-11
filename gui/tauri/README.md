@@ -34,7 +34,15 @@ make deps     # npm install + cargo fetch (one-time)
 make dev      # tauri dev (hot-reload)
 make check    # tsc + vite build + cargo check
 make icons    # regenerate the raster icon set from icon.svg
-make install  # binary + .desktop under ~/.local
+make install  # binary + .desktop under ~/.local  (Linux)
+```
+
+**macOS** — build + install the `.app` to `/Applications` and relaunch, in one
+step (the ntune analog of RadioBar's `build-app.sh --install`):
+
+```bash
+npm run install:app          # or: ./install.sh
+./install.sh --skip-build    # reinstall the last build without rebuilding
 ```
 
 Stack: Tauri 2 · React 19 · TypeScript · Tailwind v3 — matching the rest of the
