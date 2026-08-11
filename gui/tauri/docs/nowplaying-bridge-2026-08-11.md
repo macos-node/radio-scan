@@ -20,8 +20,10 @@
 > banner + the located episode's tracklist (`r`→`audio_url` join **verified** against
 > `duck_log`). **Verified linux 2026-08-11 (`adjmx`)**: ntune wrote `playing:false`
 > to `~/.local/share/radio-scan/nowplaying.json` (`local_data_dir()` → `$XDG_DATA_HOME`,
-> unset → `~/.local/share`) on launch — dir auto-created, valid JSON. **Needs-verify:
-> windows** (producer `local_data_dir()` → `%LOCALAPPDATA%` path/write there).
+> unset → `~/.local/share`) on launch — dir auto-created, valid JSON. **Verified
+> windows 2026-08-11 (`macos-node`)**: ntune wrote `playing:false` to
+> `%LOCALAPPDATA%\radio-scan\nowplaying.json` (`local_data_dir()` → `%LOCALAPPDATA%`)
+> on launch — dir auto-created by `create_dir_all`, valid JSON, no `cfg` branch.
 >
 > **Build 2026-08-11 (Linux `adjmx`): Tauri-tray consumer SHIPPED.** `tray.rs` now
 > **polls** `local_data_dir()/radio-scan/nowplaying.json` every 3 s (RadioBar's
@@ -38,8 +40,12 @@
 > **Verified macos 2026-08-11 (`macos-node`)**: builds; `compose()` 4/4 green on
 > macOS; `ntune --tray` launched and the poller consumed a live `playing:true`
 > payload for ~2 cycles without panic (same `local_data_dir()` resolver as the
-> producer + RadioBar; RadioBar unaffected). **Needs-verify: windows** (tray poll +
-> `%LOCALAPPDATA%`).
+> producer + RadioBar; RadioBar unaffected). **Verified windows 2026-08-11
+> (`macos-node`)**: builds (rustc 1.92); `compose()` 4/4 green on Windows; the
+> default-on tray poller consumed live `playing:true` (station ICY + episode) and the
+> transition back to stopped from `%LOCALAPPDATA%\radio-scan\nowplaying.json` without
+> panic — same `local_data_dir()` resolver as the producer. **All three platforms
+> now verified — the bridge is fully validated end-to-end.**
 
 ## Aim (one sentence)
 **One now-playing "fabric": whatever ntune is playing is reflected on a small

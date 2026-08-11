@@ -255,9 +255,11 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   Linux/Windows surface, `tray.rs`) also built — file-polls the same path every 3 s,
   renders the tier-1 banner (no tracklist join off-mac); the in-process
   `emitTrayNowPlaying` event is gone (file is the single source). Producer path
-  verified **linux** (`$XDG_DATA_HOME`); tray verified **linux + macos** (`compose()`
-  4/4, `--tray` poll no-panic). **Needs-verify: windows** (producer + tray path on
-  `%LOCALAPPDATA%`). Full contract:
+  verified **linux** (`$XDG_DATA_HOME`) **+ windows** (`%LOCALAPPDATA%\radio-scan\nowplaying.json`,
+  dir auto-created, writes `playing:false` on launch); tray verified **linux + macos
+  + windows** (`compose()` 4/4, default-on tray poll ingests live `playing:true` /
+  episode / stopped payloads without panic). **All three platforms verified
+  2026-08-11 — bridge fully validated.** Full contract:
   [`gui/tauri/docs/nowplaying-bridge-2026-08-11.md`](gui/tauri/docs/nowplaying-bridge-2026-08-11.md).
 
 ## Outstanding
