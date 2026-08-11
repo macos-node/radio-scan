@@ -82,6 +82,7 @@ struct Track: Decodable {
     let label: String?
     let album: String?
     let raw: String?
+    let audio_url: String?   // episodic podcast enclosure (duck) — the bridge join key
 
     /// "HH:mm" from the local ISO string (stream rows only).
     var timeHM: String {
@@ -103,6 +104,30 @@ struct Track: Decodable {
     }
 }
 
+/// The shared now-playing state ntune writes to
+/// `~/Library/Application Support/radio-scan/nowplaying.json` (frozen bridge
+/// contract, docs/nowplaying-bridge-2026-08-11.md). We read it to reflect what
+/// ntune is playing and, for episodes, join `r` → an episodic log's `audio_url`.
+struct Bridge: Decodable {
+    let kind: String        // "station" | "episode"
+    let key: String
+    let r: String           // stream/enclosure URL = the join key
+    let title: String
+    let subtitle: String?
+    let artist: String?     // live ICY, station only
+    let track: String?      // live ICY, station only
+    let playing: Bool
+    let ts: Double?
+}
+
+/// A playing episode located in one of the episodic logs by `audio_url == r`.
+struct LocatedEpisode {
+    let show: String
+    let episode: String
+    let date: String
+    let tracks: [Track]
+}
+
 // MARK: - Model
 
 @MainActor
@@ -110,10 +135,23 @@ final class RadioModel: ObservableObject {
     @Published private(set) var tracks: [Track] = []       // file order
     @Published private(set) var jobLoaded = false          // launchd job registered?
     @Published private(set) var show: Show
+    @Published private(set) var bridge: Bridge?            // what ntune is playing
+    @Published private(set) var located: LocatedEpisode?  // its tracklist, if episodic
 
     private let home = (NSHomeDirectory() as NSString).appendingPathComponent("RadioTuner")
     private let defaultsKey = "currentShowID"
     private var timer: Timer?
+    private var bridgeTimer: Timer?
+    private var locatedFor: String?   // cache: last `r` we scanned for
+
+    /// The shared live file ntune writes — resolved off the SAME base dir ntune's
+    /// `local_data_dir()` uses (`~/Library/Application Support`) + the product
+    /// constant, with NO ntune bundle id (the frozen cross-app rendezvous).
+    private var bridgePath: String {
+        let base = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        return base?.appendingPathComponent("radio-scan/nowplaying.json").path ?? ""
+    }
 
     private var jsonlPath: String {
         (home as NSString).appendingPathComponent(show.logFile)
@@ -158,9 +196,64 @@ final class RadioModel: ObservableObject {
     init() {
         show = Show.find(UserDefaults.standard.string(forKey: defaultsKey))
         refresh()
+        loadBridge()
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
+        // The live now-playing file is tiny — poll it faster than the log refresh.
+        bridgeTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.loadBridge() }
+        }
+    }
+
+    // MARK: bridge (what ntune is playing)
+
+    private func loadBridge() {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: bridgePath)),
+              let b = try? JSONDecoder().decode(Bridge.self, from: data) else {
+            if bridge != nil || located != nil { bridge = nil; located = nil; locatedFor = nil }
+            return
+        }
+        bridge = b
+        // Locate an episode's tracklist only when the source (r) changes — scanning
+        // a log is heavy, so cache by r; clear for stations / when stopped.
+        if b.playing, b.kind == "episode", !b.r.isEmpty {
+            if b.r != locatedFor {
+                locatedFor = b.r
+                located = locateEpisode(r: b.r)
+            }
+        } else if located != nil || locatedFor != nil {
+            located = nil
+            locatedFor = nil
+        }
+    }
+
+    /// Scan the episodic logs for a row whose `audio_url` matches `r`, and return
+    /// that episode's real tracks in running order. (Duck carries `audio_url`; On
+    /// The Wire has none, so it never matches — as designed.)
+    private func locateEpisode(r: String) -> LocatedEpisode? {
+        let dec = JSONDecoder()
+        for s in Show.all where s.kind == .episodic {
+            let path = (home as NSString).appendingPathComponent(s.logFile)
+            guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+            var rows: [Track] = []
+            var name = "", date = ""
+            for line in text.split(separator: "\n") {
+                guard let d = line.data(using: .utf8),
+                      let t = try? dec.decode(Track.self, from: d) else { continue }
+                if t.audio_url == r {
+                    rows.append(t)
+                    name = t.episode ?? name
+                    date = t.episode_date ?? date
+                }
+            }
+            if !rows.isEmpty {
+                let real = rows.filter { $0.isRealTrack }
+                    .sorted { ($0.pos?.num ?? 0) < ($1.pos?.num ?? 0) }
+                return LocatedEpisode(show: s.name, episode: name, date: date, tracks: real)
+            }
+        }
+        return nil
     }
 
     func select(_ newShow: Show) {
@@ -263,6 +356,8 @@ struct ContentView: View {
                 Text(statusWord).font(.caption).foregroundStyle(.secondary)
             }
 
+            bridgeBanner
+
             if isEpisodic { episodicHeader } else { streamHeader }
 
             Divider()
@@ -321,6 +416,51 @@ struct ContentView: View {
         }
         .padding(12)
         .frame(width: 300)
+    }
+
+    // Bridge: "▶ Playing in ntune" — reflects the shared now-playing file, and for
+    // a located episode shows its tracklist (the cross-app "locate show + tracks").
+    @ViewBuilder private var bridgeBanner: some View {
+        if let b = model.bridge, b.playing {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    Image(systemName: "play.circle.fill")
+                        .foregroundStyle(.green).font(.caption)
+                    Text("Playing in ntune")
+                        .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                    Spacer()
+                    Text(b.kind).font(.caption2).foregroundStyle(.tertiary)
+                }
+                Text(b.title).font(.subheadline).lineLimit(1)
+                if b.kind == "station" {
+                    let live = [b.artist ?? "", b.track ?? ""].filter { !$0.isEmpty }
+                    if !live.isEmpty {
+                        Text(live.joined(separator: " – "))
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                } else if let sub = b.subtitle, !sub.isEmpty {
+                    Text(sub).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                if let loc = model.located {
+                    Text("\(loc.show) · \(loc.episode)  (\(loc.tracks.count) tracks)")
+                        .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                        .padding(.top, 1)
+                    ForEach(Array(loc.tracks.prefix(12).enumerated()), id: \.offset) { _, t in
+                        HStack(spacing: 8) {
+                            Text(t.pos.map { "\($0.text)." } ?? "•")
+                                .font(.caption2.monospaced()).foregroundStyle(.secondary)
+                                .frame(width: 26, alignment: .trailing)
+                            Text(t.display).font(.caption).lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+            }
+            .padding(8)
+            .background(Color.green.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            Divider()
+        }
     }
 
     // Stream: live now-playing card.

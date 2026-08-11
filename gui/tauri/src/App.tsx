@@ -36,6 +36,7 @@ import {
   stationIcy,
   streamUrl,
   unfollowStation,
+  writeNowPlaying,
   type Episode,
   type Favorite,
   type Identity,
@@ -455,6 +456,21 @@ export default function App() {
         ? current.title
         : "Not playing";
     void emitTrayNowPlaying({ label, canFavorite: nowPlaying != null });
+
+    // Bridge: mirror the same derived state to the shared now-playing file so an
+    // out-of-process surface (RadioBar today; the tray tomorrow) can reflect it —
+    // and, for episodes, join `r` to a logged tracklist. Best-effort.
+    void writeNowPlaying({
+      kind: current?.kind ?? "station",
+      key: current?.key ?? "",
+      r: current?.url ?? "",
+      title: current?.title ?? "",
+      subtitle: current?.subtitle,
+      artist: nowPlaying?.artist,
+      track: nowPlaying?.title,
+      playing: playing && current != null,
+      ts: Math.floor(Date.now() / 1000),
+    }).catch(() => {});
   }, [nowPlaying, playing, current]);
 
   return (

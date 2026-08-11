@@ -244,13 +244,16 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
 - **Next — U4b:** per-npub `1063` feed tab (reuse the episode model + relay
   layer). Follow-ups: reqwest-based proxy (TLS upstreams + `Range`/seek + `https`
   now-playing); `airplay.v1` emission (menubar-companion direction).
-- **Now-playing bridge — DESIGN, not started. READ BEFORE any platform menubar/
-  tray build.** A cross-platform contract so ntune's now-playing reflects on a
-  menubar/tray surface (and locates the episode + tracklist). Mechanism = a shared
-  local `nowplaying.json` file (works identically mac/Linux/Windows), one sink on
-  the existing now-playing effect + a consumer poll/join. **The path + payload must
-  be agreed across the macOS / Linux / Windows sessions FIRST** — full direction,
-  aims, per-platform notes, and open decisions in
+- **Now-playing bridge — producer + macOS consumer BUILT (2026-08-11).** Path table
+  frozen/acked by all three sessions; shared file
+  `<local_data_dir()>/radio-scan/nowplaying.json`. **Producer** = ntune Rust
+  `write_nowplaying` (one uniform `local_data_dir().join(...)` line, no `cfg`) called
+  from the existing now-playing effect — verified on macOS (writes on launch/state
+  change). **macOS consumer** = RadioBar polls the file (3 s), renders a "▶ Playing
+  in ntune" banner, and for episodes joins `r`→`audio_url` to show the located
+  episode's tracklist (verified against `duck_log`). **Needs-verify: linux + windows**
+  (producer path/write). Still to build: the **Tauri-tray consumer** (Linux/Windows
+  surface). Full contract:
   [`gui/tauri/docs/nowplaying-bridge-2026-08-11.md`](gui/tauri/docs/nowplaying-bridge-2026-08-11.md).
 
 ## Outstanding

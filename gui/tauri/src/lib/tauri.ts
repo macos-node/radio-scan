@@ -55,6 +55,28 @@ export async function importJson<T = unknown>(): Promise<T | null> {
   return JSON.parse(text) as T;
 }
 
+/** The shared now-playing bridge payload (frozen contract:
+ *  docs/nowplaying-bridge-2026-08-11.md). airplay.v1-adjacent — `r` is the
+ *  stream/enclosure URL (the join key a consumer matches to `*_log.audio_url`). */
+export interface NowPlayingState {
+  kind: "station" | "episode";
+  key: string;
+  r: string;
+  title: string;
+  subtitle?: string;
+  artist?: string; // live ICY, station only
+  track?: string; // live ICY, station only
+  playing: boolean;
+  ts: number; // unix seconds
+}
+
+/** Write the shared now-playing state to
+ *  `<local_data_dir()>/radio-scan/nowplaying.json` (local-only; the menubar/tray
+ *  reads it). Best-effort — a failed write never disrupts playback. */
+export function writeNowPlaying(state: NowPlayingState): Promise<void> {
+  return invoke("write_nowplaying", { state });
+}
+
 /** Save arbitrary text to a chosen path (native Save dialog). `ext` sets the
  *  filter + default extension (e.g. "opml"). Same `export_file` command as
  *  exportJson, just without the JSON.stringify. */

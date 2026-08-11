@@ -12,6 +12,15 @@
 > **Path table 2026-08-11 — all three FROZEN/ACKED (Windows · macOS · Linux).**
 > See "THE decision" for the frozen table and the *Acknowledgement log* at the
 > bottom. **`write_nowplaying` is UNBLOCKED** — build per "Smallest first step".
+>
+> **Build 2026-08-11 (macOS `macos-node`): producer + macOS consumer SHIPPED.**
+> ntune's `write_nowplaying` (shared Rust, one `local_data_dir().join(...)` line, no
+> `cfg`) fires on every now-playing change — **verified**: ntune wrote `playing:false`
+> to the frozen path on launch. RadioBar reads it and renders a "▶ Playing in ntune"
+> banner + the located episode's tracklist (`r`→`audio_url` join **verified** against
+> `duck_log`). **Needs-verify: linux + windows** (producer `local_data_dir()`
+> path/write there). Still to build: the **Tauri-tray consumer** (the Linux/Windows
+> surface — RadioBar covers macOS).
 
 ## Aim (one sentence)
 **One now-playing "fabric": whatever ntune is playing is reflected on a small

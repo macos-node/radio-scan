@@ -268,6 +268,24 @@ fn read_text_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
+/// Write the shared now-playing state file — the local, cross-app rendezvous for
+/// the menubar/tray bridge (frozen contract: docs/nowplaying-bridge-2026-08-11.md).
+/// Path = `<local_data_dir()>/radio-scan/nowplaying.json`: the OS BASE data dir
+/// (NOT `app_local_data_dir()`, which appends the bundle id) + a product-scoped
+/// constant, so a native consumer (RadioBar) derives the same path without knowing
+/// ntune's Tauri identifier. One resolver on every OS — no per-OS `cfg` branch.
+#[tauri::command]
+fn write_nowplaying(app: tauri::AppHandle, state: serde_json::Value) -> Result<(), String> {
+    let dir = app
+        .path()
+        .local_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("radio-scan");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let text = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("nowplaying.json"), text).map_err(|e| e.to_string())
+}
+
 // --- nostr identity (OS keychain) -------------------------------------------
 // Its own keychain service (like ntree's), holding the owner nsec. Debug builds
 // use a separate `-dev` service so `tauri dev` never touches installed state.
@@ -830,6 +848,7 @@ pub fn run() {
             import_local_stations,
             export_file,
             read_text_file,
+            write_nowplaying,
             get_identity,
             generate_identity,
             import_identity,
