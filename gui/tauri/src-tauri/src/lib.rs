@@ -811,10 +811,12 @@ pub fn run() {
             // The app handle lets it emit now-playing events parsed from ICY (U3).
             let port = proxy::start(app.handle().clone())?;
             app.manage(ProxyPort(port));
-            // U6 scaffold — opt-in menubar/tray now-playing companion. Off unless
-            // launched with `--tray`, so the default app is unchanged. Also the
-            // headless-to-tray autostart entry point (see the U6 build-map notes).
-            if std::env::args().any(|a| a == "--tray") {
+            // U6 menubar/tray now-playing companion — ON BY DEFAULT (Windows local
+            // default; the tray is additive over the normal window). Pass `--no-tray`
+            // to disable it — the escape hatch for a desktop that can't host a tray
+            // (mirrors Linux dropping the flag on a DE with no SNI). `--tray` is still
+            // accepted as an explicit no-op for back-compat with existing shortcuts.
+            if !std::env::args().any(|a| a == "--no-tray") {
                 tray::init(app.handle())?;
             }
             Ok(())

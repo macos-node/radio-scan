@@ -71,6 +71,7 @@ the matrix below. That check is the real gate, not the green build.
 |---|---|---|---|
 | macOS arm64 | `.dmg` → `/Applications` | WKWebView | AAC+ stream actually plays; Keychain `nsec`; `~/Library/Application Support/uk.fizx.ntune` paths |
 | Linux x86_64 | `.deb` (system install; AppImage deferred) | webkit2gtk 4.1 | AAC+ stream plays **with `gstreamer1.0-plugins-bad` + `-libav` installed**; libsecret `nsec`; XDG paths |
+| Windows x86_64 (`macos-node`, prototyping) | `.exe` (NSIS-only) | WebView2 (Edge Chromium) | AAC+ stream plays (WebView2 native); Credential Manager `nsec` (`windows-native` keyring); `%LOCALAPPDATA%` paths; tray companion on by default (`--no-tray` opts out) |
 
 Local install for either side: `scripts/build-install.sh` (native bundle for the
 OS you run it on). Dev loop: `scripts/dev.sh`.
