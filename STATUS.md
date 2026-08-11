@@ -212,6 +212,21 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   Station** (stream), **A Duck in a Tree → Podcast** (feed; its enclosure URL is the
   join key to `duck_log.audio_url` for the planned bridge), **On The Wire →
   neither** (no raw audio stream exists — log-only in RadioBar).
+- **OPML import + Nostr npub detection (2026-08-11).** The Podcasts tab's Import now
+  accepts **OPML** (the universal feed-reader export, e.g. from `narr`) as well as
+  the app's JSON shape — auto-detected by content (leading `<` ⇒ OPML via
+  `DOMParser`), reusing the existing `read_text_file` command (no Rust change).
+  Category groups are **flattened**, feeds deduped by url, merged. It's a *general*
+  reader export so mixed content is expected — blogs/release feeds import alongside
+  podcasts and just show "no audio episodes" when fetched (honest passthrough; no
+  audio-only filter yet). `Sub` gained an optional `npub` field: on import, feeds
+  served from a Nostr npub (bridges like `castr.me/npub1…/rss.xml`) are detected
+  (`/npub1[a-z0-9]{58}/`) and tagged with a subtle **`nostr`** chip. Today they
+  still import + play as ordinary RSS via the bridge; the tag is the on-ramp to
+  **U4b** (native per-npub `1063` reading — same npub, better source). Import/Export
+  are still **per-tab** (Stations ↔ `stations.json`, Podcasts ↔ `ntune.podcasts`
+  localStorage), each treating the whole file as its own type — no cross-routing. A
+  unified app-level backup/restore that routes by shape is an open idea, not built.
 - **Next — U4b:** per-npub `1063` feed tab (reuse the episode model + relay
   layer). Follow-ups: reqwest-based proxy (TLS upstreams + `Range`/seek + `https`
   now-playing); `airplay.v1` emission (menubar-companion direction).

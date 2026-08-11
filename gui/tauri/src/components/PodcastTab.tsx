@@ -18,7 +18,7 @@ import {
   copyText,
   exportJson,
   fetchPodcast,
-  importJson,
+  openImportFile,
   type Episode,
   type Podcast,
 } from "../lib/tauri";
@@ -29,6 +29,19 @@ import { cn } from "../lib/cn";
 interface Sub {
   url: string;
   title: string;
+  /** Set when the feed is served from a Nostr npub (see detectNpub). */
+  npub?: string;
+}
+
+const NPUB_RE = /npub1[a-z0-9]{58}/i;
+
+/** A feed served from a Nostr npub — e.g. the castr.me bridge
+ *  (`castr.me/npub1…/rss.xml`) that turns a npub's audio events into a podcast
+ *  RSS. Detected on import so these subs are tagged now and can later upgrade
+ *  from the RSS bridge to native per-npub `1063` reading (ntune U4b) — same
+ *  npub, better source. Today they still import + play as ordinary RSS. */
+function detectNpub(url: string): string | undefined {
+  return url.match(NPUB_RE)?.[0].toLowerCase();
 }
 
 const SUBS_KEY = "ntune.podcasts";
@@ -49,6 +62,42 @@ function saveSubs(s: Sub[]) {
 
 function loadView(): View {
   return localStorage.getItem(VIEW_KEY) === "cards" ? "cards" : "list";
+}
+
+/** Parse an OPML subscription list (the universal feed-reader export, e.g. from
+ *  narr) into {url,title} subs. `querySelectorAll` recurses, so category groups
+ *  (nested <outline>s) are flattened; every outline with an xmlUrl is a feed.
+ *  Mixed content is expected — an OPML from a general RSS reader carries blogs
+ *  and release feeds too; non-audio ones simply show "no audio episodes" once
+ *  fetched, exactly like adding them by hand. */
+function parseOpml(xml: string): Sub[] {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  if (doc.querySelector("parsererror")) throw new Error("not valid OPML/XML");
+  const out: Sub[] = [];
+  doc.querySelectorAll("outline[xmlUrl]").forEach((o) => {
+    const url = (o.getAttribute("xmlUrl") || "").trim();
+    if (!url) return;
+    const title = (o.getAttribute("text") || o.getAttribute("title") || url).trim();
+    const npub = detectNpub(url);
+    out.push(npub ? { url, title, npub } : { url, title });
+  });
+  return out;
+}
+
+/** Parse the app's own JSON export shape: [{url, title?}]. */
+function parseSubsJson(text: string): Sub[] {
+  const data = JSON.parse(text);
+  if (!Array.isArray(data)) throw new Error("expected a JSON array");
+  return data
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+    .map((r) => {
+      const url = String(r.url ?? "").trim();
+      const npub =
+        detectNpub(url) ?? (typeof r.npub === "string" ? r.npub : undefined);
+      const title = String(r.title ?? "").trim() || url;
+      return npub ? { url, title, npub } : { url, title };
+    })
+    .filter((s) => s.url);
 }
 
 function fmtDuration(secs: number | null): string {
@@ -239,20 +288,25 @@ export function PodcastTab({
   // Import subscriptions from a JSON file and merge into the list (deduped by
   // url, imported first). Accepts our export shape [{url,title}]; a missing
   // title falls back to the url. Feeds are fetched lazily on expand as usual.
+  // Import subscriptions from OPML (feed-reader export) or the app's JSON shape —
+  // auto-detected by content (leading '<' => OPML) with the extension as a
+  // fallback. Feeds are flattened, deduped by url, and merged (imported first);
+  // fetched lazily on expand as usual.
   const importSubs = async () => {
     setError(null);
     try {
-      const data = await importJson<unknown>();
-      if (data == null) return; // cancelled
-      if (!Array.isArray(data)) throw new Error("expected a JSON array");
-      const incoming: Sub[] = data
-        .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
-        .map((r) => {
-          const url = String(r.url ?? "").trim();
-          return { url, title: String(r.title ?? "").trim() || url };
-        })
-        .filter((s) => s.url);
-      if (incoming.length === 0) throw new Error("no valid podcasts in file");
+      const file = await openImportFile();
+      if (file == null) return; // cancelled
+      const looksXml =
+        /^\s*</.test(file.text) ||
+        /\.(opml|xml)$/i.test(file.path);
+      const parsed = looksXml ? parseOpml(file.text) : parseSubsJson(file.text);
+      // Dedup within the incoming set (an OPML can list a feed under two groups).
+      const seen = new Set<string>();
+      const incoming = parsed.filter((s) =>
+        s.url && !seen.has(s.url) ? (seen.add(s.url), true) : false,
+      );
+      if (incoming.length === 0) throw new Error("no feeds found in file");
       setSubs((prev) => {
         const urls = new Set(incoming.map((s) => s.url));
         const next = [...incoming, ...prev.filter((s) => !urls.has(s.url))];
@@ -384,7 +438,7 @@ export function PodcastTab({
         <button
           type="button"
           onClick={importSubs}
-          title="Import podcasts from JSON"
+          title="Import podcasts (OPML or JSON)"
           className="flex items-center gap-1 rounded-sm border border-surface px-2 py-1.5 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
         >
           <Upload size={13} />
@@ -460,6 +514,14 @@ export function PodcastTab({
                         <span className="min-w-0 flex-1 truncate text-sm text-fg">
                           {s.title}
                         </span>
+                        {s.npub && (
+                          <span
+                            className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[9px] text-nostr"
+                            title={`Nostr npub feed — ${s.npub}\n(RSS bridge today; native 1063 reading planned)`}
+                          >
+                            nostr
+                          </span>
+                        )}
                         {loadingUrl === s.url && (
                           <Loader2 size={12} className="animate-spin text-muted" />
                         )}
@@ -557,6 +619,14 @@ export function PodcastTab({
                         <span className="line-clamp-2 text-xs leading-snug text-fg">
                           {s.title}
                         </span>
+                        {s.npub && (
+                          <span
+                            className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[9px] text-nostr"
+                            title={`Nostr npub feed — ${s.npub}\n(RSS bridge today; native 1063 reading planned)`}
+                          >
+                            nostr
+                          </span>
+                        )}
                         {loadingUrl === s.url && (
                           <Loader2 size={12} className="animate-spin text-muted" />
                         )}

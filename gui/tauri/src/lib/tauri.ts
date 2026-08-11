@@ -55,6 +55,20 @@ export async function importJson<T = unknown>(): Promise<T | null> {
   return JSON.parse(text) as T;
 }
 
+/** Open a subscriptions file (OPML or JSON) and return its raw text + path, so
+ *  the caller can parse either format (podcasts import accepts both). Reuses the
+ *  same `read_text_file` command as importJson — no new Rust needed. */
+export async function openImportFile(): Promise<{ path: string; text: string } | null> {
+  const path = await open({
+    multiple: false,
+    directory: false,
+    filters: [{ name: "Subscriptions (OPML or JSON)", extensions: ["opml", "xml", "json"] }],
+  });
+  if (typeof path !== "string") return null; // cancelled
+  const text = await invoke<string>("read_text_file", { path });
+  return { path, text };
+}
+
 // --- loopback stream proxy ---------------------------------------------------
 
 /** The loopback proxy's port for this run (src-tauri/src/proxy.rs). */
