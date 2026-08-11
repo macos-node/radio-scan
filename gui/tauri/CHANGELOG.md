@@ -31,13 +31,14 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   `localStorage` subs migrate into the store on first launch. The subscription-list
   precursor to the U4.5 harvest-metadata persistence above. Diagnosis + evidence:
   [`docs/podcast-persistence-2026-08-11.md`](docs/podcast-persistence-2026-08-11.md).
-  Needs-verify: macos, linux.
+  Verified macos 2026-08-12. Needs-verify: linux.
 - **UI preferences now persist durably too.** Theme, volume, and the list/card view
   toggles moved off `localStorage` into a generic Rust settings store
   (`settings.json`, same synchronous write) — same durability gap, so they could
   reset on a non-graceful exit. `localStorage` stays a mirror (the `index.html`
   pre-paint theme read needs a synchronous source); the store is authoritative on
-  load and migrates existing prefs on first launch. Needs-verify: macos, linux.
+  load and migrates existing prefs on first launch. Verified macos 2026-08-12.
+  Needs-verify: linux.
 - **Fresh install no longer starts muted.** `loadVolume` let an unset value slip
   past its range guard (`Number(null) === 0`), so a first run defaulted to 0
   instead of the intended 0.9. An unset volume now returns 0.9.

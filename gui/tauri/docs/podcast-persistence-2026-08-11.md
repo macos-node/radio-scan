@@ -1,8 +1,9 @@
 # ntune — podcast subscriptions made durable (localStorage → Rust store)
 
-> **Status: FIXED 2026-08-11 (Windows `macos-node`). Needs-verify: macos, linux**
-> (the store is shared TS/Rust — the fix and migration must be smoke-tested where
-> the old localStorage path happened to work). A §2 change note under
+> **Status: FIXED 2026-08-11 (Windows `macos-node`). Verified macos 2026-08-12
+> (`macos-node`). Needs-verify: linux** (the store is shared TS/Rust — the fix and
+> migration must be smoke-tested where the old localStorage path happened to work).
+> A §2 change note under
 > [`../CONTRIBUTING-cross-session.md`](../CONTRIBUTING-cross-session.md).
 
 ## Symptom (Windows)
@@ -77,12 +78,36 @@ Rust file is authoritative.
 - **Full round-trip:** restored a real 31-feed backup through the store; after a
   normal relaunch the Podcasts tab showed all 31 (npub feed kept its `nostr` tag).
 
-## Needs-verify: macos, linux
+## Verified (macOS, `macos-node`, 2026-08-12)
 
-Same shared code path. Confirm on each: (1) a subscribe writes
+Release build green (Homebrew rustc 1.97.1); `mediaIcon` vitest 11/11. Smoke-tested
+on a **real pre-fix profile** — the WebKit `localStorage` held `ntune.podcasts` (a
+multi-feed subscription list), `ntune.volume`, `ntune.positions`, but no
+`podcasts.json` / `settings.json` on disk yet — i.e. exactly the state the fix is for.
+
+- **Migration:** first launch of the new build wrote
+  `~/Library/Application Support/uk.fizx.ntune/podcasts.json` (subscriptions moved
+  out of `localStorage`, `nostr` tags preserved) **and** `settings.json`
+  (theme / volume / view). Both materialised while the app ran.
+- **Synchronous write, live divergence caught in the act:** with the app running,
+  `settings.json` held the current `volume: 0.45` while the on-disk WebKit
+  `localStorage` sqlite still lagged at `0` (WebKit flushes DOM Storage lazily) —
+  the durability gap made visible.
+- **Survives the failure mode:** `kill -9` (no graceful close, so `localStorage`
+  never flushes) → relaunch → `settings.json` still `0.45`, loaded as authoritative
+  (the stale `localStorage` value did *not* win). Under the old localStorage-only
+  path that change would have been lost.
+- **Fresh-install 0.9 default:** the shipped `loadVolume` guard exercised against
+  its truth table — `null`/`""` → `0.9` (the muted-`0` regression), `"0"`→`0`,
+  `"0.19"`→`0.19`, out-of-range/garbage → `0.9`. 7/7. (The default only lives in
+  in-app audio state until the slider is touched, so there is no on-disk artifact to
+  read — hence the logic check.)
+
+## Needs-verify: linux
+
+Same shared code path. Confirm: (1) a subscribe writes
 `<app_data_dir>/podcasts.json`; (2) subscriptions survive a restart; (3) a pre-fix
-install with `localStorage` subs migrates on first launch. Paths:
-macOS `~/Library/Application Support/uk.fizx.ntune/podcasts.json`,
+install with `localStorage` subs migrates on first launch. Path:
 Linux `$XDG_DATA_HOME/uk.fizx.ntune/podcasts.json`.
 
 ## Relation to v0.2.0 (U4.5)
