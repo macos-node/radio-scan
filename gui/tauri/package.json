@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "tauri": "tauri",
-    "install:app": "bash ./install.sh"
+    "install:app": "bash ./install.sh",
+    "install:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
