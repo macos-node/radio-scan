@@ -1,8 +1,7 @@
 # ntune — podcast subscriptions made durable (localStorage → Rust store)
 
 > **Status: FIXED 2026-08-11 (Windows `macos-node`). Verified macos 2026-08-12
-> (`macos-node`). Needs-verify: linux** (the store is shared TS/Rust — the fix and
-> migration must be smoke-tested where the old localStorage path happened to work).
+> (`macos-node`) + Verified linux 2026-08-12 (`adjmx`) — all platforms green.**
 > A §2 change note under
 > [`../CONTRIBUTING-cross-session.md`](../CONTRIBUTING-cross-session.md).
 
@@ -103,12 +102,30 @@ multi-feed subscription list), `ntune.volume`, `ntune.positions`, but no
   in-app audio state until the slider is touched, so there is no on-disk artifact to
   read — hence the logic check.)
 
-## Needs-verify: linux
+## Verified (Linux, `adjmx`, 2026-08-12)
 
-Same shared code path. Confirm: (1) a subscribe writes
-`<app_data_dir>/podcasts.json`; (2) subscriptions survive a restart; (3) a pre-fix
-install with `localStorage` subs migrates on first launch. Path:
-Linux `$XDG_DATA_HOME/uk.fizx.ntune/podcasts.json`.
+Rebuilt from `main`; `tsc` + `cargo check` clean. Tested on this box's **real
+pre-fix profile** — webkit2gtk `localStorage` (`tauri_localhost_0.localstorage`,
+UTF-16LE) held `ntune.podcasts` = **11 real feeds** + `ntune.volume`/view keys, and
+**no `podcasts.json`/`settings.json`** on disk — exactly the state the fix targets.
+`app_data_dir` already resolves correctly on Linux (the existing `stations.json`
+lives at `~/.local/share/uk.fizx.ntune/`).
+
+- **Migration + synchronous write:** first launch of the new build wrote
+  `~/.local/share/uk.fizx.ntune/podcasts.json` (all **11** feeds, npub tags would be
+  preserved — none here) **and** `settings.json` (views + volume 0.27), both
+  materialised **while the app ran** (< 0.5 s after launch — the thing localStorage
+  never did).
+- **Survives the failure mode + Rust store wins:** `kill -9` (no graceful close, so
+  `localStorage` never flushes) → then staled the `localStorage` mirror to `[]` →
+  relaunch. `podcasts.json` still held all **11** feeds (durable store authoritative,
+  ignored the empty mirror), and the app **re-mirrored 11 back to `localStorage`** on
+  load — the durable store self-heals the fallback. Under the old localStorage-only
+  path the `kill -9` would have lost every sub.
+
+The Linux-specific risks named in the ping — XDG base resolution + webkit2gtk
+`localStorage` flush timing — both hold. (Real profile migrated in place; a
+pre-migration snapshot was kept during testing.)
 
 ## Relation to v0.2.0 (U4.5)
 

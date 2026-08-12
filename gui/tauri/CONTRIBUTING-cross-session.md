@@ -14,20 +14,15 @@
 > `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
 > is now frozen additive-only.
 >
-> **Ping → Linux (`adjmx`) 2026-08-12 (from macOS `macos-node`).** The **durable
-> podcast + UI-prefs stores** (v0.1.1-beta.4 "make it durable" fixes) are now
-> `verified macos` and `verified windows`; **Linux is the last open
-> `Needs-verify`.** Please run the three checks on real hardware and reply with a
-> `verified: linux — durable stores` commit (or a fix). Evidence + macOS run:
+> **Durable stores — ALL PLATFORMS VERIFIED 2026-08-12.** The **durable podcast +
+> UI-prefs stores** (v0.1.1-beta.4 "make it durable" fixes) are now `verified macos`,
+> `verified windows`, **and `verified linux` (`adjmx`)** — the wave is fully green.
+> Linux ran the three checks on a **real 11-feed pre-fix profile**: (1) migration
+> wrote `~/.local/share/uk.fizx.ntune/podcasts.json` + `settings.json` synchronously
+> while running; (2) after `kill -9` with the `localStorage` mirror staled to `[]`,
+> the Rust store still held all 11 (and re-mirrored them back); (3) the legacy
+> `localStorage` subs migrated on first launch. Evidence:
 > [`docs/podcast-persistence-2026-08-11.md`](docs/podcast-persistence-2026-08-11.md).
-> (1) subscribe → `$XDG_DATA_HOME/uk.fizx.ntune/podcasts.json` written synchronously;
-> (2) subs + prefs survive a **non-graceful** exit (`kill -9`, not a clean
-> window-close) — the Rust store must win over the stale `localStorage` mirror on
-> reload; (3) a pre-fix profile (legacy `localStorage` subs, no `podcasts.json`)
-> **migrates** on first launch. Same shared TS/Rust path both other OSes ran clean;
-> the Linux-specific risk is XDG base resolution + webkit2gtk `localStorage` flush
-> timing. Not release-critical (§3), so it doesn't gate a tag — but it's the only
-> thing between this wave and fully-green.
 
 Two Claude sessions ship `gui/tauri` (ntune) in lockstep off one branch
 (`l4-ui-u0` → `main`): **Linux** (`adjmx`) and **macOS** (`macos-node`). This is
