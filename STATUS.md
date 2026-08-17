@@ -1,6 +1,6 @@
 # radio-scan — project status
 
-_Last updated: 2026-08-11_
+_Last updated: 2026-08-17_
 
 A snapshot of where this project stands, for picking it back up (in Claude Code
 or elsewhere). Grew from a personal playlist logger into the seed of an
@@ -183,7 +183,8 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   {url,artist,title} event per track change; the player bar shows ♪ Artist —
   Title. **http-only** (proxied streams); `https` plays direct and shows none.
   Verified on Linux — Acid Jazz shows live track updates, audio stays clean
-  (ffprobe). `Needs-verify: macos` (ICY parse on WKWebView).
+  (ffprobe). **Verified on macOS 2026-08-05** (`1a51e3c`): ICY parse on WKWebView
+  renders live now-playing, proxy strips metadata (valid ADTS AAC, no leak).
 - **U4a (done, Linux-verified):** podcast RSS tab. A Stations|Podcasts tab
   switch; subscribe by feed URL (localStorage), episodes fetched via Rust
   `reqwest` + `feed-rs`, played through the shared player. Playback is
@@ -195,7 +196,8 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   radio mounts too. Verified on Linux (BBC Global News plays).
   **Known limit:** full **seek on `http` enclosures** needs the proxy to forward
   `Content-Length` + honour `Range` (206); `https` feeds seek fully today.
-  `Needs-verify: macos`.
+  **Verified on macOS 2026-08-05** (`aa677a9`): feed fetch → episode list → playback,
+  stations unregressed after the player refactor, redirect proxy follows a 302.
 - **Stations vs Podcasts — the two tabs take DIFFERENT URLs (2026-08-10).** A
   **Station** is an audio **stream URL** (Icecast/Shoutcast mount, e.g.
   `http://host:8000/mount`) played straight through `<audio>`. A **Podcast** is an
@@ -241,7 +243,7 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   `station.ts::parseStationsJson` (shared by the tab import + restore router).
   Frontend + `cargo` build green; installed. `Needs-verify` in-app: OPML backup
   round-trip, full-backup restore into both stores.
-- **Next — U4b:** per-npub `1063` feed tab (reuse the episode model + relay
+- **U4b (not started):** per-npub `1063` feed tab (reuse the episode model + relay
   layer). Follow-ups: reqwest-based proxy (TLS upstreams + `Range`/seek + `https`
   now-playing); `airplay.v1` emission (menubar-companion direction).
 - **Now-playing bridge — producer + macOS consumer BUILT (2026-08-11).** Path table
@@ -261,11 +263,50 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   episode / stopped payloads without panic). **All three platforms verified
   2026-08-11 — bridge fully validated.** Full contract:
   [`gui/tauri/docs/nowplaying-bridge-2026-08-11.md`](gui/tauri/docs/nowplaying-bridge-2026-08-11.md).
+- **The "make it durable" wave — DONE, all platforms green (2026-08-11/12).** Two
+  stores moved off webview `localStorage` into Rust-written files sitting next to
+  `stations.json` in `app_data_dir()`, each a synchronous `std::fs::write` so a
+  change lands on disk the instant it's made:
+  - `podcasts.json` — podcast subscriptions (`4d9d0bf`).
+  - `settings.json` — UI prefs: theme, volume, the list/card view toggles
+    (`c829a2f`). `localStorage` stays a **mirror** (the `index.html` pre-paint theme
+    read needs a synchronous source); the Rust store is authoritative on load.
+  Both migrate existing `localStorage` values on first launch. **Why:** WebView2 only
+  flushed `localStorage` on a graceful window-close, so a crash / force-kill / OS
+  sign-out / tray **Quit** dropped every unflushed change — imported podcasts
+  vanished on reopen while file-backed stations survived (Windows-visible, fragile
+  everywhere). Fell out of it: **volume now defaults to 0.9 on a fresh install**
+  (`a68485c`) — it was silently muted. Verified **macos** (`fabab32`) and **linux**
+  (`c6ab30b` — real pre-fix profile: 11 feeds in webkit2gtk `localStorage`,
+  no store on disk; new build wrote both files while running (<0.5 s), then `kill -9`
+  + a staled `[]` mirror still relaunched to 11 feeds from `podcasts.json`, proving
+  XDG resolution and store-wins). Version **0.1.1-beta.4** (tags stop at
+  `ntune-v0.1.1-beta.3`). Diagnosis + evidence:
+  [`gui/tauri/docs/podcast-persistence-2026-08-11.md`](gui/tauri/docs/podcast-persistence-2026-08-11.md).
+- **`Needs-verify` ledger.** `c6ab30b` closed the last *runtime* one. The only item
+  still open is the **in-app backup/restore check** on the §6 Backup & Restore
+  bullet (OPML backup round-trip, full-backup restore into both stores) — note that
+  restore now lands in the durable stores above, so it wants a re-run rather than
+  the original check. (The stale `Needs-verify: macos` markers on U3/U4a are
+  corrected in place: both were cleared on macOS 2026-08-05, `1a51e3c` / `aa677a9`.)
+- **Next — v0.2.0 "make it durable" *minor* (U4.5), the headline still unbuilt.**
+  The subscription/prefs stores above are the **precursor**; U4.5 is persisting the
+  *harvested* slice into them — `station.v1` description + ICY-on-tune-in for
+  stations, Tier-A identity (author, categories, language, copyright, website,
+  email, `podcast:guid`, `podcast:funding`, top `podcast:value` `lnaddress`,
+  `image` URL stored-not-rendered) for podcasts. Harvest and user **enrich** stay
+  separate slices — re-fetch overwrites harvest freely, **feed always wins**, enrich
+  is gap-fill-only. Keyed `podcast:guid`‖feed-url (podcasts), slug+url (stations) —
+  a compatibility contract for import/export from here on. The driving symptom is
+  **export serializer-drift**; the definition of done is **export == persisted
+  state**. Direction (incl. the open decisions to settle inside the minor):
+  [`docs/radio-scan-v0.2.0-direction-2026-08-10.md`](docs/radio-scan-v0.2.0-direction-2026-08-10.md).
 
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
   reconcile heard tracks vs ndisc's catalogue) and the Nostr publisher/poller.
-  The suite-level UI is now **underway** — ntune (§6) is at U0–U2; RadioBar (§5)
+  The suite-level UI is now **underway** — ntune (§6) is at U0–U4a + the durable-
+  store wave, with U4.5/v0.2.0 next; RadioBar (§5)
   remains a local macOS viewer, not the suite surface. See the build map's open
   decisions (n-alias, dedup window, relay-filterable work key, privacy
   granularity, Python-vs-Rust) and the L4 map's (playback engine, who publishes
