@@ -9,8 +9,9 @@
 > The Nostr wire contract](../SUITE.md)**. Build context:
 > **[docs/radio-scan-buildmap-2026-07-28.md](../docs/radio-scan-buildmap-2026-07-28.md)**.
 
-Date: 2026-07-28 · kinds **LOCKED for the proposal** — airplay.v1 = **31240**,
-station.v1 = **31241** · freeze **deferred**
+Date: 2026-07-28 (show.v1 added 2026-08-18) · kinds **LOCKED for the proposal** —
+airplay.v1 = **31240**, station.v1 = **31241**, show.v1 = **31242** · freeze
+**deferred**
 
 > The precise wire shapes now live as drafted contracts with fixtures:
 > [`airplay.v1.json`](./airplay.v1.json), [`station.v1.json`](./station.v1.json),
@@ -36,6 +37,7 @@ primitives; only two new event kinds are introduced.
 | Kind | Name | NIP | Role | Signed by | `d` identity |
 |------|------|-----|------|-----------|--------------|
 | `31241` | `station.v1` | 33 | A stream a user **follows** (url + metadata) | any user | `airplay:station:<slug>` |
+| `31242` | `show.v1` | 33 | A podcast/show a user **follows** (feed url) | any user | `airplay:show:<slug>` |
 | `31240` | `airplay.v1` | 33 | An **airplay observation** for a station+track | any user | `airplay:<station>:<mrkhex>` |
 | `7` | reaction | 25 | React to / rate an airplay or station | any user | — |
 | `31239` | `feed.v1` | 33 | A note *about* airplay ("heavy rotation…") | owner + contributors | `glmps:<id>` |
@@ -48,6 +50,14 @@ primitives; only two new event kinds are introduced.
 > block rather than the NIP-78 `30078` range (so both airplay and station are
 > addressable and #d/#a-discoverable in the same family). Final confirmation is a
 > merge-time check, not a freeze commitment.
+>
+> **`show.v1 = 31242` added 2026-08-18** — the next free slot, same family, same
+> per-publisher model. It exists because a follow of a *feed* is not a follow of a
+> *stream*: `station.v1`'s `r` is the stream mount and `#r` is the cross-user
+> identity of a tunable thing, so two podcast feeds published as stations in
+> 2026-08 put non-playable rows into that shared space. Contract + rationale:
+> [`show.v1.json`](./show.v1.json); the decision is #10 in
+> [`../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../docs/radio-scan-v0.2.0-direction-2026-08-10.md).
 
 Everything is **parameterised-replaceable** (33/30xxx) so re-publishing the same
 `d` updates in place — an observation's play-count grows, a station's metadata is

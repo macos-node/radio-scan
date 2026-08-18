@@ -339,6 +339,22 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   `a0f86545fcbd` a-duck-in-a-tree) and landed on **all three** relays; replaying
   `resolveStations` against live relay data now yields **0** relay stations, so the
   Stations tab is the 10 local rows only.
+- **`show.v1` (kind 31242) — open decision #10 SETTLED 2026-08-18.** Podcast follows
+  now have a wire form: the feed-shaped sibling of `station.v1`, drafted at
+  [`schema/show.v1.json`](schema/show.v1.json) with two fixtures. Addressable,
+  per-publisher, `d = airplay:show:<slug>`, required `name` + `r` (the **feed** URL);
+  31242 confirmed unused across the suite and contiguous with 31240/31241. Two
+  decisions inside it: **identity is `i`, not `r`** — the feed's `<podcast:guid>`
+  rides as a **NIP-73** `i` tag (`podcast:guid:<guid>`, `#i`-filterable) and is the
+  preferred cross-user key, because a feed URL is demonstrably unstable (podbean
+  served the byte-identical 4 MB document from two hostnames, which is why Duck
+  showed in both tabs); it stays **optional** because only 4 of 6 sampled live feeds
+  carry a guid. And **harvest is not wire** — U4.5's Tier-A identity stays local, the
+  event publishes the *follow*, the feed stays the authority on itself. Fixtures cover
+  both cases (Duck without a guid, No Agenda with a real one). **Not yet built:**
+  publish/unfollow commands, a Follow control on the Podcasts tab, and a relay read
+  merged with `podcasts.json` the way `useStations` does for stations — a separate
+  slice that need not gate the 0.2.0 tag.
 - **NIP-09 deletion is id-based on some relays (2026-08-18).** Fallout from the
   above: `relay.fizx.uk` **accepted** every station deletion and kept serving the
   targets anyway (7 of 7 still on the wire after deletion), while nos.lol and primal

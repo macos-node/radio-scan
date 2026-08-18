@@ -141,23 +141,43 @@ of the work, not after:
   de-facto sensor. *Lean: still write to the bridge/`airplay.json`, one publisher —
   but 0.2.0 is where the persisted observation store that would feed it gets built.
   Decide emit-vs-handoff here even if emission ships later.*
-- **#10 (new, 2026-08-18) — podcast follows have no wire form.** Stations publish
-  (`station.v1`), podcasts don't: subscriptions live in `podcasts.json` + OPML and
-  sync nowhere. That asymmetry is not academic — it is *why* two podcast feeds were
-  published as stations in 2026-08 (`on-the-wire`, `a-duck-in-a-tree`): "follow this
-  stream" was the only publish button in the app. Both had to be deleted by hand,
-  and `#r` — the relay-filterable cross-user station identity — briefly carried feed
-  URLs that no client can tune.
-  *Lean: a sibling **`show.v1`** kind (31242, contiguous with 31240/31241), same
-  shape as `station.v1` with `r` = the feed URL.* It costs little to spec because
-  the Stations|Podcasts split already exists in the UI, and it keeps `#r` honest
-  per-kind rather than overloading the station namespace. The alternative is NIP-51
-  collections, which is decision #9 and explicitly deferred (authoring is the
-  read→write identity boundary); a `show.v1` **follow** is the read-side half and
-  does not cross that line. Settle the kind number here even if publishing ships
-  later. Guard already landed in the meantime: `publish_station` now refuses a
-  conclusively non-audio URL (see below), so the same mistake can't reach a relay
-  again — but refusing is not the same as offering the right home for the follow.
+- **#10 — podcast follows have no wire form. ✅ SETTLED 2026-08-18: `show.v1`,
+  kind 31242.** Contract drafted at [`../schema/show.v1.json`](../schema/show.v1.json)
+  with two fixtures; 31242 confirmed unused across the suite (used set
+  1063/4550/27235/30000/31237-31239 + radio-scan's 31240/31241) and contiguous with
+  the block.
+  *The problem:* stations published (`station.v1`), podcasts didn't — subscriptions
+  lived in `podcasts.json` + OPML and synced nowhere. Not academic: it is *why* two
+  podcast feeds went out as stations in 2026-08 (`on-the-wire`, `a-duck-in-a-tree`),
+  since "follow this stream" was the only publish button in the app. Both had to be
+  deleted by hand on 2026-08-18.
+  *The shape:* addressable, per-publisher, `d = airplay:show:<slug>`, required
+  `name` + `r` (the **feed** URL) — station.v1's shape with `r` re-pointed. Two
+  decisions worth their own line:
+  - **Identity is `i`, not `r`.** The feed URL is *not* stable: podbean served the
+    byte-identical 4 MB document from two hostnames, and URL-keyed dedupe read that
+    as two shows — which is exactly why "A Duck in a Tree" appeared in both tabs at
+    once. So the contract carries the feed's `<podcast:guid>` as a **NIP-73** `i`
+    tag (`podcast:guid:<guid>`), single-letter and therefore `#i`-filterable, and
+    names it the preferred cross-user key. NIP-73 over a bespoke tag so the identity
+    is shared with non-Nostr podcast tooling. **Optional**, because measurement says
+    it must be: of six live subscriptions sampled, four carry a `podcast:guid`
+    (podhome, yellowball, fountain.fm, nashownotes) and two do not — the BBC's, and
+    podbean's, the very show that motivated the contract.
+  - **Harvest is not wire.** The Tier-A identity U4.5 persists (author, categories,
+    language, copyright, website, email, funding, value) stays local. The event
+    publishes the *follow*; the feed remains the authority on itself, and any
+    consumer can fetch it. This keeps show.v1 small and keeps "feed always wins"
+    true on the wire as well as in the store.
+  *Why not the alternatives:* overloading `station.v1` is what caused the incident —
+  `r` there is the stream mount and `#r` is the cross-user identity of a **tunable**
+  thing, so a feed in that space hands every consumer something it cannot play.
+  NIP-51 collection authoring stays deferred (decision #9): a `show.v1` follow is the
+  read-side half and does not cross that boundary.
+  *Still to build:* publish/unfollow commands, a Follow control on the Podcasts tab,
+  and the read subscription that merges relay shows with `podcasts.json` the way
+  `useStations` already does for stations. The contract is settled; the plumbing is a
+  separate slice and need not gate the 0.2.0 tag.
 - **#7 — npub-audio scope.** Not triggered by persistence; leave at `1063`-first.
   Note it only so 0.2.0 doesn't accidentally widen the harvest schema for kind-1.
 
