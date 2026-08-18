@@ -320,6 +320,22 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   `latestAt` in `podcasts.json`** — 2026-08-18 back to 2026-08-05, so a cold start
   paints the right order. No open `Needs-verify` on Linux; macOS/Windows unexercised
   (frontend + a serde field, no platform-specific path).
+- **Stations vs podcasts on the wire (2026-08-18).** Two podcast feeds were sitting
+  on the relays as `station.v1` (`on-the-wire` → a blogspot RSS with **0 enclosures**;
+  `a-duck-in-a-tree` → the podbean feed) with **no `kind:5`** ever published, which is
+  why they kept reappearing under Stations however often they were removed locally.
+  Diagnosed with `nak`: 116 station deletes exist across `relay.fizx.uk`/`nos.lol`,
+  none for those two. Duck showed in *both* tabs because the station row and the
+  podcast sub use **different hostnames for the byte-identical feed**
+  (`feed.podbean.com/...` vs `zovietfrance.podbean.com/...`, both 4,053,739 bytes) and
+  dedupe is by URL string. Neither belongs in `station.v1` — `r` is defined as the
+  stream mount and `#r` is the relay-filterable cross-user identity. Two things came
+  out of it: **`publish_station` now refuses** a conclusively non-audio URL (hard, vs
+  the add dialog's soft warning — the relay copy is what others read; inconclusive
+  probes still pass), and the underlying gap is recorded as **open decision #10** in
+  the v0.2.0 direction doc — *podcast follows have no wire form*, leaning to a sibling
+  **`show.v1`** (31242) rather than overloading `station.v1`. **Still open:** the two
+  stale events need a signed-in ✕ to publish their `kind:5`.
 - **Feed body cache — U4.5 slice 4, BUILT + Linux-verified (2026-08-18).** The
   Podcasts tab used to refetch all eleven feeds from a blank slate on every launch —
   its cache was a module-level object in `PodcastTab.tsx` that died with the process.

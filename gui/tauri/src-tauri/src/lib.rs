@@ -552,6 +552,63 @@ async fn publish_event(
     })
 }
 
+/// Is this content-type conclusively NOT audio? `Some(hint)` names what it looks
+/// like instead; `None` means audio, or inconclusive.
+///
+/// Mirrors `audioVerdict` in AddStationDialog.tsx deliberately: the dialog guards
+/// what lands in the LOCAL store (soft — "Add anyway" always wins, it's your
+/// device), this guards what goes on the RELAYS (hard — see publish_station).
+fn non_audio_hint(content_type: &str) -> Option<&'static str> {
+    let ct = content_type.trim().to_ascii_lowercase();
+    if ct.is_empty() {
+        return None; // no content-type: inconclusive, never block
+    }
+    let is_audio = ct.starts_with("audio/")
+        || ct.contains("ogg")
+        || ct.contains("mpegurl") // HLS / m3u
+        || ct.contains("aacp");
+    if is_audio {
+        return None;
+    }
+    Some(if ct.contains("xml") || ct.contains("rss") {
+        "an RSS/Atom feed"
+    } else if ct.contains("html") {
+        "a web page"
+    } else if ct.contains("json") {
+        "a data feed"
+    } else {
+        "a non-audio resource"
+    })
+}
+
+/// Header-only probe of what a URL actually serves. Returns the content-type, or
+/// an empty string when the server sends none / the request fails — both of which
+/// the caller must treat as inconclusive rather than as a verdict.
+async fn probe_content_type(url: &str) -> String {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
+    // send() resolves at the response head; the (possibly endless) body is dropped.
+    match client
+        .get(url)
+        .header("User-Agent", "ntune (radio-scan)")
+        .send()
+        .await
+    {
+        Ok(resp) => resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string(),
+        Err(_) => String::new(),
+    }
+}
+
 /// Publish (or replace) a `station.v1` (kind 31241) — "follow this stream".
 /// Parameterised-replaceable: re-publishing the same slug edits in place.
 /// Signed with the owner nsec; `relays` come from the renderer so the read
@@ -567,6 +624,23 @@ async fn publish_station(
     description: String,
     relays: Vec<String>,
 ) -> Result<PublishResult, String> {
+    // Refuse to put a non-stream on the relays. station.v1 defines `r` as "the
+    // direct stream URL (the mount)", and `#r` is the RELAY-FILTERABLE cross-user
+    // station identity — so a feed URL here isn't just a dead row in one list, it
+    // publishes a non-tunable thing into everyone's discovery space. Two podcast
+    // feeds reached the relays this way in 2026-08 and had to be deleted by hand.
+    //
+    // Hard refusal, unlike the add-dialog's soft warning, because this crosses the
+    // wire: the local store still takes anything you insist on. Only a CONCLUSIVE
+    // non-audio content-type blocks; no content-type or a failed probe passes, so a
+    // genuine stream that simply doesn't advertise its type is never blocked.
+    if let Some(hint) = non_audio_hint(&probe_content_type(&url).await) {
+        return Err(format!(
+            "{url} serves {hint}, not an audio stream — station.v1 publishes the \
+             stream mount. Keep it locally, or subscribe to it in the Podcasts tab."
+        ));
+    }
+
     let keys = owner_keys()?;
     let d = format!("{D_PREFIX}{slug}");
 
@@ -1084,3 +1158,47 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running ntune");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The content-types measured on the live subscriptions 2026-08-18: the two
+    // feeds that reached the relays as stations, and the streams that must not be
+    // caught by the same net.
+    #[test]
+    fn feeds_are_conclusively_not_audio() {
+        assert_eq!(
+            non_audio_hint("application/rss+xml; charset=UTF-8"),
+            Some("an RSS/Atom feed"), // On The Wire (blogspot)
+        );
+        assert_eq!(
+            non_audio_hint("text/xml; charset=UTF-8"),
+            Some("an RSS/Atom feed"), // A Duck in a Tree (podbean)
+        );
+        assert_eq!(non_audio_hint("text/html"), Some("a web page"));
+        assert_eq!(non_audio_hint("application/json"), Some("a data feed"));
+    }
+
+    #[test]
+    fn streams_pass() {
+        for ct in [
+            "audio/aacp",                  // Acid Jazz, pre-normalisation
+            "audio/mpeg",                  // SomaFM mp3 mounts
+            "audio/aac",                   // proxy-normalised
+            "application/ogg",             // ogg/vorbis mounts
+            "application/vnd.apple.mpegurl", // HLS
+        ] {
+            assert_eq!(non_audio_hint(ct), None, "{ct} should publish");
+        }
+    }
+
+    #[test]
+    fn inconclusive_never_blocks() {
+        // No content-type at all, or a failed probe (which returns ""), must pass —
+        // plenty of genuine mounts advertise nothing.
+        assert_eq!(non_audio_hint(""), None);
+        assert_eq!(non_audio_hint("   "), None);
+    }
+}
+

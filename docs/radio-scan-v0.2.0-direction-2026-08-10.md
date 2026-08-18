@@ -141,8 +141,40 @@ of the work, not after:
   de-facto sensor. *Lean: still write to the bridge/`airplay.json`, one publisher —
   but 0.2.0 is where the persisted observation store that would feed it gets built.
   Decide emit-vs-handoff here even if emission ships later.*
+- **#10 (new, 2026-08-18) — podcast follows have no wire form.** Stations publish
+  (`station.v1`), podcasts don't: subscriptions live in `podcasts.json` + OPML and
+  sync nowhere. That asymmetry is not academic — it is *why* two podcast feeds were
+  published as stations in 2026-08 (`on-the-wire`, `a-duck-in-a-tree`): "follow this
+  stream" was the only publish button in the app. Both had to be deleted by hand,
+  and `#r` — the relay-filterable cross-user station identity — briefly carried feed
+  URLs that no client can tune.
+  *Lean: a sibling **`show.v1`** kind (31242, contiguous with 31240/31241), same
+  shape as `station.v1` with `r` = the feed URL.* It costs little to spec because
+  the Stations|Podcasts split already exists in the UI, and it keeps `#r` honest
+  per-kind rather than overloading the station namespace. The alternative is NIP-51
+  collections, which is decision #9 and explicitly deferred (authoring is the
+  read→write identity boundary); a `show.v1` **follow** is the read-side half and
+  does not cross that line. Settle the kind number here even if publishing ships
+  later. Guard already landed in the meantime: `publish_station` now refuses a
+  conclusively non-audio URL (see below), so the same mistake can't reach a relay
+  again — but refusing is not the same as offering the right home for the follow.
 - **#7 — npub-audio scope.** Not triggered by persistence; leave at `1063`-first.
   Note it only so 0.2.0 doesn't accidentally widen the harvest schema for kind-1.
+
+## Guardrails added along the way
+
+- **`publish_station` refuses non-stream URLs (2026-08-18).** A header-only probe
+  runs before signing; a **conclusively** non-audio content-type (`*/xml`, `rss`,
+  `html`, `json`) is refused with a message pointing at the Podcasts tab. No
+  content-type or a failed probe **passes** — a genuine mount that advertises
+  nothing must never be blocked. This deliberately mirrors `audioVerdict` in
+  `AddStationDialog.tsx`, but the two differ in strength on purpose: the dialog
+  guards the **local** store and is always overridable ("Add anyway" — it's your
+  device), while the publisher guards the **relays** and refuses outright, because
+  that copy is the one other people read. Unit-tested against the content-types
+  measured on the live subscriptions.
+
+---
 
 ## Explicitly out of scope for 0.2.0
 

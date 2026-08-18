@@ -36,6 +36,17 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   discarded — the export serializer-drift U4.5 exists to close, met early.
 
 ### Fixed
+- **A feed URL can no longer be published as a station.** `publish_station` now
+  probes what the URL actually serves and refuses a conclusively non-audio
+  content-type (`*/xml`, `rss`, `html`, `json`), pointing at the Podcasts tab
+  instead. `station.v1` defines `r` as the stream mount and `#r` is the
+  relay-filterable cross-user station identity, so a feed there publishes a
+  non-tunable row into everyone's discovery space — which is how two podcast feeds
+  reached the relays in 2026-08. Inconclusive probes (no content-type, or a failed
+  request) still pass, so a genuine mount that advertises nothing is never blocked.
+  The add dialog's matching warning stays **soft** — it guards the local store,
+  which is yours to overrule; the publisher is hard, because that copy crosses the
+  wire.
 - **Podcast feeds no longer start from a blank slate on every launch.** Parsed feed
   bodies now persist to `<app_data_dir>/feed-cache/`, one file per feed, so opening
   the Podcasts tab paints the last known episodes and identity immediately instead
