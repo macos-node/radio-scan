@@ -339,6 +339,17 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   `a0f86545fcbd` a-duck-in-a-tree) and landed on **all three** relays; replaying
   `resolveStations` against live relay data now yields **0** relay stations, so the
   Stations tab is the 10 local rows only.
+- **`show.v1` S1 — Rust write path, BUILT (2026-08-18).** `publish_show` (31242) +
+  `unfollow_show`, per-kind `d` prefixes (`D_STATION_PREFIX` / `D_SHOW_PREFIX`), and
+  the **inverse guard**: `publish_show` refuses a conclusively audio URL exactly as
+  `publish_station` refuses a feed. A test asserts the two guards disagree on
+  everything either is sure about — nothing may be refused by both, and only an
+  inconclusive probe passes both. Tag building is a pure `show_tags` so the shape is
+  testable without a key, and one test **rebuilds the contract fixture's own record
+  and diffs it against what ntune emits** — the guard against schema/code drift.
+  `guid` → `i: podcast:guid:<guid>`, never blank. 22 Rust + 30 TS green. TS wrappers
+  (`publishShow`/`unfollowShow`) are in place; **no UI yet — S3.** Not yet exercised
+  against a live relay: that needs the signing key and is the operator's call.
 - **`show.v1` S0 — `<podcast:guid>` harvest, BUILT + Linux-verified (2026-08-18).**
   The prerequisite for the `i` tag (and for U4.5's podcast key). `feed-rs` 2.x has no
   extension map, so the guid is scanned out of the raw feed bytes with `quick-xml`

@@ -344,6 +344,39 @@ export function publishStation(input: StationInput): Promise<PublishResult> {
   });
 }
 
+/** Follow a show — publish a `show.v1` (kind 31242) for a podcast feed.
+ *
+ *  The feed-shaped sibling of publishStation: `r` carries the FEED url, and `guid`
+ *  (the feed's `<podcast:guid>`, when it states one) rides as a NIP-73 `i` tag —
+ *  the show's identity independent of the URL serving it, and the preferred
+ *  cross-user key. Rust refuses a URL that conclusively serves audio, the mirror of
+ *  publishStation refusing a feed. */
+export function publishShow(
+  slug: string,
+  name: string,
+  url: string,
+  opts: { guid?: string; tags?: string[]; description?: string } = {},
+): Promise<PublishResult> {
+  return invoke<PublishResult>("publish_show", {
+    slug,
+    name,
+    url,
+    guid: opts.guid,
+    tags: opts.tags ?? [],
+    description: opts.description ?? "",
+    relays: RELAYS,
+  });
+}
+
+/** Unfollow a show — publish a kind:5 deletion of its `show.v1`. Pass `eventId`
+ *  when the row came from a relay, for the same reason unfollowStation does. */
+export function unfollowShow(
+  slug: string,
+  eventId?: string,
+): Promise<PublishResult> {
+  return invoke<PublishResult>("unfollow_show", { slug, eventId, relays: RELAYS });
+}
+
 /** Unfollow a station — publish a kind:5 deletion of its `station.v1`.
  *
  *  Pass `eventId` (the id of the kind:31241 event being deleted) whenever the row

@@ -485,7 +485,12 @@ fn clear_identity() -> Result<(), String> {
 // --- station.v1 publish / unfollow (U2) -------------------------------------
 
 const STATION_KIND: u16 = 31241;
-const D_PREFIX: &str = "airplay:station:";
+const D_STATION_PREFIX: &str = "airplay:station:";
+/// show.v1 — a podcast/scheduled show a user follows. The feed-shaped sibling of
+/// station.v1: same addressable, per-publisher shape, but `r` is an RSS/Atom FEED
+/// URL rather than a stream mount. Contract: schema/show.v1.json.
+const SHOW_KIND: u16 = 31242;
+const D_SHOW_PREFIX: &str = "airplay:show:";
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -585,6 +590,21 @@ fn non_audio_hint(content_type: &str) -> Option<&'static str> {
     })
 }
 
+/// Is this content-type conclusively audio? `Some(hint)` when a URL offered as a
+/// FEED turns out to be a stream — the mirror of non_audio_hint, and the other half
+/// of keeping `#r` honest per kind. `None` means feed-shaped, or inconclusive.
+fn audio_stream_hint(content_type: &str) -> Option<&'static str> {
+    let ct = content_type.trim().to_ascii_lowercase();
+    if ct.is_empty() {
+        return None; // no content-type: inconclusive, never block
+    }
+    let is_audio = ct.starts_with("audio/")
+        || ct.contains("ogg")
+        || ct.contains("mpegurl") // HLS / m3u
+        || ct.contains("aacp");
+    is_audio.then_some("an audio stream")
+}
+
 /// Header-only probe of what a URL actually serves. Returns the content-type, or
 /// an empty string when the server sends none / the request fails — both of which
 /// the caller must treat as inconclusive rather than as a verdict.
@@ -646,7 +666,7 @@ async fn publish_station(
     }
 
     let keys = owner_keys()?;
-    let d = format!("{D_PREFIX}{slug}");
+    let d = format!("{D_STATION_PREFIX}{slug}");
 
     let mut ev_tags = vec![
         Tag::parse(["d", &d]).map_err(|e| e.to_string())?,
@@ -708,7 +728,106 @@ async fn unfollow_station(
 ) -> Result<PublishResult, String> {
     let keys = owner_keys()?;
     let address = format!(
-        "{STATION_KIND}:{}:{D_PREFIX}{slug}",
+        "{STATION_KIND}:{}:{D_STATION_PREFIX}{slug}",
+        keys.public_key().to_hex()
+    );
+
+    let event = EventBuilder::new(Kind::EventDeletion, "")
+        .tags(deletion_tags(&address, event_id.as_deref())?)
+        .sign_with_keys(&keys)
+        .map_err(|e| e.to_string())?;
+
+    publish_event(keys, event, address, relays).await
+}
+
+// --- show.v1 (kind 31242) ---------------------------------------------------
+// Publishing a podcast follow. The feed-shaped sibling of station.v1 above: same
+// addressable per-publisher shape, `r` carrying the FEED url, and — when the feed
+// states one — the Podcasting-2.0 channel GUID as a NIP-73 `i` tag.
+//
+// Why a separate kind rather than reusing station.v1: `r` there is defined as the
+// stream mount and `#r` is the relay-filterable identity of a TUNABLE thing, so a
+// feed published as a station hands every consumer something it cannot play. Two
+// went out that way in 2026-08 and had to be deleted by hand. Contract + the whole
+// argument: schema/show.v1.json; decision #10 in the v0.2.0 direction doc.
+
+/// The tags for a `show.v1` event. Pure, so the shape is unit-testable without a key.
+///
+/// `guid` becomes a NIP-73 external content id (`podcast:guid:<guid>`) — the show's
+/// identity independent of the URL serving it, and the preferred cross-user key
+/// because a feed URL is not stable (podbean serves one document from two
+/// hostnames). Absent on plenty of feeds — 3 of 11 in the reference profile — so it
+/// is optional and never published blank.
+fn show_tags(
+    d: &str,
+    name: &str,
+    url: &str,
+    guid: Option<&str>,
+    topics: &[String],
+) -> Result<Vec<Tag>, String> {
+    let mut tags = vec![
+        Tag::parse(["d", d]).map_err(|e| e.to_string())?,
+        Tag::parse(["name", name]).map_err(|e| e.to_string())?,
+        Tag::parse(["r", url]).map_err(|e| e.to_string())?,
+    ];
+    if let Some(g) = guid.map(str::trim).filter(|g| !g.is_empty()) {
+        tags.push(Tag::parse(["i", &format!("podcast:guid:{g}")]).map_err(|e| e.to_string())?);
+    }
+    for t in topics.iter().filter(|s| !s.trim().is_empty()) {
+        tags.push(Tag::parse(["t", t]).map_err(|e| e.to_string())?);
+    }
+    tags.push(
+        Tag::parse(["alt", "A podcast followed in radio-scan"]).map_err(|e| e.to_string())?,
+    );
+    Ok(tags)
+}
+
+/// Publish (or replace) a `show.v1` (kind 31242) — "follow this feed".
+/// Parameterised-replaceable: re-publishing the same slug edits in place.
+#[tauri::command]
+async fn publish_show(
+    slug: String,
+    name: String,
+    url: String,
+    guid: Option<String>,
+    tags: Vec<String>,
+    description: String,
+    relays: Vec<String>,
+) -> Result<PublishResult, String> {
+    // The mirror of publish_station's guard: a show's `r` is a feed, so a stream
+    // URL here is the same mistake in the other direction. Hard refusal, because
+    // this crosses the wire; only a CONCLUSIVE audio content-type blocks, so a feed
+    // served without a content-type is never held back.
+    if let Some(hint) = audio_stream_hint(&probe_content_type(&url).await) {
+        return Err(format!(
+            "{url} serves {hint}, not a podcast feed — show.v1 publishes the feed \
+             URL. It belongs in the Stations tab."
+        ));
+    }
+
+    let keys = owner_keys()?;
+    let d = format!("{D_SHOW_PREFIX}{slug}");
+    let event = EventBuilder::new(Kind::Custom(SHOW_KIND), description)
+        .tags(show_tags(&d, &name, &url, guid.as_deref(), &tags)?)
+        .sign_with_keys(&keys)
+        .map_err(|e| e.to_string())?;
+
+    let address = format!("{SHOW_KIND}:{}:{d}", keys.public_key().to_hex());
+    publish_event(keys, event, address, relays).await
+}
+
+/// Unfollow a show: publish a NIP-09 kind:5 deletion of its `show.v1`. Tags both
+/// the `a` coordinate and, when known, the `e` id — see deletion_tags for why the
+/// second one is not optional in practice.
+#[tauri::command]
+async fn unfollow_show(
+    slug: String,
+    event_id: Option<String>,
+    relays: Vec<String>,
+) -> Result<PublishResult, String> {
+    let keys = owner_keys()?;
+    let address = format!(
+        "{SHOW_KIND}:{}:{D_SHOW_PREFIX}{slug}",
         keys.public_key().to_hex()
     );
 
@@ -1293,6 +1412,8 @@ pub fn run() {
             clear_identity,
             publish_station,
             unfollow_station,
+            publish_show,
+            unfollow_show,
             fetch_podcast,
             cached_podcasts,
             station_icy,
@@ -1431,6 +1552,140 @@ mod tests {
         assert_eq!(entry.v, 1);
         assert!(entry.v < FEED_CACHE_VERSION, "must be treated as stale");
         assert_eq!(entry.podcast.guid, None);
+    }
+
+    // --- show.v1 tags ------------------------------------------------------
+
+    fn show_tag_pairs(guid: Option<&str>, topics: &[String]) -> Vec<Vec<String>> {
+        show_tags(
+            "airplay:show:no-agenda-show",
+            "No Agenda Show",
+            "http://feed.nashownotes.com/rss.xml",
+            guid,
+            topics,
+        )
+        .unwrap()
+        .iter()
+        .map(|t| t.clone().to_vec())
+        .collect()
+    }
+
+    #[test]
+    fn a_show_publishes_its_guid_as_a_nip73_id() {
+        // The real guid off No Agenda's feed. `i` is single-letter, so #i is the
+        // relay-filterable cross-user key the contract prefers over the URL.
+        let tags = show_tag_pairs(Some("856cd618-7f34-57ea-9b84-3600f1f65e7f"), &[]);
+        assert!(tags.contains(&vec![
+            "i".to_string(),
+            "podcast:guid:856cd618-7f34-57ea-9b84-3600f1f65e7f".to_string()
+        ]));
+        // The feed URL is still published — it is what the user subscribed with.
+        assert!(tags.contains(&vec![
+            "r".to_string(),
+            "http://feed.nashownotes.com/rss.xml".to_string()
+        ]));
+    }
+
+    #[test]
+    fn a_show_without_a_guid_publishes_no_i_tag() {
+        // 3 of 11 feeds in the reference profile state no guid — podbean (the show
+        // that motivated the contract), the BBC's, and acast's. A blank must not
+        // become `i: podcast:guid:`.
+        for guid in [None, Some(""), Some("  ")] {
+            let tags = show_tag_pairs(guid, &[]);
+            assert!(
+                !tags.iter().any(|t| t[0] == "i"),
+                "unexpected i tag for {guid:?}"
+            );
+            // …and the required trio is still there, so it stays a valid record.
+            for k in ["d", "name", "r"] {
+                assert!(tags.iter().any(|t| t[0] == k), "missing {k}");
+            }
+        }
+    }
+
+    #[test]
+    fn topics_ride_as_t_tags_and_blanks_are_dropped() {
+        let topics = vec!["talk".to_string(), "  ".to_string(), "news".to_string()];
+        let tags = show_tag_pairs(None, &topics);
+        let t: Vec<&Vec<String>> = tags.iter().filter(|t| t[0] == "t").collect();
+        assert_eq!(t.len(), 2);
+        assert_eq!(t[0][1], "talk");
+        assert_eq!(t[1][1], "news");
+    }
+
+    #[test]
+    fn a_stream_url_is_refused_for_a_show() {
+        // The mirror of feeds_are_conclusively_not_audio: the same mistake in the
+        // other direction. Between the two guards, #r stays honest per kind.
+        assert_eq!(audio_stream_hint("audio/aacp"), Some("an audio stream"));
+        assert_eq!(audio_stream_hint("audio/mpeg"), Some("an audio stream"));
+        assert_eq!(audio_stream_hint("application/vnd.apple.mpegurl"), Some("an audio stream"));
+        // Feeds and inconclusive probes pass.
+        for ct in ["application/rss+xml; charset=UTF-8", "text/xml", "", "   "] {
+            assert_eq!(audio_stream_hint(ct), None, "{ct} should publish as a show");
+        }
+    }
+
+    #[test]
+    fn the_two_guards_disagree_on_everything_they_are_sure_about() {
+        // Nothing may be refused by BOTH (that would be unpublishable anywhere) and
+        // nothing conclusive may be accepted by both.
+        for ct in ["audio/mpeg", "application/rss+xml", "text/html", "audio/aac"] {
+            let station_ok = non_audio_hint(ct).is_none();
+            let show_ok = audio_stream_hint(ct).is_none();
+            assert!(station_ok != show_ok, "{ct}: station_ok={station_ok} show_ok={show_ok}");
+        }
+        // Inconclusive is the one case both accept — by design.
+        assert!(non_audio_hint("").is_none() && audio_stream_hint("").is_none());
+    }
+
+    #[test]
+    fn the_built_tag_set_matches_the_published_contract_fixture() {
+        // Contract drift is the failure this catches: schema/fixtures/*.json is what
+        // show.v1 SAYS a follow looks like, and show_tags is what ntune actually
+        // emits. Compare them directly rather than trusting that both were updated.
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../schema/fixtures/show-31242.guid.json");
+        let raw = std::fs::read_to_string(&fixture)
+            .unwrap_or_else(|e| panic!("fixture {}: {e}", fixture.display()));
+        let doc: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(doc["kind"].as_u64().unwrap(), SHOW_KIND as u64);
+
+        let expected: Vec<Vec<String>> = doc["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| {
+                t.as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_str().unwrap().to_string())
+                    .collect()
+            })
+            .collect();
+
+        // Rebuild the fixture's own record from its own values.
+        let d = expected.iter().find(|t| t[0] == "d").unwrap()[1].clone();
+        let name = expected.iter().find(|t| t[0] == "name").unwrap()[1].clone();
+        let url = expected.iter().find(|t| t[0] == "r").unwrap()[1].clone();
+        let guid = expected
+            .iter()
+            .find(|t| t[0] == "i")
+            .map(|t| t[1].trim_start_matches("podcast:guid:").to_string());
+        let topics: Vec<String> = expected
+            .iter()
+            .filter(|t| t[0] == "t")
+            .map(|t| t[1].clone())
+            .collect();
+
+        let built: Vec<Vec<String>> = show_tags(&d, &name, &url, guid.as_deref(), &topics)
+            .unwrap()
+            .iter()
+            .map(|t| t.clone().to_vec())
+            .collect();
+
+        assert_eq!(built, expected, "emitted tags diverge from show.v1's fixture");
     }
 
     const ADDR: &str = "31241:916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d:airplay:station:acid-jazz";

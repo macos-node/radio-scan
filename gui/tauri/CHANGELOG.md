@@ -36,6 +36,13 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   discarded — the export serializer-drift U4.5 exists to close, met early.
 
 ### Added
+- **`show.v1` write path (S1).** `publish_show` (kind 31242) and `unfollow_show`
+  land in Rust: a follow carries `d`/`name`/`r` (the **feed** URL), the feed's
+  `<podcast:guid>` as a NIP-73 `i` tag when it states one, topic `t` tags and `alt`;
+  the unfollow reuses the station deletion's `a` + `e` tagging. `publish_show`
+  refuses a URL that conclusively serves **audio**, the exact mirror of
+  `publish_station` refusing a feed — between the two guards, `#r` stays honest per
+  kind. No UI yet; the Follow control arrives with S3.
 - **Feeds' `<podcast:guid>` is now harvested (`show.v1` S0).** The Podcasting-2.0
   channel GUID — a show's identity independent of the URL serving it — is extracted
   on fetch and persisted on the subscription. It is what `show.v1` publishes as its
