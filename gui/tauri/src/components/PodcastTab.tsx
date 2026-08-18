@@ -20,9 +20,17 @@ import {
   exportJson,
   fetchPodcast,
   openImportFile,
+  publishShow,
+  unfollowShow,
   type Episode,
   type Podcast,
 } from "../lib/tauri";
+import {
+  mergeFollows,
+  uniqueShowSlug,
+  type FollowRow,
+  type Show,
+} from "../lib/show";
 import {
   isPodcastSort,
   latestEpisodeAt,
@@ -203,6 +211,59 @@ function IdentityRow({ pod, indent = false }: { pod: Podcast; indent?: boolean }
   );
 }
 
+/** The Follow / Following control for one row.
+ *
+ *  Published state is not local state: the chip reflects a `show.v1` read back off
+ *  the relays, so it lights up when the event lands, not when the click happens.
+ *  Hidden entirely without a signing key — there is nothing to publish with, and a
+ *  dead button explains less than no button.
+ *
+ *  Distinct from the `nostr` chip on these rows: that one means the feed is *served
+ *  from* an npub (a castr.me-style bridge); this means the follow is *published to*
+ *  the relays. Both are Nostr, neither implies the other. */
+function FollowControl({
+  row,
+  signedIn,
+  busy,
+  onFollow,
+  compact = false,
+}: {
+  row: FollowRow;
+  signedIn: boolean;
+  busy: boolean;
+  onFollow: (row: FollowRow) => void;
+  compact?: boolean;
+}) {
+  if (!signedIn) return null;
+  if (row.show) {
+    return (
+      <span
+        className={cn(
+          "shrink-0 rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[9px] text-nostr",
+          compact && "px-1",
+        )}
+        title={`Published as show.v1 — airplay:show:${row.show.slug}\nOthers can discover this follow on the relays.`}
+      >
+        following
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onFollow(row)}
+      disabled={busy}
+      title="Publish a show.v1 follow to the relays"
+      className={cn(
+        "shrink-0 rounded-sm border border-surface px-1.5 py-0.5 text-[9px] text-muted transition-colors hover:border-nostr hover:text-nostr disabled:opacity-40",
+        compact && "px-1",
+      )}
+    >
+      {busy ? "…" : "follow"}
+    </button>
+  );
+}
+
 /** Feed bodies for this session, shared across mounts so switching tabs doesn't
  *  refetch. Primed on first mount from the on-disk cache (Rust `feed-cache/`), so
  *  the list paints from the last known state instead of a blank slate while every
@@ -221,10 +282,16 @@ export function PodcastTab({
   onPlayEpisode,
   currentKey,
   playing,
+  shows,
+  signedIn,
 }: {
   onPlayEpisode: (ep: Episode, podcastTitle: string) => void;
   currentKey: string | null;
   playing: boolean;
+  /** The user's published `show.v1` follows, read off the relays (useFollows). */
+  shows: Show[];
+  /** A signing key is loaded — without one there is nothing to publish with. */
+  signedIn: boolean;
 }) {
   const [subs, setSubs] = useState<Sub[]>(loadSubs);
   const [view, setView] = useState<View>(loadView);
@@ -244,6 +311,8 @@ export function PodcastTab({
   // drop a subscription outright with no undo.
   const [confirmUrl, setConfirmUrl] = useState<string | null>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  // Feed URL currently being published / retracted — disables just that row's control.
+  const [publishing, setPublishing] = useState<string | null>(null);
 
   // Re-sync when a restore (the app-level Backup dialog) writes subs from
   // outside this tab — same-document localStorage writes don't fire `storage`.
@@ -325,6 +394,11 @@ export function PodcastTab({
     setCache((c) => ({ ...c, [url]: p }));
   };
 
+  // Local subscriptions merged with the follows published to the relays. A show
+  // followed on another machine appears here even though this device never
+  // subscribed to it — that is the whole point of publishing them.
+  const rows = useMemo(() => mergeFollows(subs, shows), [subs, shows]);
+
   // Prefetch every subscription's feed in the background so card/list metadata
   // (language, copyright, identity, newest-episode date) shows without expanding.
   // Skips anything already in the session cache; errors are swallowed here
@@ -333,7 +407,7 @@ export function PodcastTab({
   // Keyed on the URL SET, not on `subs` identity: the latestAt reconcile below
   // rewrites `subs` after every fetch, and a dep on the array would cancel and
   // restart this loop each time — re-fetching whichever feed was in flight.
-  const subUrlKey = subs.map((s) => s.url).join("\n");
+  const subUrlKey = rows.map((s) => s.url).join("\n");
   useEffect(() => {
     let cancelled = false;
     const urls = subUrlKey ? subUrlKey.split("\n") : [];
@@ -401,8 +475,8 @@ export function PodcastTab({
   // `sortSubs` is stable, so unknown-date feeds hold their stored order.
   const ordered = useMemo(
     () =>
-      sortSubs(subs, sort, (s) => latestEpisodeAt(cache[s.url]) ?? s.latestAt ?? null),
-    [subs, sort, cache],
+      sortSubs(rows, sort, (s) => latestEpisodeAt(cache[s.url]) ?? s.latestAt ?? null) as FollowRow[],
+    [rows, sort, cache],
   );
 
   const fetchInto = async (url: string) => {
@@ -445,6 +519,10 @@ export function PodcastTab({
   };
 
   const remove = (url: string) => {
+    const row = rows.find((r) => r.url === url);
+    // A published follow is retracted alongside the local subscription — the same
+    // bargain the Stations tab makes, and the confirm dialog says so.
+    if (row?.show) void unfollow(row);
     setSubs((prev) => {
       const next = prev.filter((s) => s.url !== url);
       saveSubs(next);
@@ -452,6 +530,38 @@ export function PodcastTab({
     });
     if (expanded === url) setExpanded(null);
     setConfirmUrl(null);
+  };
+
+  // Follow = publish a `show.v1`. Deliberately per-show and never automatic: a
+  // station is added one at a time, but podcasts arrive in bulk from OPML, and
+  // auto-publishing an import would fire dozens of events at once (at hosts already
+  // seen rate-limiting a mere read sweep). Adding a subscription stays local.
+  const follow = async (row: FollowRow) => {
+    setPublishing(row.url);
+    setError(null);
+    try {
+      const taken = rows.map((r) => r.show?.slug).filter((v): v is string => !!v);
+      const slug = uniqueShowSlug(row.title, taken);
+      await publishShow(slug, row.title, row.url, { guid: row.guid });
+      // No local state to flip: the live subscription reads the event straight
+      // back and mergeFollows marks the row, exactly as stations do.
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPublishing(null);
+    }
+  };
+
+  const unfollow = async (row: FollowRow) => {
+    if (!row.show) return;
+    setPublishing(row.url);
+    try {
+      await unfollowShow(row.show.slug, row.show.eventId);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPublishing(null);
+    }
   };
 
   const toggle = (url: string) => {
@@ -466,8 +576,8 @@ export function PodcastTab({
   const field =
     "flex-1 rounded-sm border border-surface bg-surface px-2.5 py-1.5 font-mono text-xs text-fg outline-none focus:border-accent";
 
-  const expandedSub = expanded ? subs.find((s) => s.url === expanded) : undefined;
-  const confirmSub = confirmUrl ? subs.find((s) => s.url === confirmUrl) : undefined;
+  const expandedSub = expanded ? rows.find((s) => s.url === expanded) : undefined;
+  const confirmSub = confirmUrl ? rows.find((s) => s.url === confirmUrl) : undefined;
 
   return (
     <div className="flex flex-col">
@@ -515,7 +625,7 @@ export function PodcastTab({
       </div>
       {error && <p className="px-3 pb-2 text-xs text-alert">{error}</p>}
 
-      {subs.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="p-4 text-sm text-muted">
           No podcasts yet. Paste an RSS feed URL above to subscribe.
         </div>
@@ -525,6 +635,8 @@ export function PodcastTab({
           <div className="flex items-center gap-2 px-3 pb-1">
             <span className="font-mono text-[10px] text-muted/60">
               {subs.length} subscribed
+              {rows.some((r) => r.show) &&
+                ` · ${rows.filter((r) => r.show).length} published`}
             </span>
             <div className="ml-auto flex items-center gap-0.5">
               {SORTS.map((o) => (
@@ -601,6 +713,14 @@ export function PodcastTab({
                             nostr
                           </span>
                         )}
+                        {s.relayOnly && (
+                          <span
+                            className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 text-[9px] text-muted"
+                            title="Followed on the relays, not subscribed on this device."
+                          >
+                            relay
+                          </span>
+                        )}
                         {loadingUrl === s.url && (
                           <Loader2 size={12} className="animate-spin text-muted" />
                         )}
@@ -624,6 +744,17 @@ export function PodcastTab({
                           </span>
                         )}
                       </button>
+                      {/* Sibling of the row button, never a child: a <button>
+                          inside a <button> is invalid HTML and React refuses to
+                          hydrate it. */}
+                      <div className="flex shrink-0 items-center pr-1">
+                        <FollowControl
+                          row={s}
+                          signedIn={signedIn}
+                          busy={publishing === s.url}
+                          onFollow={follow}
+                        />
+                      </div>
                       <button
                         type="button"
                         onClick={() => copy(s.url)}
@@ -706,6 +837,7 @@ export function PodcastTab({
                             nostr
                           </span>
                         )}
+
                         {loadingUrl === s.url && (
                           <Loader2 size={12} className="animate-spin text-muted" />
                         )}
@@ -726,6 +858,16 @@ export function PodcastTab({
                           </span>
                         )}
                       </button>
+                      {/* Outside the card button — nested buttons are invalid. */}
+                      <div className="absolute left-1 top-1">
+                        <FollowControl
+                          row={s}
+                          signedIn={signedIn}
+                          busy={publishing === s.url}
+                          onFollow={follow}
+                          compact
+                        />
+                      </div>
                       <button
                         type="button"
                         onClick={() => setConfirmUrl(s.url)}
@@ -790,8 +932,11 @@ export function PodcastTab({
             {confirmSub.url}
           </p>
           <p className="mt-2 text-xs text-muted">
-            Only the subscription goes — nothing is deleted from the feed or from
-            disk, and you can add the URL back at any time.
+            {confirmSub.show
+              ? confirmSub.relayOnly
+                ? "This show is followed on the relays, not subscribed here — removing it publishes a Nostr unfollow (kind:5), so it leaves your published list. You can follow it again at any time."
+                : "The subscription goes from this device AND a Nostr unfollow (kind:5) is published, so it also leaves your published show list. Nothing is deleted from the feed itself."
+              : "Only the subscription goes — nothing is deleted from the feed or from disk, and you can add the URL back at any time."}
           </p>
           <div className="mt-4 flex justify-end gap-2">
             <button

@@ -339,6 +339,23 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   `a0f86545fcbd` a-duck-in-a-tree) and landed on **all three** relays; replaying
   `resolveStations` against live relay data now yields **0** relay stations, so the
   Stations tab is the 10 local rows only.
+- **`show.v1` S3 — Podcasts-tab Follow UI, BUILT + preview-verified (2026-08-18).**
+  Per-row **follow** control (publishes `show.v1`) → `following` chip once the event
+  reads back off the relays; published state is never local state, so the chip
+  reflects the relay, not the click. `mergeFollows` (pure, unit-tested) merges local
+  subs with published follows **by guid first, then URL**, appending relay-only rows
+  tagged `relay` — a show followed from another machine shows up here without this
+  device ever subscribing. Unsubscribing a published row retracts the follow too,
+  with the confirm dialog carrying three different wordings (local-only /
+  published+local / relay-only). Both map decisions are in the code: **follow is
+  explicit, import never publishes**, and `uniqueShowSlug` suffixes `-2` at publish
+  time because the `d` tag IS the identity. **Bug caught in the preview:** the follow
+  button was nested inside the row's expand `<button>` — invalid HTML that React
+  refuses to hydrate; it is now a sibling in both views, verified `button button` = 0
+  and no horizontal overflow. Verified with a temporary local stub (identity + two
+  fake shows, reverted): all four row states render — followed-by-guid, two
+  unfollowed, and a relay-only row. 45 TS + 22 Rust green. **Not exercised against a
+  live relay** — that needs the signing key and is the operator's call.
 - **`show.v1` S2 — read path + shared resolver, BUILT (2026-08-18).** `lib/show.ts`
   (parse/resolve for 31242, `i` → `guid`), and `hooks/useStations.ts` →
   `useFollows.ts` reading **31241 + 31242 + 5 on one subscription** (same author,

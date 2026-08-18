@@ -43,6 +43,20 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   refuses a URL that conclusively serves **audio**, the exact mirror of
   `publish_station` refusing a feed — between the two guards, `#r` stays honest per
   kind. No UI yet; the Follow control arrives with S3.
+- **Follow a podcast on the relays (`show.v1` S3).** The Podcasts tab gains a
+  per-show **follow** control that publishes a `show.v1`, and rows already published
+  show a `following` chip instead. Follows read back off the relays are merged into
+  the list **by guid first, then URL** — the two are not interchangeable, since
+  podbean serves one feed from two hostnames — so a show followed on another machine
+  appears here (tagged `relay`) even though this device never subscribed to it.
+  Unsubscribing a published show now retracts the follow as well, and the confirm
+  dialog says so, with different wording for a relay-only row. Following is
+  **deliberately per-show and never automatic**: podcasts arrive in bulk from OPML,
+  and auto-publishing an import would fire dozens of events at hosts already seen
+  rate-limiting a mere read sweep. Slugs are made unique with a `-2` suffix at
+  publish time — `airplay:show:<slug>` is the addressable identity, so a collision
+  would replace another show's event rather than create one. The control is hidden
+  without a signing key.
 - **`show.v1` read path (S2).** `lib/show.ts` parses kind 31242 into a `Show`
   (including the `podcast:guid` behind its NIP-73 `i` tag), and the relay hook now
   reads stations and shows over **one** subscription — they share an author, a relay

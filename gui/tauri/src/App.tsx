@@ -93,7 +93,7 @@ export default function App() {
 
   // U1: the station list is that pubkey's published `station.v1` (31241) events
   // off the relays. The Rust seed is the first-run fallback until any exist.
-  const { stations: relayStations, loading: relayLoading } = useFollows(
+  const { stations: relayStations, shows: relayShows, loading: relayLoading } = useFollows(
     ownerHex,
     true,
   );
@@ -634,6 +634,8 @@ export default function App() {
             </section>
           ) : (
             <PodcastTab
+              shows={relayShows}
+              signedIn={!!identity}
               onPlayEpisode={playEpisode}
               currentKey={current?.kind === "episode" ? current.key : null}
               playing={playing}

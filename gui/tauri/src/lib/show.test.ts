@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Event as NostrEvent } from "nostr-tools";
-import { parseShow, resolveShows, SHOW_KIND } from "./show";
+import {
+  mergeFollows,
+  parseShow,
+  resolveShows,
+  uniqueShowSlug,
+  SHOW_KIND,
+  type Show,
+} from "./show";
 import { resolveStations } from "./station";
 
 const PK = "916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d";
@@ -130,5 +137,84 @@ describe("resolveShows", () => {
     const mixed = [station, show("duck", 100), del("duck", 200)];
     expect(resolveShows(mixed, PK)).toEqual([]);
     expect(resolveStations(mixed, PK).map((s) => s.slug)).toEqual(["acid-jazz"]);
+  });
+});
+
+describe("mergeFollows", () => {
+  const sub = (url: string, title: string, guid?: string) =>
+    guid ? { url, title, guid } : { url, title };
+  const show = (url: string, title: string, guid?: string): Show => ({
+    slug: title.toLowerCase().replace(/\W+/g, "-"),
+    title,
+    url,
+    tags: [],
+    description: null,
+    eventId: "ff".repeat(32),
+    ...(guid ? { guid } : {}),
+  });
+
+  it("matches by guid even when the URLs differ", () => {
+    // The podbean case: one feed, two hostnames. URL matching alone lists it twice.
+    const rows = mergeFollows(
+      [sub("https://zovietfrance.podbean.com/feed.xml", "A Duck in a Tree", "g-duck")],
+      [show("https://feed.podbean.com/zovietfrance/feed.xml", "A Duck in a Tree", "g-duck")],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].show).toBeDefined();
+    expect(rows[0].url).toBe("https://zovietfrance.podbean.com/feed.xml"); // local wins
+  });
+
+  it("falls back to URL for the feeds that state no guid", () => {
+    const rows = mergeFollows(
+      [sub("https://example.com/f.xml", "Example")],
+      [show("https://example.com/f.xml", "Example")],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].show).toBeDefined();
+  });
+
+  it("appends a follow published from another machine", () => {
+    const rows = mergeFollows(
+      [sub("https://a.example/f.xml", "Local only")],
+      [show("https://b.example/g.xml", "Followed elsewhere", "g-b")],
+    );
+    expect(rows.map((r) => [r.title, !!r.relayOnly])).toEqual([
+      ["Local only", false],
+      ["Followed elsewhere", true],
+    ]);
+  });
+
+  it("keeps local order and local harvest untouched", () => {
+    const local = [
+      { url: "u1", title: "One", latestAt: 900, guid: "g1" },
+      { url: "u2", title: "Two", latestAt: 100 },
+    ];
+    const rows = mergeFollows(local, [show("u1", "One renamed upstream", "g1")]);
+    expect(rows.map((r) => r.title)).toEqual(["One", "Two"]);
+    expect(rows[0].latestAt).toBe(900);
+  });
+
+  it("does not claim one show for two subs", () => {
+    const rows = mergeFollows(
+      [sub("u1", "One", "g1"), sub("u2", "Two")],
+      [show("u1", "One", "g1")],
+    );
+    expect(rows.filter((r) => r.show)).toHaveLength(1);
+    expect(rows).toHaveLength(2);
+  });
+});
+
+describe("uniqueShowSlug", () => {
+  it("slugifies a title", () => {
+    expect(uniqueShowSlug("No Agenda Show!", [])).toBe("no-agenda-show");
+  });
+
+  it("suffixes on collision — the d-tag IS the identity", () => {
+    expect(uniqueShowSlug("The Show", ["the-show"])).toBe("the-show-2");
+    expect(uniqueShowSlug("The Show", ["the-show", "the-show-2"])).toBe("the-show-3");
+  });
+
+  it("never yields an empty slug", () => {
+    expect(uniqueShowSlug("!!!", [])).toBe("show");
   });
 });

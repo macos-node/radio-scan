@@ -9,6 +9,7 @@
 
 import type { Event as NostrEvent } from "nostr-tools";
 import { addressOf, resolveAddressable } from "./addressable";
+import type { Sub } from "./podcasts";
 
 export const SHOW_KIND = 31242; // show.v1 — a followed podcast feed
 
@@ -77,4 +78,72 @@ export function resolveShows(
   ownerPubkey: string,
 ): Show[] {
   return resolveAddressable(events, SHOW_KIND, ownerPubkey, parseShow, (s) => s.title);
+}
+
+/** A row in the Podcasts list: a local subscription, a published follow, or both.
+ *  `show` is set when this feed is published as a `show.v1`; `relayOnly` marks a
+ *  follow that exists on the relays but not in this device's `podcasts.json` —
+ *  i.e. one followed from another machine. */
+export interface FollowRow extends Sub {
+  show?: Show;
+  relayOnly?: boolean;
+}
+
+/** Merge local subscriptions with published follows.
+ *
+ *  Matched by **guid first, then URL** — the U4.5 keying rule, and not
+ *  interchangeable: podbean serves one feed from two hostnames, so the same show
+ *  subscribed here and published there can differ by URL while sharing a guid.
+ *  Matching by URL alone would show it twice; matching by guid alone would miss
+ *  every feed that states none (3 of 11 in the reference profile).
+ *
+ *  Local subs keep their order and their harvest; relay-only follows are appended,
+ *  so nothing a user has locally is ever displaced by what a relay says. */
+export function mergeFollows(subs: Sub[], shows: Show[]): FollowRow[] {
+  const byGuid = new Map<string, Show>();
+  const byUrl = new Map<string, Show>();
+  for (const sh of shows) {
+    if (sh.guid) byGuid.set(sh.guid, sh);
+    byUrl.set(sh.url, sh);
+  }
+
+  const claimed = new Set<Show>();
+  const rows: FollowRow[] = subs.map((sub) => {
+    const match =
+      (sub.guid ? byGuid.get(sub.guid) : undefined) ?? byUrl.get(sub.url);
+    if (!match) return sub;
+    claimed.add(match);
+    return { ...sub, show: match };
+  });
+
+  for (const sh of shows) {
+    if (claimed.has(sh)) continue;
+    const row: FollowRow = {
+      url: sh.url,
+      title: sh.title,
+      show: sh,
+      relayOnly: true,
+    };
+    if (sh.guid) row.guid = sh.guid;
+    rows.push(row);
+  }
+  return rows;
+}
+
+/** A `d`-slug for a new follow, unique within `taken`. Two shows can slugify
+ *  identically, and `airplay:show:<slug>` IS the addressable identity — a
+ *  collision would silently replace the other show's event rather than create
+ *  one. Suffixes `-2`, `-3`, … on collision. */
+export function uniqueShowSlug(title: string, taken: Iterable<string>): string {
+  const base =
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "show";
+  const used = new Set(taken);
+  if (!used.has(base)) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base}-${n}`;
+    if (!used.has(candidate)) return candidate;
+  }
 }
