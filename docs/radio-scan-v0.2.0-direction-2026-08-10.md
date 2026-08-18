@@ -177,7 +177,10 @@ of the work, not after:
   *Still to build:* publish/unfollow commands, a Follow control on the Podcasts tab,
   and the read subscription that merges relay shows with `podcasts.json` the way
   `useStations` already does for stations. The contract is settled; the plumbing is a
-  separate slice and need not gate the 0.2.0 tag.
+  separate slice and need not gate the 0.2.0 tag — mapped in phases S0–S4 at
+  [`./show-v1-plumbing-buildmap-2026-08-18.md`](./show-v1-plumbing-buildmap-2026-08-18.md).
+  Its **S0 is shared with U4.5**: `feed-rs` 2.4 exposes no extension map, so
+  `<podcast:guid>` needs its own extractor before either slice can key on it.
 - **#7 — npub-audio scope.** Not triggered by persistence; leave at `1063`-first.
   Note it only so 0.2.0 doesn't accidentally widen the harvest schema for kind-1.
 

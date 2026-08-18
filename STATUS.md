@@ -351,10 +351,18 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   showed in both tabs); it stays **optional** because only 4 of 6 sampled live feeds
   carry a guid. And **harvest is not wire** — U4.5's Tier-A identity stays local, the
   event publishes the *follow*, the feed stays the authority on itself. Fixtures cover
-  both cases (Duck without a guid, No Agenda with a real one). **Not yet built:**
-  publish/unfollow commands, a Follow control on the Podcasts tab, and a relay read
-  merged with `podcasts.json` the way `useStations` does for stations — a separate
-  slice that need not gate the 0.2.0 tag.
+  both cases (Duck without a guid, No Agenda with a real one). **Not yet built:** the
+  plumbing — mapped S0–S4 in
+  [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
+  (guid extraction → Rust write path → shared addressable resolver → Podcasts-tab
+  Follow → verification), a separate slice that need not gate the 0.2.0 tag. **S0 is
+  a hard prerequisite shared with U4.5:** `feed-rs` 2.4 exposes **no extension map**,
+  so `<podcast:guid>` — the `i` tag the contract calls its preferred cross-user key —
+  is unreachable through the current parser and needs extracting from the raw bytes
+  (`quick-xml` is already in `Cargo.lock` via feed-rs). Two decisions taken in the
+  map: **Follow is explicit and import never publishes** (an OPML import of 31 feeds
+  would otherwise fire 31 publishes at hosts already seen rate-limiting a read
+  sweep), and **slug collisions take a `-2` suffix** resolved at publish time.
 - **NIP-09 deletion is id-based on some relays (2026-08-18).** Fallout from the
   above: `relay.fizx.uk` **accepted** every station deletion and kept serving the
   targets anyway (7 of 7 still on the wire after deletion), while nos.lol and primal
