@@ -43,6 +43,16 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   refuses a URL that conclusively serves **audio**, the exact mirror of
   `publish_station` refusing a feed — between the two guards, `#r` stays honest per
   kind. No UI yet; the Follow control arrives with S3.
+- **`show.v1` read path (S2).** `lib/show.ts` parses kind 31242 into a `Show`
+  (including the `podcast:guid` behind its NIP-73 `i` tag), and the relay hook now
+  reads stations and shows over **one** subscription — they share an author, a relay
+  set and the same kind:5 deletion stream, so a second pool would duplicate every
+  delete for nothing. `useStations` becomes `useFollows`. The NIP-09 and
+  replaceable-dedupe rules were **extracted** into `lib/addressable.ts` rather than
+  copied: they encode that a deletion only voids events at or before its own
+  timestamp (so unfollow → refollow works) and that an addressable event replaces
+  rather than appends. The existing station tests pass through the extraction
+  unchanged. Still no UI — S3.
 - **Feeds' `<podcast:guid>` is now harvested (`show.v1` S0).** The Podcasting-2.0
   channel GUID — a show's identity independent of the URL serving it — is extracted
   on fetch and persisted on the subscription. It is what `show.v1` publishes as its

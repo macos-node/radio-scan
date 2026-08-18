@@ -339,6 +339,18 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   `a0f86545fcbd` a-duck-in-a-tree) and landed on **all three** relays; replaying
   `resolveStations` against live relay data now yields **0** relay stations, so the
   Stations tab is the 10 local rows only.
+- **`show.v1` S2 — read path + shared resolver, BUILT (2026-08-18).** `lib/show.ts`
+  (parse/resolve for 31242, `i` → `guid`), and `hooks/useStations.ts` →
+  `useFollows.ts` reading **31241 + 31242 + 5 on one subscription** (same author,
+  same relays, same deletion stream — a second pool would duplicate every kind:5).
+  The NIP-09 + replaceable rules are **extracted** to `lib/addressable.ts`, not
+  copied: deletion voids only events at-or-before its timestamp (unfollow → refollow
+  works) and addressable events replace rather than append. **Regression proof: the
+  existing station tests pass through the extraction unchanged.** New show tests
+  include the two cross-talk cases the shared subscription creates — a station
+  deletion must not tombstone a show at the same `d`, and one mixed event stream must
+  resolve both lists independently. 37 TS + 22 Rust green. App still consumes only
+  `stations`; the Podcasts tab picks up `shows` in S3.
 - **`show.v1` S1 — Rust write path, BUILT (2026-08-18).** `publish_show` (31242) +
   `unfollow_show`, per-kind `d` prefixes (`D_STATION_PREFIX` / `D_SHOW_PREFIX`), and
   the **inverse guard**: `publish_show` refuses a conclusively audio URL exactly as

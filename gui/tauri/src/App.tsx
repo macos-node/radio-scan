@@ -54,7 +54,7 @@ import {
 } from "./lib/settings";
 import { resumePosition, savePosition, type Playing } from "./lib/player";
 import { OWNER_PUBKEY, parseStationsJson } from "./lib/station";
-import { useStations } from "./hooks/useStations";
+import { useFollows } from "./hooks/useFollows";
 import { shortVersion } from "./lib/format";
 import { cn } from "./lib/cn";
 
@@ -93,7 +93,7 @@ export default function App() {
 
   // U1: the station list is that pubkey's published `station.v1` (31241) events
   // off the relays. The Rust seed is the first-run fallback until any exist.
-  const { stations: relayStations, loading: relayLoading } = useStations(
+  const { stations: relayStations, loading: relayLoading } = useFollows(
     ownerHex,
     true,
   );

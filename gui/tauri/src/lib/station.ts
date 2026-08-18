@@ -8,9 +8,10 @@
 // descriptive tag (fmt / br / server / t) is optional.
 
 import type { Event as NostrEvent } from "nostr-tools";
+import { addressOf, resolveAddressable, DELETE_KIND } from "./addressable";
 
 export const STATION_KIND = 31241; // station.v1 — a followed radio stream
-export const DELETE_KIND = 5; // NIP-09 deletion
+export { DELETE_KIND };
 
 // The suite owner key (one person = one npub) — the same constant nplay's
 // feed.ts uses. U1 reads THIS author's published stations ("own stations"
@@ -88,7 +89,7 @@ const all = (ev: NostrEvent, k: string): string[] =>
 
 /** The addressable coordinate `31241:<pubkey>:<d>` — the replaceable identity. */
 export function stationAddress(ev: NostrEvent): string {
-  return `${STATION_KIND}:${ev.pubkey}:${tag(ev, "d") ?? ""}`;
+  return addressOf(ev, STATION_KIND);
 }
 
 /** Turn a raw kind:31241 event into a Station, or null if it lacks the
@@ -114,45 +115,22 @@ export function parseStation(ev: NostrEvent): Station | null {
 
 /**
  * Resolve a raw event stream into the displayable station list: keep only
- * `ownerPubkey`'s stations, drop any the owner deleted (kind:5 referencing the
- * `a` coordinate), dedupe replaceables by address keeping latest created_at,
- * and skip structurally-invalid records. Sorted by name.
+ * `ownerPubkey`'s stations, drop any the owner deleted (unless re-published
+ * since), dedupe replaceables by address keeping latest created_at, and skip
+ * structurally-invalid records. Sorted by name.
+ *
+ * The NIP-09 / replaceable rules live in lib/addressable.ts, shared with shows —
+ * see the note there for why they are not worth having two copies of.
  */
 export function resolveStations(
   events: NostrEvent[],
   ownerPubkey: string,
 ): Station[] {
-  // Owner kind:5 deletions referencing a station address (NIP-09 `a` tags),
-  // keyed to the LATEST deletion time per address. NIP-09: a deletion only
-  // voids events with created_at <= its own — so re-publishing a station after
-  // unfollowing it (same slug, later timestamp) must NOT stay tombstoned.
-  const deletedAt = new Map<string, number>();
-  for (const e of events) {
-    if (e.kind !== DELETE_KIND || e.pubkey !== ownerPubkey) continue;
-    for (const t of e.tags) {
-      if (t[0] === "a" && t[1]?.startsWith(`${STATION_KIND}:`)) {
-        const prev = deletedAt.get(t[1]) ?? 0;
-        if (e.created_at > prev) deletedAt.set(t[1], e.created_at);
-      }
-    }
-  }
-
-  const byAddr = new Map<string, { station: Station; createdAt: number }>();
-  for (const ev of events) {
-    if (ev.kind !== STATION_KIND || ev.pubkey !== ownerPubkey) continue;
-    const address = stationAddress(ev);
-    const delAt = deletedAt.get(address);
-    // Suppress only if deleted and NOT re-published after the deletion.
-    if (delAt !== undefined && ev.created_at <= delAt) continue;
-    const station = parseStation(ev);
-    if (!station) continue;
-    const prev = byAddr.get(address);
-    if (!prev || ev.created_at > prev.createdAt) {
-      byAddr.set(address, { station, createdAt: ev.created_at });
-    }
-  }
-
-  return [...byAddr.values()]
-    .map((v) => v.station)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  return resolveAddressable(
+    events,
+    STATION_KIND,
+    ownerPubkey,
+    parseStation,
+    (s) => s.name,
+  );
 }

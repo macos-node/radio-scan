@@ -6,22 +6,29 @@ import {
   resolveStations,
   type Station,
 } from "../lib/station";
+import { SHOW_KIND, resolveShows, type Show } from "../lib/show";
 import { RELAYS } from "../lib/relays";
 
-export interface StationsState {
+export interface FollowsState {
   stations: Station[];
+  shows: Show[];
   loading: boolean;
 }
 
-/** Subscribe to `ownerHex`'s kind:31241 stations (+ kind:5 deletes) and resolve
- *  them into the displayable list. `active` gates the subscription so relays are
- *  only touched while the tuner is mounted. Returns [] until events arrive —
- *  the caller falls back to the seed list when empty. */
-export function useStations(
+/** Subscribe to `ownerHex`'s published follows — kind:31241 stations and
+ *  kind:31242 shows, plus the kind:5 deletes that void them — and resolve each
+ *  into its displayable list.
+ *
+ *  ONE subscription covers both kinds: they share an author, a relay set and the
+ *  deletion stream, so a second pool would duplicate every kind:5 for nothing.
+ *  `active` gates it so relays are only touched while the app is mounted. Each
+ *  list is [] until events arrive; the caller falls back to its local store. */
+export function useFollows(
   ownerHex: string | undefined,
   active: boolean,
-): StationsState {
+): FollowsState {
   const [stations, setStations] = useState<Station[]>([]);
+  const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
   const byKeyRef = useRef<Map<string, NostrEvent>>(new Map());
 
@@ -32,22 +39,26 @@ export function useStations(
     }
     byKeyRef.current = new Map();
     setStations([]);
+    setShows([]);
     setLoading(true);
 
     const pool = new SimplePool();
     const byKey = byKeyRef.current;
-    const recompute = () =>
-      setStations(resolveStations([...byKey.values()], ownerHex));
+    const recompute = () => {
+      const evs = [...byKey.values()];
+      setStations(resolveStations(evs, ownerHex));
+      setShows(resolveShows(evs, ownerHex));
+    };
 
     const sub = pool.subscribeMany(
       RELAYS,
-      { kinds: [STATION_KIND, DELETE_KIND], authors: [ownerHex] },
+      { kinds: [STATION_KIND, SHOW_KIND, DELETE_KIND], authors: [ownerHex] },
       {
         onevent(ev) {
-          // Replaceable stations key by address; kind:5 deletes by id.
+          // Replaceable follows key by address; kind:5 deletes by id.
           const dTag = ev.tags.find((t) => t[0] === "d")?.[1];
           const key =
-            ev.kind === STATION_KIND
+            ev.kind === STATION_KIND || ev.kind === SHOW_KIND
               ? `${ev.kind}:${ev.pubkey}:${dTag ?? ""}`
               : ev.id;
           const prev = byKey.get(key);
@@ -72,5 +83,5 @@ export function useStations(
     };
   }, [ownerHex, active]);
 
-  return { stations, loading };
+  return { stations, shows, loading };
 }
