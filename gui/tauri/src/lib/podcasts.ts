@@ -175,14 +175,30 @@ export function buildOpml(subs: Sub[], title = "ntune podcasts"): string {
   ].join("\n");
 }
 
-/** Merge incoming subs into existing, deduped by url (incoming wins, first). */
+/** Merge incoming subs into existing, deduped by url (incoming wins, first).
+ *
+ *  One exception: `latestAt` is **harvest, not user data**, so an incoming entry
+ *  that lacks it inherits the stamp we already derived rather than wiping it.
+ *  Without that, restoring any export written before the field existed — or one
+ *  from another app / an OPML file, which has nowhere to carry it — reset every
+ *  feed's newest-episode date and the "Recent" order went flat until each feed
+ *  refetched. Same rule as the rest of the harvest slice: a fetch overwrites it
+ *  freely (the feed always wins), but an import only gap-fills. */
 export function mergeSubs(existing: Sub[], incoming: Sub[]): Sub[] {
   const seen = new Set<string>();
   const fresh = incoming.filter((s) =>
     s.url && !seen.has(s.url) ? (seen.add(s.url), true) : false,
   );
+  const prevByUrl = new Map(existing.map((s) => [s.url, s]));
   const urls = new Set(fresh.map((s) => s.url));
-  return [...fresh, ...existing.filter((s) => !urls.has(s.url))];
+  return [
+    ...fresh.map((s) => {
+      if (s.latestAt != null) return s;
+      const prev = prevByUrl.get(s.url);
+      return prev?.latestAt != null ? { ...s, latestAt: prev.latestAt } : s;
+    }),
+    ...existing.filter((s) => !urls.has(s.url)),
+  ];
 }
 
 /** How the Podcasts tab orders the list. `recent` = newest episode first (the

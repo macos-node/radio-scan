@@ -36,6 +36,13 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   discarded — the export serializer-drift U4.5 exists to close, met early.
 
 ### Fixed
+- **Restoring an old export no longer wipes the podcast sort dates.** `mergeSubs`
+  is incoming-wins, so importing a backup written before `latestAt` existed — or an
+  OPML file, which has nowhere to carry it — reset every feed's newest-episode date
+  and flattened the **Recent** order until each feed refetched. `latestAt` is
+  harvest, not user data, so an incoming entry that lacks it now inherits the stamp
+  already on the sub: a fetch still overwrites it freely (feed always wins), an
+  import only gap-fills.
 - **Removing a podcast or station now asks first.** The hover-✕ on a row/card
   removed the subscription outright, with no undo — and it sits exactly where the
   pointer already is, so a stray click silently dropped a feed. Both lists now open

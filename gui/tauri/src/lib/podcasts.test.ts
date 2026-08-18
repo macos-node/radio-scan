@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { latestEpisodeAt, sortSubs, type Sub } from "./podcasts";
+import { latestEpisodeAt, mergeSubs, sortSubs, type Sub } from "./podcasts";
 
 const sub = (url: string, title: string, latestAt?: number): Sub =>
   latestAt == null ? { url, title } : { url, title, latestAt };
@@ -59,5 +59,44 @@ describe("sortSubs", () => {
   it("holds stored order when nothing has a date yet (first paint)", () => {
     const cold = [sub("a", "Zulu"), sub("b", "alpha"), sub("c", "Mike")];
     expect(sortSubs(cold, "recent").map((s) => s.url)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("mergeSubs", () => {
+  const stored: Sub[] = [
+    { url: "a", title: "Alpha", latestAt: 900 },
+    { url: "b", title: "Bravo", latestAt: 600 },
+  ];
+
+  it("incoming wins on title + order, deduped by url", () => {
+    const merged = mergeSubs(stored, [
+      { url: "b", title: "Bravo (renamed)" },
+      { url: "c", title: "Charlie" },
+    ]);
+    expect(merged.map((s) => [s.url, s.title])).toEqual([
+      ["b", "Bravo (renamed)"],
+      ["c", "Charlie"],
+      ["a", "Alpha"],
+    ]);
+  });
+
+  it("an import without latestAt keeps the harvested stamp", () => {
+    // An old export / OPML file has nowhere to carry the date; it must not wipe
+    // one we already derived, or Recent order goes flat until every feed refetches.
+    const merged = mergeSubs(stored, [
+      { url: "a", title: "Alpha" },
+      { url: "b", title: "Bravo" },
+    ]);
+    expect(merged.map((s) => s.latestAt)).toEqual([900, 600]);
+  });
+
+  it("an incoming latestAt still wins (a fetch/newer export is authoritative)", () => {
+    const merged = mergeSubs(stored, [{ url: "a", title: "Alpha", latestAt: 5000 }]);
+    expect(merged[0].latestAt).toBe(5000);
+  });
+
+  it("adds unknown feeds with no stamp at all", () => {
+    const merged = mergeSubs(stored, [{ url: "z", title: "Zulu" }]);
+    expect(merged.find((s) => s.url === "z")?.latestAt).toBeUndefined();
   });
 });
