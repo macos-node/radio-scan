@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  cachedPodcasts,
   copyText,
   exportJson,
   fetchPodcast,
@@ -202,9 +203,16 @@ function IdentityRow({ pod, indent = false }: { pod: Podcast; indent?: boolean }
   );
 }
 
-/** Session-scoped feed cache shared across mounts, so switching tabs doesn't
- *  refetch every feed. Lives for the app session (cleared on restart). */
+/** Feed bodies for this session, shared across mounts so switching tabs doesn't
+ *  refetch. Primed on first mount from the on-disk cache (Rust `feed-cache/`), so
+ *  the list paints from the last known state instead of a blank slate while every
+ *  feed refetches. */
 const podCache: Record<string, Podcast> = {};
+
+/** Feeds already refreshed from the network this session. The prefetch loop skips
+ *  these rather than everything in `podCache` — otherwise a disk-primed entry
+ *  would look fetched and the list would never see today's episodes. */
+const refreshed = new Set<string>();
 
 /** Podcasts tab (U4): subscribe by RSS URL (localStorage), browse episodes
  *  fetched via Rust feed-rs, play through the shared player. Two views — a dense
@@ -330,12 +338,27 @@ export function PodcastTab({
     let cancelled = false;
     const urls = subUrlKey ? subUrlKey.split("\n") : [];
     (async () => {
+      // Paint from disk first — one local read for the whole list, so episodes
+      // and identity are on screen before the network is touched.
+      const cold = urls.filter((u) => !podCache[u]);
+      if (cold.length > 0) {
+        try {
+          const hits = await cachedPodcasts(cold);
+          if (cancelled) return;
+          for (const h of hits) putCache(h.url, h.podcast);
+        } catch (e) {
+          console.error("cached_podcasts failed", e);
+        }
+      }
+      // Then refresh each feed in the background. Conditional GET makes an
+      // unchanged feed a cheap 304, and the disk-primed rows just get restated.
       for (const url of urls) {
         if (cancelled) return;
-        if (podCache[url]) continue;
+        if (refreshed.has(url)) continue;
         try {
           const p = await fetchPodcast(url);
           if (cancelled) return;
+          refreshed.add(url);
           putCache(url, p);
         } catch {
           /* ignore prefetch errors */
@@ -377,6 +400,7 @@ export function PodcastTab({
     setError(null);
     try {
       const p = await fetchPodcast(url);
+      refreshed.add(url);
       putCache(url, p);
       return p;
     } catch (e) {
@@ -394,6 +418,7 @@ export function PodcastTab({
     setError(null);
     try {
       const p = await fetchPodcast(url);
+      refreshed.add(url);
       putCache(url, p);
       setSubs((prev) => {
         const next = [{ url, title: p.title }, ...prev.filter((s) => s.url !== url)];

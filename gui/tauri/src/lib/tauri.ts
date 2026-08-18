@@ -228,9 +228,28 @@ export interface Podcast {
   episodes: Episode[];
 }
 
-/** Fetch + parse a podcast feed URL into episodes. */
+/** Fetch + parse a podcast feed URL into episodes. Writes through the on-disk
+ *  feed cache, and sends the cached ETag / Last-Modified as a conditional GET —
+ *  an unchanged feed answers 304 and costs no body and no reparse. */
 export function fetchPodcast(url: string): Promise<Podcast> {
   return invoke<Podcast>("fetch_podcast", { url });
+}
+
+/** One feed as last stored on disk: the parsed body plus when it was last
+ *  confirmed current. */
+export interface CachedFeed {
+  url: string;
+  fetchedAt: number;
+  etag?: string;
+  lastModified?: string;
+  podcast: Podcast;
+}
+
+/** Cached bodies for the given feed URLs — a local disk read, so the Podcasts
+ *  tab can paint immediately instead of waiting on the network. Feeds with no
+ *  cache entry are simply absent from the result. */
+export function cachedPodcasts(urls: string[]): Promise<CachedFeed[]> {
+  return invoke<CachedFeed[]>("cached_podcasts", { urls });
 }
 
 /** Static ICY headers a stream advertises — captured on tune-in to enrich a

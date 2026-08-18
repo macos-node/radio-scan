@@ -301,7 +301,9 @@ fn list_local_podcasts(app: tauri::AppHandle) -> Result<Vec<PodcastSub>, String>
 #[tauri::command]
 fn save_local_podcasts(app: tauri::AppHandle, subs: Vec<PodcastSub>) -> Result<(), String> {
     let body = serde_json::to_string_pretty(&subs).map_err(|e| e.to_string())?;
-    std::fs::write(podcasts_path(&app)?, body).map_err(|e| e.to_string())
+    std::fs::write(podcasts_path(&app)?, body).map_err(|e| e.to_string())?;
+    prune_feed_cache(&app, &subs); // unsubscribing is the only way to orphan a body
+    Ok(())
 }
 
 // --- local settings store (settings.json) -----------------------------------
@@ -621,7 +623,7 @@ async fn unfollow_station(
 // Subscribe to a podcast by feed URL; fetch + parse RSS 2.0 / Atom (feed-rs)
 // into an episode list the UI plays through the same <audio>/proxy path as radio.
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct Episode {
     /// Stable id — the entry guid, else the enclosure URL.
@@ -636,7 +638,7 @@ struct Episode {
     published_at: Option<i64>,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct Podcast {
     title: String,
@@ -687,20 +689,135 @@ fn entry_enclosure(entry: &feed_rs::model::Entry) -> Option<(String, Option<Stri
     None
 }
 
+// --- feed body cache --------------------------------------------------------
+// Parsed feeds persist under `<app_data_dir>/feed-cache/`, one file per feed, so
+// opening the Podcasts tab paints from disk instead of from a blank slate while
+// eleven feeds refetch. The session cache in PodcastTab.tsx died with the process,
+// so every launch re-downloaded every feed before showing anything.
+//
+// Freshness is the server's call, not a TTL: each entry keeps the ETag /
+// Last-Modified it was served with and the next fetch sends them back as a
+// conditional GET, so an unchanged feed costs one 304 with no body and no reparse.
+// Cache files are named by a hash of the feed URL; the URL itself lives in the
+// envelope, so nothing depends on the name being readable.
+
+fn feed_cache_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app_data_dir(app)?.join("feed-cache");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+/// FNV-1a over the feed URL — a filename, not a security boundary. Stable across
+/// builds (unlike DefaultHasher), so yesterday's cache is still found today.
+fn cache_key(url: &str) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in url.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x100_0000_01b3);
+    }
+    format!("{h:016x}.json")
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// One cached feed: the parsed podcast plus what the next conditional GET needs.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CachedFeed {
+    url: String,
+    /// When this body was last confirmed current (a 304 refreshes it too).
+    fetched_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    etag: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_modified: Option<String>,
+    podcast: Podcast,
+}
+
+fn read_cached_feed(app: &tauri::AppHandle, url: &str) -> Option<CachedFeed> {
+    let path = feed_cache_dir(app).ok()?.join(cache_key(url));
+    let text = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str::<CachedFeed>(&text).ok()
+}
+
+/// Best-effort — a cache write that fails must never fail the fetch that produced
+/// a perfectly good feed.
+fn write_cached_feed(app: &tauri::AppHandle, entry: &CachedFeed) {
+    let Ok(dir) = feed_cache_dir(app) else { return };
+    if let Ok(body) = serde_json::to_string(entry) {
+        let _ = std::fs::write(dir.join(cache_key(&entry.url)), body);
+    }
+}
+
+/// Cached feeds for the given subscriptions, in whatever order they are found.
+/// Missing or unreadable entries are simply absent — the caller refetches.
+#[tauri::command]
+fn cached_podcasts(app: tauri::AppHandle, urls: Vec<String>) -> Vec<CachedFeed> {
+    urls.iter()
+        .filter_map(|u| read_cached_feed(&app, u))
+        .collect()
+}
+
+/// Drop cache files for feeds that are no longer subscribed. Called on every
+/// subscription write, so the directory tracks the sub list instead of growing
+/// forever; unsubscribing is the only thing that can orphan an entry.
+fn prune_feed_cache(app: &tauri::AppHandle, subs: &[PodcastSub]) {
+    let Ok(dir) = feed_cache_dir(app) else { return };
+    let keep: std::collections::HashSet<String> =
+        subs.iter().map(|s| cache_key(&s.url)).collect();
+    let Ok(entries) = std::fs::read_dir(&dir) else { return };
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if name.ends_with(".json") && !keep.contains(&name) {
+            let _ = std::fs::remove_file(e.path());
+        }
+    }
+}
+
 /// Fetch and parse a podcast feed into an episode list (newest first).
 #[tauri::command]
-async fn fetch_podcast(url: String) -> Result<Podcast, String> {
-    let bytes = reqwest::Client::new()
+async fn fetch_podcast(app: tauri::AppHandle, url: String) -> Result<Podcast, String> {
+    // Ask only for what changed: if we hold a body, replay its validators and let
+    // the server answer 304 (no body, no reparse) when the feed is untouched.
+    let cached = read_cached_feed(&app, &url);
+    let mut req = reqwest::Client::new()
         .get(&url)
-        .header("User-Agent", "ntune (radio-scan)")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .error_for_status()
-        .map_err(|e| e.to_string())?
-        .bytes()
-        .await
-        .map_err(|e| e.to_string())?;
+        .header("User-Agent", "ntune (radio-scan)");
+    if let Some(c) = &cached {
+        if let Some(tag) = &c.etag {
+            req = req.header("If-None-Match", tag.clone());
+        }
+        if let Some(lm) = &c.last_modified {
+            req = req.header("If-Modified-Since", lm.clone());
+        }
+    }
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+
+    if resp.status() == reqwest::StatusCode::NOT_MODIFIED {
+        // Unchanged. Restamp so `fetchedAt` means "last confirmed current".
+        if let Some(mut c) = cached {
+            c.fetched_at = now_secs();
+            write_cached_feed(&app, &c);
+            return Ok(c.podcast);
+        }
+        return Err("server sent 304 with nothing cached".to_string());
+    }
+
+    let resp = resp.error_for_status().map_err(|e| e.to_string())?;
+    let header = |name: &str| {
+        resp.headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string())
+    };
+    let etag = header("etag");
+    let last_modified = header("last-modified");
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
 
     let feed = feed_rs::parser::parse(&bytes[..]).map_err(|e| format!("parse failed: {e}"))?;
 
@@ -757,7 +874,7 @@ async fn fetch_podcast(url: String) -> Result<Podcast, String> {
     let language = feed.language.clone();
     let copyright = feed.rights.as_ref().map(|t| t.content.trim().to_string());
 
-    Ok(Podcast {
+    let podcast = Podcast {
         title: feed.title.map(|t| t.content).unwrap_or_else(|| "Untitled".to_string()),
         description: feed.description.map(|t| t.content),
         image: feed.logo.or(feed.icon).map(|i| i.uri),
@@ -768,7 +885,19 @@ async fn fetch_podcast(url: String) -> Result<Podcast, String> {
         language,
         copyright,
         episodes,
-    })
+    };
+
+    write_cached_feed(
+        &app,
+        &CachedFeed {
+            url: url.clone(),
+            fetched_at: now_secs(),
+            etag,
+            last_modified,
+            podcast: podcast.clone(),
+        },
+    );
+    Ok(podcast)
 }
 
 // --- station ICY probe (win #2) ---------------------------------------------
@@ -946,6 +1075,7 @@ pub fn run() {
             publish_station,
             unfollow_station,
             fetch_podcast,
+            cached_podcasts,
             station_icy,
             add_favorite,
             list_favorites,

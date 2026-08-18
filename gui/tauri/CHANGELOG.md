@@ -36,6 +36,19 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   discarded — the export serializer-drift U4.5 exists to close, met early.
 
 ### Fixed
+- **Podcast feeds no longer start from a blank slate on every launch.** Parsed feed
+  bodies now persist to `<app_data_dir>/feed-cache/`, one file per feed, so opening
+  the Podcasts tab paints the last known episodes and identity immediately instead
+  of waiting on eleven refetches; the refresh then runs in the background. The
+  session cache it replaces was a module-level object that died with the process.
+  Freshness is the server's call rather than a TTL: each entry stores the ETag /
+  Last-Modified it was served with and replays them as a conditional GET, so an
+  unchanged feed answers **304** — no body, no reparse. Bodies for unsubscribed
+  feeds are pruned on the next subscription write, and the cache is deliberately
+  **not** exported (a body costs one fetch to rebuild; `export == persisted state`
+  stays about the subscription + harvest slices). Design + decisions:
+  [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../../docs/radio-scan-v0.2.0-direction-2026-08-10.md)
+  § the feed body cache.
 - **Restoring an old export no longer wipes the podcast sort dates.** `mergeSubs`
   is incoming-wins, so importing a backup written before `latestAt` existed — or an
   OPML file, which has nowhere to carry it — reset every feed's newest-episode date

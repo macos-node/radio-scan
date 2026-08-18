@@ -9,8 +9,8 @@
 > Treat the checklist as the worklist; treat the Open decisions as gates to settle
 > *inside* this minor, not after it.
 
-Date: 2026-08-10 · current version: **0.1.1-beta.3** (unreleased) · branch:
-`l4-podcast-cards` · this note proposes the **0.1.1 → 0.2.0** cut.
+Date: 2026-08-10 (slice 4 added 2026-08-18) · current version: **0.1.1-beta.4**
+(unreleased) · branch: `main` · this note proposes the **0.1.1 → 0.2.0** cut.
 
 ---
 
@@ -48,6 +48,41 @@ the U4 notes kept saying "…persist it — revisit display later" about.
    overwrites the **harvest** slice freely.
 3. **The `image` URL** finally lands where U4 said it should: **stored, not
    rendered** (link kept, optional disk cache deferred). Display stays a later call.
+4. **Feed bodies** (added 2026-08-18, **built** — see below). Parsed episodes +
+   identity persist per feed, so the Podcasts tab opens on the last known state
+   instead of a blank slate while every subscription refetches.
+
+### The feed body cache (slice 4)
+
+The subscription list and the harvest slice above are *small* state. The **bodies**
+— episodes, hundreds per feed — were the loudest instance of the same problem: the
+session cache lived in a module-level object in `PodcastTab.tsx`, so it died with
+the process and every launch re-downloaded all eleven feeds before showing anything.
+
+Decisions taken (they are the compatibility surface, so they are recorded here
+rather than left to the code):
+
+- **Where:** `<app_data_dir>/feed-cache/<fnv1a64(url)>.json`, **one file per feed**
+  — a refreshed feed rewrites only itself, so a 700-episode archive never forces a
+  rewrite of the other ten. The URL rides *inside* the envelope; nothing depends on
+  the filename being readable.
+- **Envelope:** `{url, fetchedAt, etag?, lastModified?, podcast}`. `fetchedAt` means
+  *last confirmed current*, so a 304 restamps it.
+- **Freshness is the server's call, not a TTL.** Each entry replays its ETag /
+  Last-Modified as a conditional GET; an unchanged feed answers **304** — no body,
+  no reparse. Measured 2026-08-18 across the live subscriptions: 3 of 4 sampled
+  feeds honour `If-None-Match` (podbean, fountain.fm, nashownotes); the BBC's CDN
+  answers 200 regardless, which simply degrades to today's behaviour.
+- **Paint order:** disk first (one batched `cached_podcasts` read for the whole
+  list), network second, in the background. The refresh pass tracks *fetched this
+  session* rather than *present in cache*, or a disk-primed row would look fetched
+  and never see today's episodes.
+- **Eviction:** none by age. `save_local_podcasts` prunes bodies whose feed is no
+  longer subscribed — unsubscribing is the only way to orphan one, so the directory
+  tracks the sub list instead of growing forever.
+- **Not exported.** Bodies are a cache, not state: `export == persisted state`
+  covers the subscription + harvest slices, and re-deriving a body costs one fetch.
+  Keeping bodies out of the export keeps backups small and portable.
 
 ### The rule that makes it safe (carried verbatim from U4)
 - **Harvest and enrich live in separate slices.** Harvest is overwrite-on-refetch;
@@ -68,6 +103,11 @@ the U4 notes kept saying "…persist it — revisit display later" about.
       still unrendered.
 - [ ] Import merges into the persisted slices (harvest-vs-enrich preserved), deduped
       by the keys above.
+- [x] **Feed bodies survive a restart** — the tab paints from disk, then refreshes
+      by conditional GET (slice 4, built 2026-08-18).
+- [x] **An import never wipes harvest.** `latestAt` proved the rule: `mergeSubs` is
+      incoming-wins, so an OPML or pre-field export used to reset it. Harvest now
+      gap-fills from the existing sub; a fetch still overwrites freely.
 
 ---
 

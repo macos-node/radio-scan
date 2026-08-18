@@ -320,6 +320,21 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   `latestAt` in `podcasts.json`** — 2026-08-18 back to 2026-08-05, so a cold start
   paints the right order. No open `Needs-verify` on Linux; macOS/Windows unexercised
   (frontend + a serde field, no platform-specific path).
+- **Feed body cache — U4.5 slice 4, BUILT + Linux-verified (2026-08-18).** The
+  Podcasts tab used to refetch all eleven feeds from a blank slate on every launch —
+  its cache was a module-level object in `PodcastTab.tsx` that died with the process.
+  Parsed bodies now persist to `<app_data_dir>/feed-cache/`, **one file per feed**
+  (`{url, fetchedAt, etag?, lastModified?, podcast}`); the tab paints from disk via a
+  batched `cached_podcasts` read, then refreshes in the background. **Freshness is
+  the server's call, not a TTL** — stored validators replay as a conditional GET, so
+  an unchanged feed costs a 304 with no body and no reparse. Verified on the real
+  11-feed profile: **1.88 MB, 5,926 episodes, ETag on 11/11** (Last-Modified on 9/11),
+  and a live curl check had podbean / fountain.fm / nashownotes answering 304 (the
+  BBC CDN answers 200 regardless — degrades to today's behaviour). Bodies are pruned
+  when a feed is unsubscribed, and are **not exported** — a cache, not state. The
+  refresh pass tracks *fetched this session* rather than *present in cache*, or a
+  disk-primed row would look fetched and never see today's episodes. Design +
+  decisions recorded in the v0.2.0 direction doc § the feed body cache.
 - **Next — v0.2.0 "make it durable" *minor* (U4.5), the headline still unbuilt.**
   The subscription/prefs stores above are the **precursor**; U4.5 is persisting the
   *harvested* slice into them — `station.v1` description + ICY-on-tune-in for
