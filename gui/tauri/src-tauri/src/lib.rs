@@ -272,6 +272,10 @@ struct PodcastSub {
     title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     npub: Option<String>,
+    /// Harvested: the feed's `<podcast:guid>`, when it carries one. The show's
+    /// URL-independent identity — show.v1's NIP-73 `i` tag and U4.5's podcast key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    guid: Option<String>,
     /// Harvested: unix seconds of the newest episode seen in this feed, so the
     /// Podcasts tab's "Recent" order is right on the first paint instead of
     /// settling as the background prefetch trickles in. Every field the renderer
@@ -759,7 +763,102 @@ struct Podcast {
     language: Option<String>,
     /// `<copyright>` / `rights`.
     copyright: Option<String>,
+    /// `<podcast:guid>` — the Podcasting-2.0 channel GUID (see extract_podcast_guid).
+    /// `serde(default)` so feed-cache entries written before this field still load
+    /// instead of being discarded as unreadable.
+    #[serde(default)]
+    guid: Option<String>,
     episodes: Vec<Episode>,
+}
+
+// --- <podcast:guid> --------------------------------------------------------
+// The Podcasting-2.0 channel GUID: a show's identity independent of the URL it is
+// served from. show.v1 publishes it as a NIP-73 `i` tag (podcast:guid:<guid>) and
+// U4.5 keys the harvest slice on it, because a feed URL is demonstrably NOT stable
+// — podbean served the byte-identical 4,053,739-byte document from two hostnames
+// (2026-08-18), and a URL-keyed dedupe read that as two shows.
+//
+// feed-rs 2.x has no extension map, so this is unreachable through the parsed
+// model; we scan the raw bytes we already hold.
+
+/// Namespace URIs seen binding the `podcast:` prefix in the wild. The canonical
+/// one is podcastindex.org/namespace/1.0, but feeds bind whatever they like —
+/// No Agenda's binds the prefix to the namespace's GitHub docs page.
+const PODCAST_NS: [&str; 4] = [
+    "https://podcastindex.org/namespace/1.0",
+    "http://podcastindex.org/namespace/1.0",
+    "https://github.com/Podcastindex-org/podcast-namespace/blob/main/docs/1.0.md",
+    "http://github.com/Podcastindex-org/podcast-namespace/blob/main/docs/1.0.md",
+];
+
+/// The channel-level `<podcast:guid>`, if the feed carries one.
+///
+/// Accepts an element whose local name is `guid` when EITHER its prefix resolves
+/// to a known podcast-namespace URI OR the prefix is literally `podcast`. The
+/// prefix check is not laziness: measured across live feeds 2026-08-18, three
+/// bound `podcast:` to the canonical URI and No Agenda bound it to the GitHub docs
+/// page — a URI-only match would silently drop a guid the feed clearly states. A
+/// prefix-only match would be wrong the other way, so we take either.
+///
+/// Only the CHANNEL's guid counts: `<guid>` inside an `<item>` is the episode id,
+/// an entirely different thing, and every RSS feed is full of them.
+fn extract_podcast_guid(bytes: &[u8]) -> Option<String> {
+    use quick_xml::events::Event;
+    use quick_xml::name::ResolveResult;
+
+    let mut reader = quick_xml::NsReader::from_reader(bytes);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    let mut item_depth = 0usize;
+
+    loop {
+        buf.clear();
+        let (ns, ev) = match reader.read_resolved_event_into(&mut buf) {
+            Ok(v) => v,
+            Err(_) => return None, // malformed XML: feed-rs will report it
+        };
+        match ev {
+            Event::Eof => return None,
+            Event::Start(ref e) => {
+                let local = e.local_name();
+                let local = local.as_ref();
+                let prefix = e.name().prefix().map(|p| p.as_ref().to_vec());
+                if prefix.is_none() && (local == b"item" || local == b"entry") {
+                    item_depth += 1;
+                    continue;
+                }
+                if item_depth > 0 || local != b"guid" {
+                    continue;
+                }
+                let in_podcast_ns = match ns {
+                    ResolveResult::Bound(n) => std::str::from_utf8(n.as_ref())
+                        .map(|u| PODCAST_NS.contains(&u))
+                        .unwrap_or(false),
+                    _ => false,
+                };
+                let prefixed_podcast = prefix.as_deref() == Some(b"podcast".as_slice());
+                if !in_podcast_ns && !prefixed_podcast {
+                    continue;
+                }
+                let end = e.to_end().into_owned();
+                if let Ok(text) = reader.read_text(end.name()) {
+                    let guid = String::from_utf8_lossy(text.as_ref()).trim().to_string();
+                    if !guid.is_empty() {
+                        return Some(guid);
+                    }
+                }
+            }
+            Event::End(ref e) => {
+                let local = e.local_name();
+                if e.name().prefix().is_none()
+                    && (local.as_ref() == b"item" || local.as_ref() == b"entry")
+                {
+                    item_depth = item_depth.saturating_sub(1);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// The audio enclosure for a feed entry: prefer a media object, fall back to an
@@ -822,11 +921,28 @@ fn now_secs() -> i64 {
         .unwrap_or(0)
 }
 
+/// How much of a feed we know how to read. Bump this whenever the PARSE output
+/// changes — a new harvested field, a fixed extractor — so bodies stored by an
+/// older build are re-fetched in full instead of being revalidated forever.
+///
+/// Without it a conditional GET quietly starves every parser change: an unchanged
+/// feed answers 304, we hand back the stored body, and the new field stays empty
+/// until the publisher happens to touch the feed. Found while adding
+/// `<podcast:guid>` (v2) on top of eleven already-cached bodies (v1).
+const FEED_CACHE_VERSION: u32 = 2;
+
+fn feed_cache_v1() -> u32 {
+    1 // entries written before the version field existed
+}
+
 /// One cached feed: the parsed podcast plus what the next conditional GET needs.
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct CachedFeed {
     url: String,
+    /// Parser generation that produced `podcast` (see FEED_CACHE_VERSION).
+    #[serde(default = "feed_cache_v1")]
+    v: u32,
     /// When this body was last confirmed current (a 304 refreshes it too).
     fetched_at: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -885,7 +1001,10 @@ async fn fetch_podcast(app: tauri::AppHandle, url: String) -> Result<Podcast, St
     let mut req = reqwest::Client::new()
         .get(&url)
         .header("User-Agent", "ntune (radio-scan)");
-    if let Some(c) = &cached {
+    // Only revalidate a body this build knows how to read. A stale-version entry
+    // still paints (cached_podcasts returns it), but it must be re-fetched in full
+    // so the current parser sees the document.
+    if let Some(c) = cached.as_ref().filter(|c| c.v == FEED_CACHE_VERSION) {
         if let Some(tag) = &c.etag {
             req = req.header("If-None-Match", tag.clone());
         }
@@ -899,6 +1018,7 @@ async fn fetch_podcast(app: tauri::AppHandle, url: String) -> Result<Podcast, St
         // Unchanged. Restamp so `fetchedAt` means "last confirmed current".
         if let Some(mut c) = cached {
             c.fetched_at = now_secs();
+            c.v = FEED_CACHE_VERSION; // only sent validators for a current-version body
             write_cached_feed(&app, &c);
             return Ok(c.podcast);
         }
@@ -972,6 +1092,7 @@ async fn fetch_podcast(app: tauri::AppHandle, url: String) -> Result<Podcast, St
     let copyright = feed.rights.as_ref().map(|t| t.content.trim().to_string());
 
     let podcast = Podcast {
+        guid: extract_podcast_guid(&bytes),
         title: feed.title.map(|t| t.content).unwrap_or_else(|| "Untitled".to_string()),
         description: feed.description.map(|t| t.content),
         image: feed.logo.or(feed.icon).map(|i| i.uri),
@@ -988,6 +1109,7 @@ async fn fetch_podcast(app: tauri::AppHandle, url: String) -> Result<Podcast, St
         &app,
         &CachedFeed {
             url: url.clone(),
+            v: FEED_CACHE_VERSION,
             fetched_at: now_secs(),
             etag,
             last_modified,
@@ -1214,6 +1336,101 @@ mod tests {
         ] {
             assert_eq!(non_audio_hint(ct), None, "{ct} should publish");
         }
+    }
+
+    // --- <podcast:guid> extraction, against the shapes measured on live feeds ---
+
+    /// A channel with the given root attrs + channel body, wrapped in one item so
+    /// every case also proves the episode `<guid>` is not mistaken for the show's.
+    fn feed(root_attrs: &str, channel_head: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss {root_attrs} version="2.0">
+  <channel>
+    <title>Example</title>
+    {channel_head}
+    <item>
+      <title>Episode 1</title>
+      <guid isPermaLink="false">episode-guid-must-not-win</guid>
+    </item>
+  </channel>
+</rss>"#
+        )
+    }
+
+    const CANON: &str = r#"xmlns:podcast="https://podcastindex.org/namespace/1.0""#;
+
+    #[test]
+    fn reads_the_channel_guid_from_the_canonical_namespace() {
+        // fountain.fm / podhome / yellowball all bind the canonical URI.
+        let xml = feed(
+            CANON,
+            "<podcast:guid>e22a2294-d951-51dd-9498-cd04b4467ce1</podcast:guid>",
+        );
+        assert_eq!(
+            extract_podcast_guid(xml.as_bytes()).as_deref(),
+            Some("e22a2294-d951-51dd-9498-cd04b4467ce1")
+        );
+    }
+
+    #[test]
+    fn reads_it_when_the_prefix_is_bound_to_something_else() {
+        // No Agenda binds `podcast:` to the namespace's GitHub docs page, not the
+        // canonical URI. A URI-only match would silently drop a stated guid.
+        let xml = feed(
+            r#"xmlns:podcast="https://github.com/Podcastindex-org/podcast-namespace/blob/main/docs/1.0.md""#,
+            "<podcast:guid>856cd618-7f34-57ea-9b84-3600f1f65e7f</podcast:guid>",
+        );
+        assert_eq!(
+            extract_podcast_guid(xml.as_bytes()).as_deref(),
+            Some("856cd618-7f34-57ea-9b84-3600f1f65e7f")
+        );
+    }
+
+    #[test]
+    fn reads_it_under_a_different_prefix_bound_to_the_real_namespace() {
+        let xml = feed(
+            r#"xmlns:pc="https://podcastindex.org/namespace/1.0""#,
+            "<pc:guid>28e3b6e8-5003-5b3d-8d45-f9e2ea75d9c9</pc:guid>",
+        );
+        assert_eq!(
+            extract_podcast_guid(xml.as_bytes()).as_deref(),
+            Some("28e3b6e8-5003-5b3d-8d45-f9e2ea75d9c9")
+        );
+    }
+
+    #[test]
+    fn never_mistakes_an_episode_guid_for_the_shows() {
+        // The motivating absence: podbean's and the BBC's feeds carry no
+        // <podcast:guid> at all, but every item has a plain <guid>.
+        let xml = feed(CANON, "<description>no channel guid here</description>");
+        assert_eq!(extract_podcast_guid(xml.as_bytes()), None);
+    }
+
+    #[test]
+    fn an_empty_guid_is_absent_not_blank() {
+        let xml = feed(CANON, "<podcast:guid>   </podcast:guid>");
+        assert_eq!(extract_podcast_guid(xml.as_bytes()), None);
+    }
+
+    #[test]
+    fn malformed_xml_yields_none_rather_than_panicking() {
+        assert_eq!(extract_podcast_guid(b"<rss><channel><title>oops"), None);
+        assert_eq!(extract_podcast_guid(b""), None);
+        assert_eq!(extract_podcast_guid(&[0xff, 0xfe, 0x00]), None);
+    }
+
+    #[test]
+    fn a_cache_entry_without_a_version_reads_as_v1() {
+        // The eleven bodies already on disk when the version field was added must
+        // load and be treated as stale, not be discarded or mistaken for current.
+        let stored = r#"{"url":"https://example.com/f.xml","fetchedAt":1,"podcast":
+            {"title":"T","description":null,"image":null,"author":null,"ownerEmail":null,
+             "website":null,"categories":[],"language":null,"copyright":null,"episodes":[]}}"#;
+        let entry: CachedFeed = serde_json::from_str(stored).expect("legacy entry must load");
+        assert_eq!(entry.v, 1);
+        assert!(entry.v < FEED_CACHE_VERSION, "must be treated as stale");
+        assert_eq!(entry.podcast.guid, None);
     }
 
     const ADDR: &str = "31241:916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d:airplay:station:acid-jazz";

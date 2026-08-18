@@ -35,7 +35,30 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   unknown keys on the way in, so the first cut wrote a stamp the store silently
   discarded — the export serializer-drift U4.5 exists to close, met early.
 
+### Added
+- **Feeds' `<podcast:guid>` is now harvested (`show.v1` S0).** The Podcasting-2.0
+  channel GUID — a show's identity independent of the URL serving it — is extracted
+  on fetch and persisted on the subscription. It is what `show.v1` publishes as its
+  NIP-73 `i` tag and what U4.5 keys the podcast harvest on, and it matters because a
+  feed URL is demonstrably unstable: podbean serves the byte-identical document from
+  two hostnames, which is how one show appeared in two places at once. `feed-rs`
+  exposes no extension map, so this is read from the raw feed bytes with `quick-xml`
+  (already an indirect dependency). Measured on an 11-feed profile: 8 carry a guid
+  and all 8 were extracted; the 3 without one genuinely publish none (podbean, the
+  BBC, acast). Accepts the element when its prefix resolves to a known podcast
+  namespace **or** is literally `podcast` — No Agenda binds the prefix to the
+  namespace's GitHub docs page, and a URI-only match would silently drop a guid the
+  feed plainly states. An episode's `<guid>` is never mistaken for the show's.
+
 ### Fixed
+- **The feed cache no longer starves a parser change.** Cache entries now record the
+  parser generation that produced them (`FEED_CACHE_VERSION`). Conditional-GET
+  validators are replayed only for a body the running build knows how to read, so a
+  build that learns to extract a new field re-fetches in full instead of being handed
+  its own stale parse forever. Without it the `podcast:guid` work above would have
+  landed silently: eleven cached bodies would have answered 304 and kept their
+  guid-less parse until each publisher happened to touch their feed. A stale-version
+  entry still paints immediately; only its revalidation is skipped.
 - **Unfollow now names the event as well as the address.** A station deletion
   tagged only the addressable `a` coordinate, and several relay implementations
   honour NIP-09 **by event id** — they accept an `a`-only deletion and go on

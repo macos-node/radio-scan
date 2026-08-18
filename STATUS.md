@@ -339,6 +339,24 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   `a0f86545fcbd` a-duck-in-a-tree) and landed on **all three** relays; replaying
   `resolveStations` against live relay data now yields **0** relay stations, so the
   Stations tab is the 10 local rows only.
+- **`show.v1` S0 — `<podcast:guid>` harvest, BUILT + Linux-verified (2026-08-18).**
+  The prerequisite for the `i` tag (and for U4.5's podcast key). `feed-rs` 2.x has no
+  extension map, so the guid is scanned out of the raw feed bytes with `quick-xml`
+  (promoted from indirect dep), persisted as `Podcast.guid` → `Sub.guid`. Verified on
+  the real 11-feed profile: **8/11 carry a guid, all 8 extracted**; the 3 blanks
+  (podbean/Duck, BBC, acast) publish none — re-checked against the raw XML. Four
+  values match guids read off the live feeds by `curl` before the code existed.
+  **Two things the build map got wrong, corrected in the code:**
+  - *"Bind the namespace URI, not the prefix"* would have dropped No Agenda, which
+    binds `podcast:` to the namespace's **GitHub docs page** rather than the canonical
+    URI. Rule is now: known podcast namespace **or** a literal `podcast:` prefix —
+    with an `<item>`'s own `<guid>` still never mistaken for the channel's.
+  - *The feed cache would have starved the extractor.* The 11 cached bodies predated
+    the field; their ETags would have drawn 304s and returned the old parse forever.
+    `CachedFeed` now carries `FEED_CACHE_VERSION` (entries without it read as v1) and
+    validators are only replayed for a body the running build can read. Confirmed by
+    the run: all 11 bodies re-fetched in full and now read `v: 2`. **This is a general
+    rule for the store — a parse change must bump the version or it lands silently.**
 - **`show.v1` (kind 31242) — open decision #10 SETTLED 2026-08-18.** Podcast follows
   now have a wire form: the feed-shaped sibling of `station.v1`, drafted at
   [`schema/show.v1.json`](schema/show.v1.json) with two fixtures. Addressable,

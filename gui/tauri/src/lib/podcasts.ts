@@ -19,6 +19,11 @@ export interface Sub {
   title: string;
   /** Set when the feed is served from a Nostr npub (see detectNpub). */
   npub?: string;
+  /** Harvested: the feed's `<podcast:guid>` when it carries one — the show's
+   *  URL-independent identity (show.v1's NIP-73 `i` tag, U4.5's podcast key).
+   *  A feed URL is not stable: podbean serves the same document from two
+   *  hostnames, which is how one show ended up listed twice. */
+  guid?: string;
   /** Harvested: unix seconds of the newest episode seen in this feed. Persisted
    *  so "recently updated" ordering is already right on the first paint, before
    *  the feeds re-fetch. Harvest, not user data — every fetch overwrites it
@@ -111,13 +116,14 @@ export function detectNpub(url: string): string | undefined {
 function mkSub(
   url: string,
   title: string,
-  extra?: { npub?: string; latestAt?: number },
+  extra?: { npub?: string; latestAt?: number; guid?: string },
 ): Sub {
   const npub = detectNpub(url) ?? extra?.npub;
   const sub: Sub = { url, title };
   if (npub) sub.npub = npub;
   if (typeof extra?.latestAt === "number" && Number.isFinite(extra.latestAt))
     sub.latestAt = extra.latestAt;
+  if (extra?.guid) sub.guid = extra.guid;
   return sub;
 }
 
@@ -137,7 +143,7 @@ export function parseOpml(xml: string): Sub[] {
   return out;
 }
 
-/** Parse the app's JSON export shape: [{url, title?, npub?, latestAt?}]. */
+/** Parse the app's JSON export shape: [{url, title?, npub?, latestAt?, guid?}]. */
 export function parseSubsJson(data: unknown): Sub[] {
   if (!Array.isArray(data)) throw new Error("expected a JSON array of feeds");
   return data
@@ -148,6 +154,7 @@ export function parseSubsJson(data: unknown): Sub[] {
       return mkSub(url, title, {
         npub: typeof r.npub === "string" ? r.npub : undefined,
         latestAt: typeof r.latestAt === "number" ? r.latestAt : undefined,
+        guid: typeof r.guid === "string" ? r.guid : undefined,
       });
     })
     .filter((s) => s.url);
@@ -177,8 +184,9 @@ export function buildOpml(subs: Sub[], title = "ntune podcasts"): string {
 
 /** Merge incoming subs into existing, deduped by url (incoming wins, first).
  *
- *  One exception: `latestAt` is **harvest, not user data**, so an incoming entry
- *  that lacks it inherits the stamp we already derived rather than wiping it.
+ *  One exception: the **harvest** fields (`latestAt`, `guid`) are not user data, so
+ *  an incoming entry that lacks them inherits what we already derived rather than
+ *  wiping it.
  *  Without that, restoring any export written before the field existed — or one
  *  from another app / an OPML file, which has nowhere to carry it — reset every
  *  feed's newest-episode date and the "Recent" order went flat until each feed
@@ -193,9 +201,15 @@ export function mergeSubs(existing: Sub[], incoming: Sub[]): Sub[] {
   const urls = new Set(fresh.map((s) => s.url));
   return [
     ...fresh.map((s) => {
-      if (s.latestAt != null) return s;
       const prev = prevByUrl.get(s.url);
-      return prev?.latestAt != null ? { ...s, latestAt: prev.latestAt } : s;
+      if (!prev) return s;
+      const latestAt = s.latestAt ?? prev.latestAt;
+      const guid = s.guid ?? prev.guid;
+      if (latestAt === s.latestAt && guid === s.guid) return s;
+      const merged: Sub = { ...s };
+      if (latestAt != null) merged.latestAt = latestAt;
+      if (guid) merged.guid = guid;
+      return merged;
     }),
     ...existing.filter((s) => !urls.has(s.url)),
   ];

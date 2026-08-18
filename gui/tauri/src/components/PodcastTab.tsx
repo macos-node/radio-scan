@@ -371,16 +371,26 @@ export function PodcastTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subUrlKey]);
 
-  // Persist each feed's newest-episode date as it arrives, so "Recent" ordering
-  // is already correct on the next launch's first paint instead of settling as
-  // the prefetch trickles in. Harvest only — the feed always wins.
+  // Persist the harvest as each feed arrives: the newest-episode date (so "Recent"
+  // ordering is right on the next launch's first paint instead of settling as the
+  // prefetch trickles in) and the feed's <podcast:guid> (the show's URL-independent
+  // identity — show.v1's `i` tag and U4.5's podcast key). Harvest only: the feed
+  // always wins, and a field the feed stops carrying is never blanked here.
   useEffect(() => {
     let changed = false;
     const next = subs.map((s) => {
-      const at = latestEpisodeAt(cache[s.url]);
-      if (at == null || at === s.latestAt) return s;
+      const pod = cache[s.url];
+      if (!pod) return s;
+      const at = latestEpisodeAt(pod);
+      const guid = pod.guid ?? undefined;
+      const nextAt = at ?? s.latestAt;
+      const nextGuid = guid ?? s.guid;
+      if (nextAt === s.latestAt && nextGuid === s.guid) return s;
       changed = true;
-      return { ...s, latestAt: at };
+      const updated: Sub = { ...s };
+      if (nextAt != null) updated.latestAt = nextAt;
+      if (nextGuid) updated.guid = nextGuid;
+      return updated;
     });
     if (!changed) return;
     saveSubs(next);

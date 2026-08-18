@@ -225,6 +225,9 @@ export interface Podcast {
   categories: string[];
   language: string | null;
   copyright: string | null;
+  /** `<podcast:guid>` — the Podcasting-2.0 channel GUID: the show's identity
+   *  independent of the URL serving it. Absent on plenty of feeds. */
+  guid: string | null;
   episodes: Episode[];
 }
 

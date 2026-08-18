@@ -100,3 +100,33 @@ describe("mergeSubs", () => {
     expect(merged.find((s) => s.url === "z")?.latestAt).toBeUndefined();
   });
 });
+
+describe("mergeSubs — the harvest slice", () => {
+  const harvested: Sub[] = [
+    { url: "a", title: "Alpha", latestAt: 900, guid: "guid-a" },
+    { url: "b", title: "Bravo", latestAt: 600 },
+  ];
+
+  it("an OPML/old import keeps both harvested fields", () => {
+    const merged = mergeSubs(harvested, [
+      { url: "a", title: "Alpha" },
+      { url: "b", title: "Bravo" },
+    ]);
+    expect(merged.map((s) => [s.latestAt, s.guid])).toEqual([
+      [900, "guid-a"],
+      [600, undefined],
+    ]);
+  });
+
+  it("an incoming guid wins (a re-fetch is authoritative)", () => {
+    const merged = mergeSubs(harvested, [
+      { url: "a", title: "Alpha", guid: "guid-a-moved" },
+    ]);
+    expect(merged[0].guid).toBe("guid-a-moved");
+  });
+
+  it("a feed with no guid anywhere simply has none", () => {
+    const merged = mergeSubs(harvested, [{ url: "z", title: "Zulu" }]);
+    expect(merged.find((s) => s.url === "z")?.guid).toBeUndefined();
+  });
+});
