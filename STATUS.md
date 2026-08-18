@@ -289,6 +289,37 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   restore now lands in the durable stores above, so it wants a re-run rather than
   the original check. (The stale `Needs-verify: macos` markers on U3/U4a are
   corrected in place: both were cleared on macOS 2026-08-05, `1a51e3c` / `aa677a9`.)
+- **List quality-of-life (2026-08-18).** Two small fixes, both on `main`:
+  - **Remove now confirms — podcasts *and* stations.** The hover-✕ removed an entry
+    outright with no undo, sitting exactly where the pointer already was, so a stray
+    click cost a subscription. All four surfaces (list row + card, both tabs) now
+    open a confirm dialog naming the item and its URL, with focus landing on
+    **Cancel**. The station dialog states when removal also publishes a `kind:5`
+    unfollow (`signedIn` prop from App), since that leaves the *published* list too.
+    Escape-to-close went into the shared `Modal`, so all five dialogs gained it.
+  - **Sort by recency.** A **Recent | A–Z | Added** switch beside the list/card
+    toggle, defaulting to **Recent**. Ordering is display-only (`sortSubs` in
+    `lib/podcasts.ts`, unit-tested) — the stored order is never rewritten, so
+    **Added** always recovers it; undated feeds sort last, stably. Each feed's
+    newest-episode date persists on the sub as `latestAt`, so the order is right on
+    the first paint instead of settling as the prefetch trickles in — the **first
+    slice of U4.5's harvest persistence** (re-derived on every fetch, feed always
+    wins), and it rides through JSON import/export. The pref lives in the durable
+    settings store. Two knock-ons: the background prefetch effect is now keyed on the
+    sub-URL *set* rather than the `subs` array, since the `latestAt` write would
+    otherwise cancel and restart it mid-flight; and **the Rust `PodcastSub` struct had
+    to learn the field** — serde drops unknown keys on the way in, so the first
+    install wrote a stamp `save_local_podcasts` silently discarded (in-session order
+    was right, the store stayed bare). That's the **export serializer-drift U4.5
+    exists to close, hit early**: any renderer-side field must be added to the Rust
+    struct in the same change.
+  Verified in the browser preview (tsc + vite + vitest green; sort order, every ✕
+  surface, Escape/Cancel/confirm paths), and in the installed Linux build against the
+  real 11-feed profile: confirm dialogs; Recent order correct in-session (which is
+  what exposed the serde drop above); and, after the struct fix, **all 11 subs carry
+  `latestAt` in `podcasts.json`** — 2026-08-18 back to 2026-08-05, so a cold start
+  paints the right order. No open `Needs-verify` on Linux; macOS/Windows unexercised
+  (frontend + a serde field, no platform-specific path).
 - **Next — v0.2.0 "make it durable" *minor* (U4.5), the headline still unbuilt.**
   The subscription/prefs stores above are the **precursor**; U4.5 is persisting the
   *harvested* slice into them — `station.v1` description + ICY-on-tune-in for

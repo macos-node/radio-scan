@@ -617,6 +617,7 @@ export default function App() {
                 loading={loading}
                 onTune={tune}
                 onRemove={removeStation}
+                signedIn={!!identity}
                 icy={icyByUrl}
               />
             </section>

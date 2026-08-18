@@ -19,6 +19,11 @@ export interface Sub {
   title: string;
   /** Set when the feed is served from a Nostr npub (see detectNpub). */
   npub?: string;
+  /** Harvested: unix seconds of the newest episode seen in this feed. Persisted
+   *  so "recently updated" ordering is already right on the first paint, before
+   *  the feeds re-fetch. Harvest, not user data — every fetch overwrites it
+   *  (the feed always wins). */
+  latestAt?: number;
 }
 
 /** Legacy webview key — now only a migration source + pre-init fallback mirror. */
@@ -103,9 +108,17 @@ export function detectNpub(url: string): string | undefined {
   return url.match(NPUB_RE)?.[0].toLowerCase();
 }
 
-function mkSub(url: string, title: string, existingNpub?: string): Sub {
-  const npub = detectNpub(url) ?? existingNpub;
-  return npub ? { url, title, npub } : { url, title };
+function mkSub(
+  url: string,
+  title: string,
+  extra?: { npub?: string; latestAt?: number },
+): Sub {
+  const npub = detectNpub(url) ?? extra?.npub;
+  const sub: Sub = { url, title };
+  if (npub) sub.npub = npub;
+  if (typeof extra?.latestAt === "number" && Number.isFinite(extra.latestAt))
+    sub.latestAt = extra.latestAt;
+  return sub;
 }
 
 /** Parse an OPML subscription list (the universal feed-reader export) into subs.
@@ -124,7 +137,7 @@ export function parseOpml(xml: string): Sub[] {
   return out;
 }
 
-/** Parse the app's JSON export shape: [{url, title?, npub?}]. */
+/** Parse the app's JSON export shape: [{url, title?, npub?, latestAt?}]. */
 export function parseSubsJson(data: unknown): Sub[] {
   if (!Array.isArray(data)) throw new Error("expected a JSON array of feeds");
   return data
@@ -132,7 +145,10 @@ export function parseSubsJson(data: unknown): Sub[] {
     .map((r) => {
       const url = String(r.url ?? "").trim();
       const title = String(r.title ?? "").trim() || url;
-      return mkSub(url, title, typeof r.npub === "string" ? r.npub : undefined);
+      return mkSub(url, title, {
+        npub: typeof r.npub === "string" ? r.npub : undefined,
+        latestAt: typeof r.latestAt === "number" ? r.latestAt : undefined,
+      });
     })
     .filter((s) => s.url);
 }
@@ -167,4 +183,55 @@ export function mergeSubs(existing: Sub[], incoming: Sub[]): Sub[] {
   );
   const urls = new Set(fresh.map((s) => s.url));
   return [...fresh, ...existing.filter((s) => !urls.has(s.url))];
+}
+
+/** How the Podcasts tab orders the list. `recent` = newest episode first (the
+ *  default: a feed that just published rises to the top); `title` = A–Z;
+ *  `added` = the stored order, newest subscription first. Display-only — the
+ *  stored order is never rewritten, so `added` always survives. */
+export type PodcastSort = "recent" | "title" | "added";
+
+export function isPodcastSort(v: unknown): v is PodcastSort {
+  return v === "recent" || v === "title" || v === "added";
+}
+
+/** Newest episode date in a fetched feed, in unix seconds. Feeds are usually
+ *  newest-first but that isn't guaranteed, so take the max rather than [0]. */
+export function latestEpisodeAt(
+  pod: { episodes: { publishedAt: number | null }[] } | undefined,
+): number | null {
+  if (!pod) return null;
+  let max: number | null = null;
+  for (const ep of pod.episodes) {
+    if (ep.publishedAt != null && (max == null || ep.publishedAt > max))
+      max = ep.publishedAt;
+  }
+  return max;
+}
+
+/** Order subs for display. `latestOf` resolves a sub's newest-episode time —
+ *  the caller passes the freshly fetched feed when it has one, falling back to
+ *  the persisted `latestAt`. Feeds with no known date sort last, keeping their
+ *  stored order (Array#sort is stable), so an unfetched list never scrambles. */
+export function sortSubs(
+  subs: Sub[],
+  mode: PodcastSort,
+  latestOf: (s: Sub) => number | null = (s) => s.latestAt ?? null,
+): Sub[] {
+  const out = [...subs];
+  if (mode === "title") {
+    out.sort((a, b) =>
+      a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+    );
+  } else if (mode === "recent") {
+    out.sort((a, b) => {
+      const x = latestOf(a);
+      const y = latestOf(b);
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return y - x;
+    });
+  }
+  return out;
 }

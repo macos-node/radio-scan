@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -23,22 +23,28 @@ import {
   type Podcast,
 } from "../lib/tauri";
 import {
+  isPodcastSort,
+  latestEpisodeAt,
   loadSubs,
   mergeSubs,
   parseOpml,
   parseSubsJson,
   saveSubs,
+  sortSubs,
   PODCASTS_EVENT,
+  type PodcastSort,
   type Sub,
 } from "../lib/podcasts";
 import {
   getSetting,
   setSetting,
   SETTINGS_EVENT,
+  PODCAST_SORT_KEY,
   PODCAST_VIEW_KEY,
 } from "../lib/settings";
 import { podcastIconKey } from "../lib/mediaIcon";
 import { MediaGlyph } from "./MediaGlyph";
+import { Modal } from "./Modal";
 import { cn } from "../lib/cn";
 
 type View = "list" | "cards";
@@ -46,6 +52,19 @@ type View = "list" | "cards";
 function loadView(): View {
   return getSetting(PODCAST_VIEW_KEY) === "cards" ? "cards" : "list";
 }
+
+/** Ordering pref — defaults to `recent` so a freshly published feed surfaces
+ *  without the user asking. */
+function loadSort(): PodcastSort {
+  const v = getSetting(PODCAST_SORT_KEY);
+  return isPodcastSort(v) ? v : "recent";
+}
+
+const SORTS: { id: PodcastSort; label: string; title: string }[] = [
+  { id: "recent", label: "Recent", title: "Newest episode first" },
+  { id: "title", label: "A–Z", title: "By title" },
+  { id: "added", label: "Added", title: "Newest subscription first" },
+];
 
 function fmtDuration(secs: number | null): string {
   if (!secs) return "";
@@ -201,6 +220,7 @@ export function PodcastTab({
 }) {
   const [subs, setSubs] = useState<Sub[]>(loadSubs);
   const [view, setView] = useState<View>(loadView);
+  const [sort, setSort] = useState<PodcastSort>(loadSort);
   const [addUrl, setAddUrl] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -211,6 +231,11 @@ export function PodcastTab({
   const [loadingUrl, setLoadingUrl] = useState<string | null>(null);
   // Feed URL just copied to the clipboard — briefly shows a ✓ on that row.
   const [copied, setCopied] = useState<string | null>(null);
+  // Feed the user clicked ✕ on — unsubscribing waits on the confirm dialog. The
+  // ✕ sits under the pointer on a hover-revealed row, so a stray click used to
+  // drop a subscription outright with no undo.
+  const [confirmUrl, setConfirmUrl] = useState<string | null>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
   // Re-sync when a restore (the app-level Backup dialog) writes subs from
   // outside this tab — same-document localStorage writes don't fire `storage`.
@@ -220,9 +245,12 @@ export function PodcastTab({
     return () => window.removeEventListener(PODCASTS_EVENT, onChange);
   }, []);
 
-  // Re-read the view pref once the durable settings store finishes loading.
+  // Re-read the view + sort prefs once the durable settings store finishes loading.
   useEffect(() => {
-    const onSettings = () => setView(loadView());
+    const onSettings = () => {
+      setView(loadView());
+      setSort(loadSort());
+    };
     window.addEventListener(SETTINGS_EVENT, onSettings);
     return () => window.removeEventListener(SETTINGS_EVENT, onSettings);
   }, []);
@@ -230,6 +258,17 @@ export function PodcastTab({
   const chooseView = (v: View) => {
     setView(v);
     setSetting(PODCAST_VIEW_KEY, v);
+  };
+
+  // Land focus on Cancel, not on the destructive button — a stray Enter or
+  // Space right after the mis-click then dismisses rather than confirms.
+  useEffect(() => {
+    if (confirmUrl) cancelRef.current?.focus();
+  }, [confirmUrl]);
+
+  const chooseSort = (v: PodcastSort) => {
+    setSort(v);
+    setSetting(PODCAST_SORT_KEY, v);
   };
 
   const copy = (url: string) => {
@@ -279,19 +318,25 @@ export function PodcastTab({
   };
 
   // Prefetch every subscription's feed in the background so card/list metadata
-  // (language, copyright, identity) shows without expanding. Runs on mount and
-  // when subs change; skips anything already in the session cache; errors are
-  // swallowed here (expanding a feed re-fetches via fetchInto and surfaces them).
+  // (language, copyright, identity, newest-episode date) shows without expanding.
+  // Skips anything already in the session cache; errors are swallowed here
+  // (expanding a feed re-fetches via fetchInto and surfaces them).
+  //
+  // Keyed on the URL SET, not on `subs` identity: the latestAt reconcile below
+  // rewrites `subs` after every fetch, and a dep on the array would cancel and
+  // restart this loop each time — re-fetching whichever feed was in flight.
+  const subUrlKey = subs.map((s) => s.url).join("\n");
   useEffect(() => {
     let cancelled = false;
+    const urls = subUrlKey ? subUrlKey.split("\n") : [];
     (async () => {
-      for (const s of subs) {
+      for (const url of urls) {
         if (cancelled) return;
-        if (podCache[s.url]) continue;
+        if (podCache[url]) continue;
         try {
-          const p = await fetchPodcast(s.url);
+          const p = await fetchPodcast(url);
           if (cancelled) return;
-          putCache(s.url, p);
+          putCache(url, p);
         } catch {
           /* ignore prefetch errors */
         }
@@ -301,7 +346,31 @@ export function PodcastTab({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subs]);
+  }, [subUrlKey]);
+
+  // Persist each feed's newest-episode date as it arrives, so "Recent" ordering
+  // is already correct on the next launch's first paint instead of settling as
+  // the prefetch trickles in. Harvest only — the feed always wins.
+  useEffect(() => {
+    let changed = false;
+    const next = subs.map((s) => {
+      const at = latestEpisodeAt(cache[s.url]);
+      if (at == null || at === s.latestAt) return s;
+      changed = true;
+      return { ...s, latestAt: at };
+    });
+    if (!changed) return;
+    saveSubs(next);
+    setSubs(next);
+  }, [cache, subs]);
+
+  // Display order. Falls back to the persisted stamp for feeds not fetched yet;
+  // `sortSubs` is stable, so unknown-date feeds hold their stored order.
+  const ordered = useMemo(
+    () =>
+      sortSubs(subs, sort, (s) => latestEpisodeAt(cache[s.url]) ?? s.latestAt ?? null),
+    [subs, sort, cache],
+  );
 
   const fetchInto = async (url: string) => {
     setLoadingUrl(url);
@@ -347,6 +416,7 @@ export function PodcastTab({
       return next;
     });
     if (expanded === url) setExpanded(null);
+    setConfirmUrl(null);
   };
 
   const toggle = (url: string) => {
@@ -362,6 +432,7 @@ export function PodcastTab({
     "flex-1 rounded-sm border border-surface bg-surface px-2.5 py-1.5 font-mono text-xs text-fg outline-none focus:border-accent";
 
   const expandedSub = expanded ? subs.find((s) => s.url === expanded) : undefined;
+  const confirmSub = confirmUrl ? subs.find((s) => s.url === confirmUrl) : undefined;
 
   return (
     <div className="flex flex-col">
@@ -415,12 +486,31 @@ export function PodcastTab({
         </div>
       ) : (
         <>
-          {/* Count + list/card view toggle */}
+          {/* Count + sort + list/card view toggle */}
           <div className="flex items-center gap-2 px-3 pb-1">
             <span className="font-mono text-[10px] text-muted/60">
               {subs.length} subscribed
             </span>
             <div className="ml-auto flex items-center gap-0.5">
+              {SORTS.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => chooseSort(o.id)}
+                  title={o.title}
+                  aria-pressed={sort === o.id}
+                  className={cn(
+                    "rounded-sm px-1.5 py-0.5 text-[10px] transition-colors",
+                    sort === o.id
+                      ? "bg-surface text-fg"
+                      : "text-muted hover:bg-surfaceHover hover:text-fg",
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-0.5">
               {(
                 [
                   { id: "list", icon: <List size={13} />, label: "List view" },
@@ -449,7 +539,7 @@ export function PodcastTab({
 
           {view === "list" ? (
             <ul className="flex flex-col">
-              {subs.map((s) => {
+              {ordered.map((s) => {
                 const open = expanded === s.url;
                 const pod = cache[s.url];
                 return (
@@ -519,7 +609,7 @@ export function PodcastTab({
                       </button>
                       <button
                         type="button"
-                        onClick={() => remove(s.url)}
+                        onClick={() => setConfirmUrl(s.url)}
                         title="Unsubscribe"
                         aria-label={`Unsubscribe ${s.title}`}
                         className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
@@ -549,7 +639,7 @@ export function PodcastTab({
             <div className="px-3 pb-3">
               <div className="overflow-x-auto pb-1">
               <div className="flex items-stretch gap-2">
-                {subs.map((s) => {
+                {ordered.map((s) => {
                   const open = expanded === s.url;
                   const pod = cache[s.url];
                   return (
@@ -603,7 +693,7 @@ export function PodcastTab({
                       </button>
                       <button
                         type="button"
-                        onClick={() => remove(s.url)}
+                        onClick={() => setConfirmUrl(s.url)}
                         title="Unsubscribe"
                         aria-label={`Unsubscribe ${s.title}`}
                         className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-sm bg-panel/80 text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
@@ -651,6 +741,41 @@ export function PodcastTab({
             </div>
           )}
         </>
+      )}
+
+      {/* Unsubscribing is confirmed — the hover-✕ sits right where the pointer
+          already is, and there's no undo once the sub is gone. */}
+      {confirmSub && (
+        <Modal title="Unsubscribe?" onClose={() => setConfirmUrl(null)}>
+          <p className="text-sm text-fg">
+            Remove <span className="font-medium">{confirmSub.title}</span> from
+            your podcasts?
+          </p>
+          <p className="mt-1.5 break-all font-mono text-[10px] text-muted">
+            {confirmSub.url}
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            Only the subscription goes — nothing is deleted from the feed or from
+            disk, and you can add the URL back at any time.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              ref={cancelRef}
+              onClick={() => setConfirmUrl(null)}
+              className="rounded-sm border border-surface px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => remove(confirmSub.url)}
+              className="rounded-sm bg-alert px-3 py-1.5 text-xs font-medium text-bg transition-opacity hover:opacity-90"
+            >
+              Unsubscribe
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

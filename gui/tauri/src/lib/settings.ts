@@ -12,9 +12,16 @@ export const THEME_KEY = "ntune.theme";
 export const VOLUME_KEY = "ntune.volume";
 export const STATION_VIEW_KEY = "ntune.stationView";
 export const PODCAST_VIEW_KEY = "ntune.podcastView";
+export const PODCAST_SORT_KEY = "ntune.podcastSort";
 
 /** The prefs migrated from localStorage on the first launch after this store. */
-const MIGRATE_KEYS = [THEME_KEY, VOLUME_KEY, STATION_VIEW_KEY, PODCAST_VIEW_KEY];
+const MIGRATE_KEYS = [
+  THEME_KEY,
+  VOLUME_KEY,
+  STATION_VIEW_KEY,
+  PODCAST_VIEW_KEY,
+  PODCAST_SORT_KEY,
+];
 
 /** Dispatched after initSettings() loads the durable store, so mounted components
  *  re-read the now-authoritative values (same-document localStorage writes don't

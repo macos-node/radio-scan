@@ -20,7 +20,30 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   compatibility contract for import/export from here on. `image` URL stored, not
   yet rendered. **Export == persisted state**, closing the serializer-drift.
 
+### Added
+- **Podcasts sort by recency.** The Podcasts tab gets a **Recent | A–Z | Added**
+  order switch beside the list/card toggle, defaulting to **Recent** — the feed
+  that published most recently sits at the top. Each feed's newest-episode date is
+  harvested on fetch and persisted on the sub (`latestAt`), so the order is already
+  right on the first paint of the next launch rather than settling as the
+  background prefetch trickles in; feeds with no known date keep their stored order
+  at the bottom. The choice persists in the durable settings store
+  (`ntune.podcastSort`). Ordering is display-only — the stored order is never
+  rewritten, so **Added** always gets it back. (A first, small slice of the U4.5
+  harvest-persistence above: harvested, re-derived on every fetch, feed always wins.)
+  Persisting it needed the Rust `PodcastSub` struct to carry the field: serde drops
+  unknown keys on the way in, so the first cut wrote a stamp the store silently
+  discarded — the export serializer-drift U4.5 exists to close, met early.
+
 ### Fixed
+- **Removing a podcast or station now asks first.** The hover-✕ on a row/card
+  removed the subscription outright, with no undo — and it sits exactly where the
+  pointer already is, so a stray click silently dropped a feed. Both lists now open
+  a confirm dialog naming the item and its URL; focus lands on **Cancel**, and
+  Escape or the backdrop dismisses. The station dialog also says when removal will
+  publish a Nostr `kind:5` unfollow (i.e. when signed in), since that leaves the
+  published list too. Escape-to-close was added to the shared `Modal`, so every
+  dialog gets it.
 - **Podcast subscriptions now persist durably.** They moved off webview
   `localStorage` into a Rust-written `podcasts.json` (a synchronous `std::fs::write`
   next to `stations.json`), so a subscription lands on disk the instant it's added

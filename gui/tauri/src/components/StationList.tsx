@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy, LayoutGrid, List, Loader2, Radio, X } from "lucide-react";
 import { copyText, type IcyInfo, type Station } from "../lib/tauri";
 import { stationIconKey } from "../lib/mediaIcon";
@@ -9,6 +9,7 @@ import {
   STATION_VIEW_KEY,
 } from "../lib/settings";
 import { MediaGlyph } from "./MediaGlyph";
+import { Modal } from "./Modal";
 import { cn } from "../lib/cn";
 
 type View = "list" | "cards";
@@ -20,8 +21,9 @@ function loadView(): View {
 /** The tuner's station list. Rows are the local station store (seeded on first
  *  run) overlaid with any Nostr `station.v1` events. When `onRemove` is provided
  *  each row gets a hover ✕ that removes it from the local store (and, if signed
- *  in, publishes a kind:5 unfollow so the relay overlay stays in step). Two
- *  views — a dense list and a glyph card grid (icons from stationIconKey). */
+ *  in, publishes a kind:5 unfollow so the relay overlay stays in step) — behind a
+ *  confirm, since the ✕ sits under the pointer and there's no undo. Two views —
+ *  a dense list and a glyph card grid (icons from stationIconKey). */
 export function StationList({
   stations,
   currentSlug,
@@ -30,6 +32,7 @@ export function StationList({
   onTune,
   onRemove,
   icy,
+  signedIn,
 }: {
   stations: Station[];
   currentSlug: string | null;
@@ -38,10 +41,15 @@ export function StationList({
   onTune: (s: Station) => void;
   onRemove?: (s: Station) => void;
   icy?: Record<string, IcyInfo>;
+  /** Signed in — removing also publishes a kind:5 unfollow, so the confirm says so. */
+  signedIn?: boolean;
 }) {
   const [view, setView] = useState<View>(loadView);
   // Slug of the row whose URL was just copied — briefly shows a ✓.
   const [copied, setCopied] = useState<string | null>(null);
+  // Station the user clicked ✕ on — removal waits on the confirm dialog.
+  const [confirmSlug, setConfirmSlug] = useState<string | null>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
   // Re-read once the durable settings store finishes loading (initSettings),
   // so a migrated / non-graceful-stale view pref lands even though this list is
@@ -63,6 +71,12 @@ export function StationList({
     return { description: s.description || info?.name || null, homepage };
   };
 
+  // Focus Cancel, not the destructive button — a stray Enter/Space right after
+  // the mis-click then dismisses rather than confirms.
+  useEffect(() => {
+    if (confirmSlug) cancelRef.current?.focus();
+  }, [confirmSlug]);
+
   const chooseView = (v: View) => {
     setView(v);
     setSetting(STATION_VIEW_KEY, v);
@@ -75,6 +89,10 @@ export function StationList({
       })
       .catch((e) => console.error("copy failed", e));
   };
+
+  const confirmStation = confirmSlug
+    ? stations.find((s) => s.slug === confirmSlug)
+    : undefined;
 
   if (loading) {
     return (
@@ -205,7 +223,7 @@ export function StationList({
                 {onRemove && (
                   <button
                     type="button"
-                    onClick={() => onRemove(s)}
+                    onClick={() => setConfirmSlug(s.slug)}
                     title={`Remove ${s.name}`}
                     aria-label={`Remove ${s.name}`}
                     className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
@@ -277,7 +295,7 @@ export function StationList({
                   {onRemove && (
                     <button
                       type="button"
-                      onClick={() => onRemove(s)}
+                      onClick={() => setConfirmSlug(s.slug)}
                       title={`Remove ${s.name}`}
                       aria-label={`Remove ${s.name}`}
                       className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-sm bg-panel/80 text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
@@ -291,6 +309,46 @@ export function StationList({
           </div>
           </div>
         </div>
+      )}
+
+      {/* Removal is confirmed — the hover-✕ sits right where the pointer already
+          is, and a removed station is gone from the local store (plus a kind:5
+          unfollow when signed in). */}
+      {onRemove && confirmStation && (
+        <Modal title="Remove station?" onClose={() => setConfirmSlug(null)}>
+          <p className="text-sm text-fg">
+            Remove <span className="font-medium">{confirmStation.name}</span> from
+            your stations?
+          </p>
+          <p className="mt-1.5 break-all font-mono text-[10px] text-muted">
+            {confirmStation.url}
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            {signedIn
+              ? "It's dropped from this device and a Nostr unfollow (kind:5) is published, so it also leaves your published station list. You can follow it again at any time."
+              : "It's dropped from this device only — you can add the stream URL back at any time."}
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              ref={cancelRef}
+              onClick={() => setConfirmSlug(null)}
+              className="rounded-sm border border-surface px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onRemove(confirmStation);
+                setConfirmSlug(null);
+              }}
+              className="rounded-sm bg-alert px-3 py-1.5 text-xs font-medium text-bg transition-opacity hover:opacity-90"
+            >
+              Remove
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

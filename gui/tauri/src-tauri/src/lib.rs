@@ -266,11 +266,19 @@ fn import_local_stations(
 // subs into this store on the first launch after the change.
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct PodcastSub {
     url: String,
     title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     npub: Option<String>,
+    /// Harvested: unix seconds of the newest episode seen in this feed, so the
+    /// Podcasts tab's "Recent" order is right on the first paint instead of
+    /// settling as the background prefetch trickles in. Every field the renderer
+    /// sends must exist here — serde drops unknown keys on the way in, which is
+    /// how this stamp silently never reached disk the first time round.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    latest_at: Option<i64>,
 }
 
 fn podcasts_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {

@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { X } from "lucide-react";
 
-/** Minimal centered overlay dialog. Click the backdrop or ✕ to dismiss. */
+/** Minimal centered overlay dialog. Click the backdrop, press Escape, or ✕ to
+ *  dismiss. */
 export function Modal({
   title,
   onClose,
@@ -11,6 +12,16 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
+  // Escape dismisses — the reflex for any dialog, and the safe way out of a
+  // destructive confirm.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
