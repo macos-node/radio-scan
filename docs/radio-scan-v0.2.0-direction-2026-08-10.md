@@ -164,6 +164,18 @@ of the work, not after:
     it must be: of six live subscriptions sampled, four carry a `podcast:guid`
     (podhome, yellowball, fountain.fm, nashownotes) and two do not — the BBC's, and
     podbean's, the very show that motivated the contract.
+    *Second measurement (macOS, 2026-08-18, a 29-sub profile):* all **four** duplicate
+    pairs in that library share an identical `<podcast:guid>` — Bitcoin And
+    (podhome = soundcloud), Once Bitten! and TFTC (fountain.fm = anchor.fm), Closed
+    Network Privacy (yellowball = anchor.fm) — while every one of the 29 URLs is
+    distinct and two pairs disagree on title. So guid is not merely the *preferred*
+    cross-user key; locally it is the **only** key that collapses a duplicate. The
+    Tier-A harvest therefore earns a second job — dedupe in the Podcasts tab, not just
+    identity on the wire — S0 has since built the extractor, so what remains is the
+    collapsing step, not the harvest. Note the asymmetry this exposes: the feeds that carry a guid
+    are the ones needing dedupe, while the two that lack one are the ones that
+    motivated the contract, so an optional `i` tag remains right and a local dedupe
+    must degrade to URL when it is absent.
   - **Harvest is not wire.** The Tier-A identity U4.5 persists (author, categories,
     language, copyright, website, email, funding, value) stays local. The event
     publishes the *follow*; the feed remains the authority on itself, and any

@@ -334,11 +334,15 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   the add dialog's soft warning — the relay copy is what others read; inconclusive
   probes still pass), and the underlying gap is recorded as **open decision #10** in
   the v0.2.0 direction doc — *podcast follows have no wire form*, leaning to a sibling
-  **`show.v1`** (31242) rather than overloading `station.v1`. **Resolved 2026-08-18:**
-  the two `kind:5` deletes were published from the app (`b6835db6fa53` on-the-wire,
-  `a0f86545fcbd` a-duck-in-a-tree) and landed on **all three** relays; replaying
-  `resolveStations` against live relay data now yields **0** relay stations, so the
-  Stations tab is the 10 local rows only.
+  **`show.v1`** (31242) rather than overloading `station.v1`. **Resolved 2026-08-18,
+  in two steps — the first of which only looked like it worked.** The app's `kind:5`
+  deletes (`b6835db6fa53` on-the-wire, `a0f86545fcbd` a-duck-in-a-tree) were `a`-only:
+  they cleared the *client* view, `resolveStations` yielding 0 relay stations, which
+  reads as done. They did **not** clear the wire — `relay.fizx.uk` went on serving
+  both target events for another ~10 h, so every other client still saw two untunable
+  feeds in the station space. An `e`-tagged `kind:5` published out-of-band
+  (`nak --prompt-sec`) finished it; verified by fetching each id from all three relays
+  (0/0/0), leaving 5 genuine mounts published. See the NIP-09 bullet below.
 - **`show.v1` S4 — FIRST LIVE PUBLISH VERIFIED (2026-08-19, Linux).** Followed
   *No Agenda Show* from the installed build: event `ad61c99d639b…` is on **all three
   relays**, and a `nak` read-back diffs **tag-for-tag identical** to
@@ -361,9 +365,12 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   2026-08-19.** The unfollow of the show above published `b85b4216a2a2` with **both**
   targets (`a` coordinate + `e` id `ad61c99d…`) to all three relays, and **fizx.uk
   dropped the event**: 0 `show.v1` served, `#i` discovery returns nothing. The same
-  session is its own control group — the 7 stations deleted with `a`-only tags on
-  08-06/08-18 are **still served** by that relay (5 after replaceable-dedupe), while
-  nos.lol has 0 of both. Same relay, same author, same day, one variable. This turns
+  session is its own control group — the stations deleted with `a`-only tags on
+  08-06/08-18 were **still served** by that relay, while nos.lol has 0 of both.
+  (*Correction, macOS:* the count read 5 rather than 7 not because of
+  replaceable-dedupe — all 7 carried distinct `d` values — but because the macOS
+  session had cleared 2 of them hours earlier with an `e`-tagged `kind:5`; see the
+  station-side A/B below. The 5 that remain are the genuine mounts.) Same relay, same author, same day, one variable. This turns
   the 2026-08-18 *inference* into a measurement and validates `24c874d` on live
   infrastructure. **Two consequences:** (1) tagging both targets is **required in
   practice** for the suite's own hub — any future retractable kind should do it from
@@ -472,9 +479,19 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   a local-only row has no published event and stays `a`-only. ntune was never
   affected — `resolveStations` filters deletions client-side — but any other client
   reading that relay was. Unit-tested both sides (Rust `deletion_tags`, TS
-  `parseStation`/`resolveStations`). **Not retroactive:** the existing tombstones on
-  `relay.fizx.uk` stay until a future unfollow re-issues them or the relay's NIP-09
-  support is checked server-side (root there is macOS-only).
+  `parseStation`/`resolveStations`). **Measured on macOS 2026-08-18 — the same two
+  events, as a controlled A/B:** the `a`-only deletes of 10:53 left `7116cb48…` and
+  `4b10cd45…` still served by `relay.fizx.uk` (nos.lol + primal had dropped theirs);
+  a `kind:5` naming both `e` ids removed them from all three. `relay.fizx.uk`
+  therefore honours NIP-09 **by id** and ignores it **by address** — this fix's
+  premise, confirmed on the hub that motivated it rather than inferred from the
+  discrepancy. **Not retroactive**, and there is a gap the app cannot close today:
+  once a deletion is issued, `resolveStations` hides the row, so no ✕ remains to
+  re-issue from — and `publish_station`'s non-audio refusal (`805ef10`) blocks
+  re-adding a feed row to obtain a fresh event. The only exit is out-of-band
+  (`nak event -k 5 -e <id> --prompt-sec`, which is how these two were cleared). A
+  *republish-tombstone* affordance — or a deletion audit that re-reads the wire and
+  re-issues what a relay is still serving — would close it.
 - **Feed body cache — U4.5 slice 4, BUILT + Linux-verified (2026-08-18).** The
   Podcasts tab used to refetch all eleven feeds from a blank slate on every launch —
   its cache was a module-level object in `PodcastTab.tsx` that died with the process.
@@ -490,6 +507,22 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   refresh pass tracks *fetched this session* rather than *present in cache*, or a
   disk-primed row would look fetched and never see today's episodes. Design +
   decisions recorded in the v0.2.0 direction doc § the feed body cache.
+- **`podcast:guid` dedupes the local library too (macOS, 2026-08-18).** A 29-sub
+  profile carries **four duplicate pairs** — the same show subscribed twice under
+  different hosts — and all 29 URLs are distinct, so URL-keyed dedupe sees nothing:
+  Bitcoin And (podhome = soundcloud), Once Bitten! and TFTC (fountain.fm = anchor.fm),
+  Closed Network Privacy (yellowball = anchor.fm). **All four pairs share an identical
+  `<podcast:guid>`**, and two of them differ in *title* across the pair
+  ("Bitcoin And . . ." vs "Bitcoin And | Bitcoin & Economic News"), so neither URL nor
+  title collapses them — guid is the only key that does. This gives U4.5's Tier-A
+  `podcast:guid` harvest a second job beyond wire identity: **collapsing duplicates in
+  the Podcasts tab** — and S0 (`553feb1`) has since built the extractor, so the value
+  is already on `Sub.guid`; only the collapsing is missing. **`mergeFollows` does not
+  do it:** it maps `subs` 1:1, using the guid to match a sub to a *published show*,
+  never to fold two subs together. So a duplicate pair still renders twice — and once
+  either is followed, both rows match the same `Show` via `byGuid` and both render as
+  `following` for a single published follow. Recorded under decision #10 in the
+  direction doc.
 - **Next — v0.2.0 "make it durable" *minor* (U4.5), the headline still unbuilt.**
   The subscription/prefs stores above are the **precursor**; U4.5 is persisting the
   *harvested* slice into them — `station.v1` description + ICY-on-tune-in for
