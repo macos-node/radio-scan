@@ -36,6 +36,16 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   discarded — the export serializer-drift U4.5 exists to close, met early.
 
 ### Fixed
+- **Unfollow now names the event as well as the address.** A station deletion
+  tagged only the addressable `a` coordinate, and several relay implementations
+  honour NIP-09 **by event id** — they accept an `a`-only deletion and go on
+  serving the event. Measured on the suite's own hub 2026-08-18: `relay.fizx.uk`
+  was still serving all 7 stations it had been told to delete, while nos.lol had
+  dropped them. The kind:5 now carries an `e` tag with the id of the event being
+  deleted whenever the row came from a relay (a local-only row has no published
+  event to name, and stays `a`-only). ntune itself was never affected — it filters
+  deletions client-side in `resolveStations` — but anything else reading that relay
+  was.
 - **A feed URL can no longer be published as a station.** `publish_station` now
   probes what the URL actually serves and refuses a conclusively non-audio
   content-type (`*/xml`, `rss`, `html`, `json`), pointing at the Podcasts tab

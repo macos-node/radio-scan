@@ -40,6 +40,11 @@ export interface Station {
   /** Optional human description — the station.v1 event *content* (plain text).
    *  Feed-authoritative like the podcast harvest; absent on bare follows. */
   description: string | null;
+  /** Relay-sourced only: the id of the kind:31241 event this row came from, so an
+   *  unfollow can name it in an `e` tag as well as the `a` coordinate. Absent for
+   *  seed / local-store rows, which were never published. Never persisted — the
+   *  Rust store's Station struct has no such field, so it drops on the way in. */
+  eventId?: string;
 }
 
 /** Parse an imported JSON array into Stations — accepts the app's own export
@@ -103,6 +108,7 @@ export function parseStation(ev: NostrEvent): Station | null {
     bitrate: Number.isFinite(br) ? br : null,
     tags: all(ev, "t"),
     description: ev.content?.trim() || null,
+    eventId: ev.id,
   };
 }
 

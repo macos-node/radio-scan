@@ -134,12 +134,21 @@ export default function App() {
   // users) overlay on top, deduped by url. Local-first so an add always shows.
   const usingRelay = relayStations.length > 0;
   const stations = useMemo(() => {
+    // A station usually exists in BOTH stores — added locally, then published —
+    // and the local copy wins the dedupe. Carry the relay twin's event id across
+    // so an unfollow can still name the concrete event in an `e` tag; without
+    // this, the common case would only ever get the `a` coordinate.
+    const relayIdByUrl = new Map<string, string>();
+    for (const r of relayStations) {
+      if (r.eventId) relayIdByUrl.set(r.url, r.eventId);
+    }
     const seen = new Set<string>();
     const out: Station[] = [];
     for (const s of [...localStations, ...relayStations]) {
       if (seen.has(s.url)) continue;
       seen.add(s.url);
-      out.push(s);
+      const eventId = s.eventId ?? relayIdByUrl.get(s.url);
+      out.push(eventId ? { ...s, eventId } : s);
     }
     return out;
   }, [localStations, relayStations]);
@@ -216,7 +225,9 @@ export default function App() {
         console.error("remove_local_station failed", e),
       );
       if (identity) {
-        unfollowStation(s.slug).catch((e) =>
+        // eventId is present when the row came from (or matched) a relay event —
+        // it makes the deletion legible to relays that only delete by id.
+        unfollowStation(s.slug, s.eventId).catch((e) =>
           console.error("unfollow failed", e),
         );
       }

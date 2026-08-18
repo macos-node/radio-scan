@@ -341,9 +341,20 @@ export function publishStation(input: StationInput): Promise<PublishResult> {
   });
 }
 
-/** Unfollow a station — publish a kind:5 deletion of its `station.v1`. */
-export function unfollowStation(slug: string): Promise<PublishResult> {
-  return invoke<PublishResult>("unfollow_station", { slug, relays: RELAYS });
+/** Unfollow a station — publish a kind:5 deletion of its `station.v1`.
+ *
+ *  Pass `eventId` (the id of the kind:31241 event being deleted) whenever the row
+ *  came from a relay: NIP-09 lets a deletion name both the addressable `a`
+ *  coordinate and the concrete `e` id, and several relay implementations only
+ *  honour deletion **by event id**. Measured 2026-08-18 on the suite's own hub —
+ *  `relay.fizx.uk` accepted a-only deletions and kept serving every tombstoned
+ *  station; nos.lol dropped them. Clients that filter deletions themselves (ntune
+ *  does) were fine either way; anything trusting the relay was not. */
+export function unfollowStation(
+  slug: string,
+  eventId?: string,
+): Promise<PublishResult> {
+  return invoke<PublishResult>("unfollow_station", { slug, eventId, relays: RELAYS });
 }
 
 // --- favorites (local curated log) ------------------------------------------

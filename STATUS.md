@@ -334,8 +334,24 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   the add dialog's soft warning — the relay copy is what others read; inconclusive
   probes still pass), and the underlying gap is recorded as **open decision #10** in
   the v0.2.0 direction doc — *podcast follows have no wire form*, leaning to a sibling
-  **`show.v1`** (31242) rather than overloading `station.v1`. **Still open:** the two
-  stale events need a signed-in ✕ to publish their `kind:5`.
+  **`show.v1`** (31242) rather than overloading `station.v1`. **Resolved 2026-08-18:**
+  the two `kind:5` deletes were published from the app (`b6835db6fa53` on-the-wire,
+  `a0f86545fcbd` a-duck-in-a-tree) and landed on **all three** relays; replaying
+  `resolveStations` against live relay data now yields **0** relay stations, so the
+  Stations tab is the 10 local rows only.
+- **NIP-09 deletion is id-based on some relays (2026-08-18).** Fallout from the
+  above: `relay.fizx.uk` **accepted** every station deletion and kept serving the
+  targets anyway (7 of 7 still on the wire after deletion), while nos.lol and primal
+  dropped theirs. The deletions tagged only the addressable `a` coordinate, and
+  several implementations honour NIP-09 **by event id**. `unfollow_station` now adds
+  an `e` tag with the id of the event being deleted (`Station.eventId`, carried from
+  the relay copy through App's local-wins dedupe so the common case isn't `a`-only);
+  a local-only row has no published event and stays `a`-only. ntune was never
+  affected — `resolveStations` filters deletions client-side — but any other client
+  reading that relay was. Unit-tested both sides (Rust `deletion_tags`, TS
+  `parseStation`/`resolveStations`). **Not retroactive:** the existing tombstones on
+  `relay.fizx.uk` stay until a future unfollow re-issues them or the relay's NIP-09
+  support is checked server-side (root there is macOS-only).
 - **Feed body cache — U4.5 slice 4, BUILT + Linux-verified (2026-08-18).** The
   Podcasts tab used to refetch all eleven feeds from a blank slate on every launch —
   its cache was a module-level object in `PodcastTab.tsx` that died with the process.

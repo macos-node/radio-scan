@@ -672,11 +672,34 @@ async fn publish_station(
     publish_event(keys, event, address, relays).await
 }
 
-/// Unfollow a station: publish a NIP-09 kind:5 deletion referencing the
-/// station's addressable `a` coordinate. Consumers drop it on read.
+/// The NIP-09 target tags for a station deletion: always the addressable `a`
+/// coordinate, plus the concrete `e` id when the caller knows it. A blank or
+/// whitespace-only id is treated as absent rather than published as an empty tag.
+fn deletion_tags(address: &str, event_id: Option<&str>) -> Result<Vec<Tag>, String> {
+    let mut tags = vec![Tag::parse(["a", address]).map_err(|e| e.to_string())?];
+    if let Some(id) = event_id.map(str::trim).filter(|s| !s.is_empty()) {
+        tags.push(Tag::parse(["e", id]).map_err(|e| e.to_string())?);
+    }
+    Ok(tags)
+}
+
+/// Unfollow a station: publish a NIP-09 kind:5 deletion of its `station.v1`.
+///
+/// Tags the addressable `a` coordinate AND, when the caller knows it, the
+/// concrete event `e` id. Both are legal NIP-09 targets and they cover different
+/// relay implementations: several honour deletion only **by event id**, so an
+/// `a`-only deletion is accepted and then quietly ignored. Measured 2026-08-18 on
+/// the suite's own hub — `relay.fizx.uk` still served every station it had been
+/// told to delete (7 of 7), while nos.lol dropped them. ntune filters deletions
+/// client-side (`resolveStations`) so it was unaffected either way; any other
+/// client reading that relay was not.
+///
+/// `event_id` is absent for a row that only ever lived in the local store — there
+/// is no published event to name, and the `a` tag alone is the whole truth.
 #[tauri::command]
 async fn unfollow_station(
     slug: String,
+    event_id: Option<String>,
     relays: Vec<String>,
 ) -> Result<PublishResult, String> {
     let keys = owner_keys()?;
@@ -686,7 +709,7 @@ async fn unfollow_station(
     );
 
     let event = EventBuilder::new(Kind::EventDeletion, "")
-        .tags(vec![Tag::parse(["a", &address]).map_err(|e| e.to_string())?])
+        .tags(deletion_tags(&address, event_id.as_deref())?)
         .sign_with_keys(&keys)
         .map_err(|e| e.to_string())?;
 
@@ -1190,6 +1213,33 @@ mod tests {
             "application/vnd.apple.mpegurl", // HLS
         ] {
             assert_eq!(non_audio_hint(ct), None, "{ct} should publish");
+        }
+    }
+
+    const ADDR: &str = "31241:916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d:airplay:station:acid-jazz";
+    const EV: &str = "b6835db6fa5300000000000000000000000000000000000000000000000000aa";
+
+    #[test]
+    fn deletion_names_the_address_and_the_event() {
+        // Both targets: `a` for addressable-aware relays, `e` for the ones that
+        // only delete by id (relay.fizx.uk kept serving a-only tombstones).
+        let tags = deletion_tags(ADDR, Some(EV)).unwrap();
+        let flat: Vec<Vec<String>> = tags.iter().map(|t| t.clone().to_vec()).collect();
+        assert_eq!(flat[0], vec!["a".to_string(), ADDR.to_string()]);
+        assert_eq!(flat[1], vec!["e".to_string(), EV.to_string()]);
+    }
+
+    #[test]
+    fn deletion_without_an_event_id_is_address_only() {
+        // A row that only ever lived in the local store has no published event to
+        // name — and a blank id must not become an empty `e` tag.
+        for id in [None, Some(""), Some("   ")] {
+            let tags = deletion_tags(ADDR, id).unwrap();
+            assert_eq!(tags.len(), 1, "unexpected e tag for {id:?}");
+            assert_eq!(
+                tags[0].clone().to_vec(),
+                vec!["a".to_string(), ADDR.to_string()]
+            );
         }
     }
 
