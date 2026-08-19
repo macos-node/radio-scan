@@ -1,6 +1,6 @@
 # Multi-device sync for stations & podcasts — decision needed
 
-> **Status: ACCEPTED 2026-08-19. Step 1 built; steps 2–3 outstanding.** This settles *how* a user's stations
+> **Status: ACCEPTED 2026-08-19. Steps 1–2 built; step 3 outstanding.** This settles *how* a user's stations
 > and shows reach every one of their devices intact, before any code depends on the
 > answer. It touches the **`d` tag format** in
 > [`../schema/station.v1.json`](../schema/station.v1.json) and

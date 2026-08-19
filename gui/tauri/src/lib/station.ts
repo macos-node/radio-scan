@@ -64,8 +64,12 @@ export interface Station {
   eventId?: string;
   /** The event's own `d`, verbatim — see the same field on `Show`. Retraction
    *  uses it rather than re-deriving, so an event published under an older `d`
-   *  format is deleted where it actually is. */
+   *  format is deleted where it actually is. Its presence also means *published*. */
   d?: string;
+  /** Published to the relays but absent from this device's store — i.e. added on
+   *  another machine. There is nothing local to remove, so ✕ is not offered.
+   *  Never persisted or exported: it describes this merge, not the station. */
+  relayOnly?: boolean;
 }
 
 /** Parse an imported JSON array into Stations — accepts the app's own export
@@ -226,4 +230,9 @@ export function toExportStation(s: Station): Record<string, unknown> {
   };
   if (s.harvest) out.harvest = s.harvest;
   return out;
+}
+
+/** Rows that exist only on the relays — nothing local to remove. */
+export function isRelayOnly(s: Station): boolean {
+  return s.relayOnly === true;
 }

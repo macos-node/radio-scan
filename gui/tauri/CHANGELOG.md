@@ -81,6 +81,20 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   to stay invisible after its cache-version bump. Cached bodies now arrive marked
   stale-or-not, decided where the version constant lives, so the renderer cannot get
   it wrong: paint anything, store only what this build actually parsed.
+- **Stations: sharing and keeping are separate acts now.** The ✕ used to remove a
+  station *and* retract it from your relays, so you could not tidy one device's list
+  without changing every device's. **`publish` is a toggle** — click it to share a
+  station, click `published` to stop — and ✕ removes it from this device only. A
+  station you still publish stays listed, marked `relay`, until you turn `published`
+  off; a station published from another machine has no ✕ at all, since there is
+  nothing here to remove. Publishing is one click, unpublishing asks first. This
+  matches the Podcasts tab, which was split the same way earlier.
+- **A follow published twice is now called out.** If one device is running an older
+  build it can publish the same station or show at a second address, and until now
+  both simply appeared as ordinary rows — which is how one such case went unnoticed.
+  Two follows pointing at the same feed or stream are never legitimate, so the app
+  now says so once, above both lists, naming how many and what to do: unpublish and
+  re-publish from the newest build.
 - **Unsubscribing and unfollowing are separate acts now.** The ✕ on a published
   podcast used to do both at once, so you could not stop publishing a show without
   also dropping it from your list, or tidy your list without announcing it to your

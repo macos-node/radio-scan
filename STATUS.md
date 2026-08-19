@@ -370,6 +370,29 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   (deleted 12:41, re-published 12:45, resolves followed). Evidence:
   [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
   § S4.
+- **Decision #11 step 2 BUILT (2026-08-19) — both halves.**
+  **(a) Station ✕ / publish split.** Stations were the last place local housekeeping
+  and a public act shared one control. `publish`/`published` is now a toggle
+  (`publishStationRow` / `unpublishStation` in App), ✕ is device-local, and a
+  relay-only row has no ✕ — mirroring the Podcasts tab exactly, including the
+  asymmetric confirms (publish is one click; unpublish asks, because it writes a
+  deletion to every relay). Needed two supporting changes: `Station.relayOnly`, set by
+  App's merge from the local URL set, and the merge now carries the published event's
+  `d` across the local-wins dedupe as well as its `eventId` — without `d` a retraction
+  cannot name what it deletes (the `468aff7` lesson).
+  **(b) Superseded-address detection** — the reader-side check adopted in answer to
+  macOS's version-skew question. `supersededAddresses()` in `lib/addressable.ts`
+  reports any target holding two live addresses, matching on `i` before `r` so
+  podbean's two hostnames don't hide it, keeping the newest and flagging the rest;
+  `useFollows` runs it across both kinds and App shows one warning above the lists.
+  This is the check that needs no foreknowledge and works retroactively — the
+  2026-08-19 skew was caught only because the expected hashes had been computed by
+  hand. 5 tests, incl. the exact incident shape.
+  Verified in the preview across all three row states (local-only → `publish` + ✕;
+  published-here → toggle + ✕; from-another-device → toggle, no ✕) and all three
+  dialogs, each saying something different and correct; plus the warning rendering
+  from a simulated stale publisher. 107 TS + 45 Rust green. **Step 3 ("publish my
+  list") outstanding.**
 - **Step 1 had a retraction bug — found and fixed by macOS (`468aff7`), verified
   here.** My unfollow paths re-derived `d` from the URL/guid, which is correct only
   while the format never changes — and #11 changed it, so every follow published

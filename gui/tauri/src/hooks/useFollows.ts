@@ -7,7 +7,7 @@ import {
   type Station,
 } from "../lib/station";
 import { SHOW_KIND, resolveShows, type Show } from "../lib/show";
-import { ingestEvent } from "../lib/addressable";
+import { ingestEvent, supersededAddresses } from "../lib/addressable";
 import { RELAYS } from "../lib/relays";
 
 /** The kinds that collapse by address rather than by event id. */
@@ -17,6 +17,12 @@ export interface FollowsState {
   stations: Station[];
   shows: Show[];
   loading: boolean;
+  /** Addresses holding a follow that something else has since republished under a
+   *  different `d` — the signature of a device on a build older than the contract
+   *  (decision #11). Maps the superseded address to the target it duplicates. One
+   *  target must have exactly one address, so a non-empty map is always wrong and
+   *  always worth showing. */
+  superseded: Map<string, string>;
   /** Re-read the published lists NOW, folding anything new into the live map.
    *
    *  Call it after publishing: a follow published mid-session did not mark its own
@@ -42,6 +48,7 @@ export function useFollows(
 ): FollowsState {
   const [stations, setStations] = useState<Station[]>([]);
   const [shows, setShows] = useState<Show[]>([]);
+  const [superseded, setSuperseded] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const byKeyRef = useRef<Map<string, NostrEvent>>(new Map());
   // Set while the subscription is live; a no-op before mount and after teardown,
@@ -57,6 +64,7 @@ export function useFollows(
     byKeyRef.current = new Map();
     setStations([]);
     setShows([]);
+    setSuperseded(new Map());
     setLoading(true);
 
     const pool = new SimplePool();
@@ -69,6 +77,13 @@ export function useFollows(
       const evs = [...byKey.values()];
       setStations(resolveStations(evs, ownerHex));
       setShows(resolveShows(evs, ownerHex));
+      // Detect duplicates across BOTH kinds in one map: a stale publisher produces
+      // the same shape whichever list it touched.
+      const dupes = new Map([
+        ...supersededAddresses(evs, STATION_KIND, ownerHex),
+        ...supersededAddresses(evs, SHOW_KIND, ownerHex),
+      ]);
+      setSuperseded(dupes);
     };
 
     const sub = pool.subscribeMany(RELAYS, filter, {
@@ -106,5 +121,5 @@ export function useFollows(
     };
   }, [ownerHex, active]);
 
-  return { stations, shows, loading, refresh };
+  return { stations, shows, loading, superseded, refresh };
 }

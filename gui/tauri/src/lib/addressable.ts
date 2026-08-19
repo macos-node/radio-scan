@@ -89,3 +89,52 @@ export function resolveAddressable<T>(
     .map((v) => v.item)
     .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
 }
+
+/** Two live events for one thing — the signature of a stale publisher.
+ *
+ *  A follow is addressed by what it points at (decision #11), so **one target must
+ *  have exactly one address**. Two events sharing an `r` (or, for shows, an `i`) are
+ *  therefore never a legitimate state: they mean something published the same follow
+ *  under a different `d`, which is what a device running an older build does. That
+ *  happened on 2026-08-19 — a build five hours behind step 1 republished two follows
+ *  as name-slugs, every relay accepted them, and the UI showed them as ordinary
+ *  follows. It was caught only because the expected addresses had been computed by
+ *  hand in advance.
+ *
+ *  This is the check that needs no foreknowledge, and it works on events already
+ *  published — which a format marker cannot, since a build predating the marker
+ *  cannot emit one. Returns the addresses that are superseded: for each duplicated
+ *  target, every address except the newest event's.
+ */
+export function supersededAddresses(
+  events: NostrEvent[],
+  kind: number,
+  ownerPubkey: string,
+): Map<string, string> {
+  // target -> [{ address, created_at }]
+  const byTarget = new Map<string, { address: string; at: number }[]>();
+  for (const ev of events) {
+    if (ev.kind !== kind || ev.pubkey !== ownerPubkey) continue;
+    const address = addressOf(ev, kind);
+    // `i` (a publisher-stated id) outranks `r` (a location) for the same reason
+    // the address derivation prefers it: a feed can move host.
+    const i = ev.tags.find((t) => t[0] === "i")?.[1];
+    const r = ev.tags.find((t) => t[0] === "r")?.[1];
+    const target = i ?? r;
+    if (!target) continue;
+    const list = byTarget.get(target) ?? [];
+    list.push({ address, at: ev.created_at });
+    byTarget.set(target, list);
+  }
+
+  const superseded = new Map<string, string>();
+  for (const [target, entries] of byTarget) {
+    const addresses = new Set(entries.map((e) => e.address));
+    if (addresses.size < 2) continue; // one address per target: nothing to report
+    const newest = entries.reduce((a, b) => (b.at > a.at ? b : a));
+    for (const e of entries) {
+      if (e.address !== newest.address) superseded.set(e.address, target);
+    }
+  }
+  return superseded;
+}

@@ -29,6 +29,7 @@ import {
   listFavorites,
   cachedPodcasts,
   listLocalStations,
+  publishStation,
   onNowPlaying,
   onTrayFavorite,
   removeFavorite,
@@ -99,6 +100,7 @@ export default function App() {
     stations: relayStations,
     shows: relayShows,
     loading: relayLoading,
+    superseded,
     refresh: refreshFollows,
   } = useFollows(ownerHex, true);
   // The local, no-key station store (stations.json) — the always-available base
@@ -142,21 +144,41 @@ export default function App() {
     // and the local copy wins the dedupe. Carry the relay twin's event id across
     // so an unfollow can still name the concrete event in an `e` tag; without
     // this, the common case would only ever get the `a` coordinate.
-    const relayIdByUrl = new Map<string, string>();
-    for (const r of relayStations) {
-      if (r.eventId) relayIdByUrl.set(r.url, r.eventId);
-    }
+    const relayByUrl = new Map<string, Station>();
+    for (const r of relayStations) relayByUrl.set(r.url, r);
+    const localUrls = new Set(localStations.map((s) => s.url));
+
     const seen = new Set<string>();
     const out: Station[] = [];
     for (const s of [...localStations, ...relayStations]) {
       if (seen.has(s.url)) continue;
       seen.add(s.url);
-      const eventId = s.eventId ?? relayIdByUrl.get(s.url);
-      out.push(eventId ? { ...s, eventId } : s);
+      const twin = relayByUrl.get(s.url);
+      // `eventId` and `d` come from the published event even when the local copy
+      // wins the dedupe — without them a retraction cannot name what it deletes.
+      const eventId = s.eventId ?? twin?.eventId;
+      const d = s.d ?? twin?.d;
+      const relayOnly = !localUrls.has(s.url);
+      out.push({
+        ...s,
+        ...(eventId ? { eventId } : {}),
+        ...(d ? { d } : {}),
+        ...(relayOnly ? { relayOnly: true } : {}),
+      });
     }
     return out;
   }, [localStations, relayStations]);
   const loading = localStations.length === 0 && relayLoading;
+
+  // A follow published at two addresses means a device is running a build older
+  // than the contract (decision #11). Say so once, plainly, rather than showing the
+  // duplicates as ordinary rows — which is how the 2026-08-19 skew went unnoticed
+  // until the expected hashes were checked by hand.
+  const skewWarning = useMemo(() => {
+    if (superseded.size === 0) return null;
+    const n = superseded.size;
+    return `${n} follow${n === 1 ? "" : "s"} published twice — a device is on an older build. Unpublish and re-publish from the newest one.`;
+  }, [superseded]);
 
   /** Where the station list came from — shown next to the section header. */
   const source = useMemo(() => {
@@ -244,22 +266,43 @@ export default function App() {
 
   // Remove a station: drop it from the local store (persisted), and if signed in
   // also publish a station.v1 unfollow so the Nostr overlay stays in step.
-  const removeStation = useCallback(
-    (s: Station) => {
-      setLocalStations((prev) => prev.filter((p) => p.slug !== s.slug));
-      removeLocalStation(s.slug).catch((e) =>
-        console.error("remove_local_station failed", e),
-      );
-      if (identity) {
-        // eventId is present when the row came from (or matched) a relay event —
-        // it makes the deletion legible to relays that only delete by id.
-        // Addressed by the stream, not the slug — the publisher derives the same.
-        unfollowStation(s.url, s.eventId, s.d)
-          .then(() => refreshFollows())
-          .catch((e) => console.error("unfollow failed", e));
-      }
-    },
-    [identity, refreshFollows],
+  // Remove from THIS DEVICE only. Retracting the published follow is
+  // unpublishStation's job — decision #11 step 2. Conflating them meant a user
+  // could not tidy a local list without telling every other device, nor stop
+  // publishing a station without losing it here; the Podcasts tab was split this
+  // way on 2026-08-19 and stations were the last holdout.
+  const removeStation = useCallback((s: Station) => {
+    setLocalStations((prev) => prev.filter((p) => p.slug !== s.slug));
+    removeLocalStation(s.slug).catch((e) =>
+      console.error("remove_local_station failed", e),
+    );
+  }, []);
+
+  /** Publish this station as a `station.v1` follow. */
+  const publishStationRow = useCallback(
+    (s: Station) =>
+      publishStation({
+        slug: s.slug,
+        name: s.name,
+        url: s.url,
+        fmt: s.fmt,
+        bitrate: s.bitrate,
+        tags: s.tags,
+        description: s.description ?? "",
+      })
+        .then(() => refreshFollows())
+        .catch((e) => console.error("publish_station failed", e)),
+    [refreshFollows],
+  );
+
+  /** Retract the published follow, leaving the local row alone. Targets the
+   *  address the event actually occupies (`s.d`) — see 468aff7. */
+  const unpublishStation = useCallback(
+    (s: Station) =>
+      unfollowStation(s.url, s.eventId, s.d)
+        .then(() => refreshFollows())
+        .catch((e) => console.error("unfollow failed", e)),
+    [refreshFollows],
   );
 
   // Export the current station list as JSON (native Save dialog). Exports the
@@ -656,6 +699,18 @@ export default function App() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
+          {/* Version skew affects both lists, so it is stated above them rather than
+              inside either tab. */}
+          {skewWarning && (
+            <p
+              className="mx-3 mt-3 rounded-sm border border-warn/40 bg-surface px-2.5 py-1.5 text-[11px] text-warn"
+              title={[...superseded.entries()]
+                .map(([addr, target]) => `${addr}\n   duplicates ${target}`)
+                .join("\n")}
+            >
+              {skewWarning}
+            </p>
+          )}
           {tab === "stations" ? (
             <section className="flex flex-col">
               <div className="flex items-center gap-2 px-3 pb-1 pt-3">
@@ -693,6 +748,8 @@ export default function App() {
                 loading={loading}
                 onTune={tune}
                 onRemove={removeStation}
+                onPublish={publishStationRow}
+                onUnpublish={unpublishStation}
                 signedIn={!!identity}
                 icy={icyByUrl}
               />
