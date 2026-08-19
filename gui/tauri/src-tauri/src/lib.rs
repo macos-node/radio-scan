@@ -305,6 +305,18 @@ struct PodcastSub {
     title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     npub: Option<String>,
+    /// The Tier-A show identity as the FEED stated it (U4.5). Persisted so the
+    /// subscription store — the thing that gets exported and carried between
+    /// machines — describes the show, rather than the export being a live
+    /// recompute that can disagree with what is on screen. The feed-cache holds
+    /// the same fields but is explicitly a cache: bodies are not exported, and a
+    /// cache may be pruned or version-invalidated at any time.
+    ///
+    /// Replaced WHOLESALE on every fetch: it is what the feed says, and the feed
+    /// always wins. User-authored gap-fill lives in its own slice (H4) precisely
+    /// so this one can be overwritten without thought.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    harvest: Option<PodcastHarvest>,
     /// Harvested: the feed's `<podcast:guid>`, when it carries one. The show's
     /// URL-independent identity — show.v1's NIP-73 `i` tag and U4.5's podcast key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -316,6 +328,38 @@ struct PodcastSub {
     /// how this stamp silently never reached disk the first time round.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     latest_at: Option<i64>,
+}
+
+/// Channel-level identity as the feed states it. Every field optional — feeds omit
+/// most of these, and an absent value must stay absent rather than become an empty
+/// string, so import/export and the "feed always wins" merge can tell "not stated"
+/// from "stated as blank".
+#[derive(Serialize, Deserialize, Clone, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct PodcastHarvest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    author: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    owner_email: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    website: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    categories: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    copyright: Option<String>,
+    /// Cover-art URL — **stored, not rendered** (the U4 decision, carried into
+    /// U4.5). Keeping the link costs nothing and lets a later build render it
+    /// without a re-fetch; rendering it is a separate call about layout and
+    /// bandwidth.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    image: Option<String>,
+    /// Feed description — the show's own blurb, not the user's note.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    /// When this slice was last taken, so a consumer can tell stale from absent.
+    fetched_at: i64,
 }
 
 fn podcasts_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
@@ -939,6 +983,26 @@ const PODCAST_NS: [&str; 4] = [
     "http://github.com/Podcastindex-org/podcast-namespace/blob/main/docs/1.0.md",
 ];
 
+/// What a channel states in namespaces `feed-rs` does not surface. One scan, since
+/// each of these otherwise costs a separate pass over a document that can be 4 MB.
+#[derive(Default, Debug, PartialEq)]
+struct ChannelExtras {
+    /// `<podcast:guid>` — the show's URL-independent identity.
+    guid: Option<String>,
+    /// `<itunes:owner><itunes:email>`, else `<managingEditor>`. feed-rs exposes
+    /// `feed.authors[].email` but leaves it empty for these feeds: measured
+    /// 2026-08-19, podhome and the BBC both state an address that arrived as None,
+    /// so U4's "Tier-A harvest" has never actually captured one.
+    owner_email: Option<String>,
+}
+
+/// Strip an RSS `email (Name)` wrapper — `<managingEditor>` is specified that way,
+/// while `<itunes:email>` is bare. Returns the address only.
+fn rss_email(raw: &str) -> Option<String> {
+    let addr = raw.split('(').next().unwrap_or(raw).trim();
+    (!addr.is_empty() && addr.contains('@')).then(|| addr.to_string())
+}
+
 /// The channel-level `<podcast:guid>`, if the feed carries one.
 ///
 /// Accepts an element whose local name is `guid` when EITHER its prefix resolves
@@ -950,23 +1014,30 @@ const PODCAST_NS: [&str; 4] = [
 ///
 /// Only the CHANNEL's guid counts: `<guid>` inside an `<item>` is the episode id,
 /// an entirely different thing, and every RSS feed is full of them.
-fn extract_podcast_guid(bytes: &[u8]) -> Option<String> {
+/// Scan the channel head for the fields feed-rs drops. Item contents are skipped:
+/// an `<item>`'s own `<guid>` is the EPISODE id, and an `<itunes:email>` inside one
+/// is not the show owner's.
+fn extract_channel_extras(bytes: &[u8]) -> ChannelExtras {
     use quick_xml::events::Event;
     use quick_xml::name::ResolveResult;
 
+    let mut out = ChannelExtras::default();
     let mut reader = quick_xml::NsReader::from_reader(bytes);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     let mut item_depth = 0usize;
 
     loop {
+        if out.guid.is_some() && out.owner_email.is_some() {
+            return out; // nothing left to find
+        }
         buf.clear();
         let (ns, ev) = match reader.read_resolved_event_into(&mut buf) {
             Ok(v) => v,
-            Err(_) => return None, // malformed XML: feed-rs will report it
+            Err(_) => return out, // malformed XML: feed-rs will report it
         };
         match ev {
-            Event::Eof => return None,
+            Event::Eof => return out,
             Event::Start(ref e) => {
                 let local = e.local_name();
                 let local = local.as_ref();
@@ -975,7 +1046,21 @@ fn extract_podcast_guid(bytes: &[u8]) -> Option<String> {
                     item_depth += 1;
                     continue;
                 }
-                if item_depth > 0 || local != b"guid" {
+                if item_depth > 0 {
+                    continue;
+                }
+                // `<managingEditor>` (unprefixed) and `<itunes:email>` both state
+                // the owner; keep whichever appears first.
+                if out.owner_email.is_none()
+                    && (local == b"email" || local == b"managingEditor")
+                {
+                    let end = e.to_end().into_owned();
+                    if let Ok(text) = reader.read_text(end.name()) {
+                        out.owner_email = rss_email(&String::from_utf8_lossy(text.as_ref()));
+                    }
+                    continue;
+                }
+                if local != b"guid" {
                     continue;
                 }
                 let in_podcast_ns = match ns {
@@ -992,7 +1077,7 @@ fn extract_podcast_guid(bytes: &[u8]) -> Option<String> {
                 if let Ok(text) = reader.read_text(end.name()) {
                     let guid = String::from_utf8_lossy(text.as_ref()).trim().to_string();
                     if !guid.is_empty() {
-                        return Some(guid);
+                        out.guid = Some(guid);
                     }
                 }
             }
@@ -1077,7 +1162,11 @@ fn now_secs() -> i64 {
 /// feed answers 304, we hand back the stored body, and the new field stays empty
 /// until the publisher happens to touch the feed. Found while adding
 /// `<podcast:guid>` (v2) on top of eleven already-cached bodies (v1).
-const FEED_CACHE_VERSION: u32 = 2;
+/// v2 → v3 (2026-08-19): the parse now extracts the channel's owner email, which
+/// feed-rs was dropping. Without the bump every cached body would revalidate to a
+/// 304 and keep its email-less parse — the exact starvation this counter exists
+/// for, met for the second time.
+const FEED_CACHE_VERSION: u32 = 3;
 
 fn feed_cache_v1() -> u32 {
     1 // entries written before the version field existed
@@ -1239,13 +1328,16 @@ async fn fetch_podcast(app: tauri::AppHandle, url: String) -> Result<Podcast, St
     let language = feed.language.clone();
     let copyright = feed.rights.as_ref().map(|t| t.content.trim().to_string());
 
+    let extras = extract_channel_extras(&bytes);
     let podcast = Podcast {
-        guid: extract_podcast_guid(&bytes),
+        guid: extras.guid,
         title: feed.title.map(|t| t.content).unwrap_or_else(|| "Untitled".to_string()),
         description: feed.description.map(|t| t.content),
         image: feed.logo.or(feed.icon).map(|i| i.uri),
         author,
-        owner_email,
+        // feed-rs first (it wins when it has one), our channel scan as the fallback
+        // — which in practice is every feed measured so far.
+        owner_email: owner_email.or(extras.owner_email),
         website,
         categories,
         language,
@@ -1577,7 +1669,7 @@ mod tests {
             "<podcast:guid>e22a2294-d951-51dd-9498-cd04b4467ce1</podcast:guid>",
         );
         assert_eq!(
-            extract_podcast_guid(xml.as_bytes()).as_deref(),
+            extract_channel_extras(xml.as_bytes()).guid.as_deref(),
             Some("e22a2294-d951-51dd-9498-cd04b4467ce1")
         );
     }
@@ -1591,7 +1683,7 @@ mod tests {
             "<podcast:guid>856cd618-7f34-57ea-9b84-3600f1f65e7f</podcast:guid>",
         );
         assert_eq!(
-            extract_podcast_guid(xml.as_bytes()).as_deref(),
+            extract_channel_extras(xml.as_bytes()).guid.as_deref(),
             Some("856cd618-7f34-57ea-9b84-3600f1f65e7f")
         );
     }
@@ -1603,7 +1695,7 @@ mod tests {
             "<pc:guid>28e3b6e8-5003-5b3d-8d45-f9e2ea75d9c9</pc:guid>",
         );
         assert_eq!(
-            extract_podcast_guid(xml.as_bytes()).as_deref(),
+            extract_channel_extras(xml.as_bytes()).guid.as_deref(),
             Some("28e3b6e8-5003-5b3d-8d45-f9e2ea75d9c9")
         );
     }
@@ -1613,20 +1705,20 @@ mod tests {
         // The motivating absence: podbean's and the BBC's feeds carry no
         // <podcast:guid> at all, but every item has a plain <guid>.
         let xml = feed(CANON, "<description>no channel guid here</description>");
-        assert_eq!(extract_podcast_guid(xml.as_bytes()), None);
+        assert_eq!(extract_channel_extras(xml.as_bytes()).guid, None);
     }
 
     #[test]
     fn an_empty_guid_is_absent_not_blank() {
         let xml = feed(CANON, "<podcast:guid>   </podcast:guid>");
-        assert_eq!(extract_podcast_guid(xml.as_bytes()), None);
+        assert_eq!(extract_channel_extras(xml.as_bytes()).guid, None);
     }
 
     #[test]
     fn malformed_xml_yields_none_rather_than_panicking() {
-        assert_eq!(extract_podcast_guid(b"<rss><channel><title>oops"), None);
-        assert_eq!(extract_podcast_guid(b""), None);
-        assert_eq!(extract_podcast_guid(&[0xff, 0xfe, 0x00]), None);
+        assert_eq!(extract_channel_extras(b"<rss><channel><title>oops").guid, None);
+        assert_eq!(extract_channel_extras(b"").guid, None);
+        assert_eq!(extract_channel_extras(&[0xff, 0xfe, 0x00]).guid, None);
     }
 
     #[test]
@@ -1774,6 +1866,57 @@ mod tests {
             .collect();
 
         assert_eq!(built, expected, "emitted tags diverge from show.v1's fixture");
+    }
+
+    #[test]
+    fn reads_the_owner_email_feed_rs_drops() {
+        // Both real shapes, measured 2026-08-19: podhome states itunes:owner/email,
+        // and also managingEditor in the RSS `address (Name)` form.
+        let itunes = feed(
+            CANON,
+            "<itunes:owner><itunes:name>David</itunes:name><itunes:email>david.bennett.c@gmail.com</itunes:email></itunes:owner>",
+        );
+        assert_eq!(
+            extract_channel_extras(itunes.as_bytes()).owner_email.as_deref(),
+            Some("david.bennett.c@gmail.com")
+        );
+
+        let editor = feed(CANON, "<managingEditor>adam@curry.com (Adam Curry)</managingEditor>");
+        assert_eq!(
+            extract_channel_extras(editor.as_bytes()).owner_email.as_deref(),
+            Some("adam@curry.com"),
+            "the `(Name)` half is not part of the address"
+        );
+    }
+
+    #[test]
+    fn an_episodes_email_is_not_the_shows() {
+        // feed() wraps every case in an <item>; put an address inside one and it
+        // must be ignored, exactly like an item's own <guid>.
+        let xml = format!(
+            r#"<?xml version="1.0"?><rss {CANON} version="2.0"><channel><title>T</title>
+                 <item><title>E</title><itunes:email>episode@example.com</itunes:email></item>
+               </channel></rss>"#
+        );
+        assert_eq!(extract_channel_extras(xml.as_bytes()).owner_email, None);
+    }
+
+    #[test]
+    fn a_non_address_is_not_an_email() {
+        let xml = feed(CANON, "<managingEditor>Adam Curry</managingEditor>");
+        assert_eq!(extract_channel_extras(xml.as_bytes()).owner_email, None);
+    }
+
+    #[test]
+    fn one_scan_finds_both_fields() {
+        let xml = feed(
+            CANON,
+            "<podcast:guid>43a4f801-04a3-5897-bc32-9f905e163a36</podcast:guid>\
+             <itunes:owner><itunes:email>a@b.com</itunes:email></itunes:owner>",
+        );
+        let extras = extract_channel_extras(xml.as_bytes());
+        assert_eq!(extras.guid.as_deref(), Some("43a4f801-04a3-5897-bc32-9f905e163a36"));
+        assert_eq!(extras.owner_email.as_deref(), Some("a@b.com"));
     }
 
     const ADDR: &str = "31241:916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d:airplay:station:acid-jazz";

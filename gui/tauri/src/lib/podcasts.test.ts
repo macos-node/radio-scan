@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { latestEpisodeAt, mergeSubs, sortSubs, type Sub } from "./podcasts";
+import {
+  harvestOf,
+  latestEpisodeAt,
+  mergeSubs,
+  parseHarvest,
+  sortSubs,
+  type Sub,
+} from "./podcasts";
 
 const sub = (url: string, title: string, latestAt?: number): Sub =>
   latestAt == null ? { url, title } : { url, title, latestAt };
@@ -128,5 +135,114 @@ describe("mergeSubs — the harvest slice", () => {
   it("a feed with no guid anywhere simply has none", () => {
     const merged = mergeSubs(harvested, [{ url: "z", title: "Zulu" }]);
     expect(merged.find((s) => s.url === "z")?.guid).toBeUndefined();
+  });
+});
+
+describe("harvestOf — the feed's own account of itself", () => {
+  const feed = {
+    author: "Adam Curry",
+    ownerEmail: "adam@curry.com",
+    website: "http://noagendashow.net",
+    categories: ["News", "Politics"],
+    language: "en",
+    copyright: null,
+    image: "https://example.com/art.jpg",
+    description: "Deconstructing media",
+  };
+
+  it("keeps what the feed states", () => {
+    const h = harvestOf(feed, 1_787_000_000);
+    expect(h).toEqual({
+      author: "Adam Curry",
+      ownerEmail: "adam@curry.com",
+      website: "http://noagendashow.net",
+      categories: ["News", "Politics"],
+      language: "en",
+      image: "https://example.com/art.jpg",
+      description: "Deconstructing media",
+      fetchedAt: 1_787_000_000,
+    });
+  });
+
+  it("drops what it does not — absent must not become empty string", () => {
+    // "not stated" and "stated as blank" have to stay distinguishable, or the
+    // merge and the export both start lying.
+    const bare = harvestOf(
+      {
+        author: null,
+        ownerEmail: null,
+        website: null,
+        categories: [],
+        language: null,
+        copyright: null,
+        image: null,
+        description: null,
+      },
+      42,
+    );
+    expect(bare).toEqual({ fetchedAt: 42 });
+    expect("author" in bare).toBe(false);
+  });
+
+  it("copies categories rather than aliasing the feed's array", () => {
+    const h = harvestOf(feed, 1);
+    h.categories?.push("Mutated");
+    expect(feed.categories).toEqual(["News", "Politics"]);
+  });
+});
+
+describe("parseHarvest — importing a harvest slice", () => {
+  it("round-trips what harvestOf produced", () => {
+    const h = harvestOf(
+      {
+        author: "A",
+        ownerEmail: null,
+        website: null,
+        categories: ["X"],
+        language: "en",
+        copyright: null,
+        image: null,
+        description: null,
+      },
+      99,
+    );
+    expect(parseHarvest(JSON.parse(JSON.stringify(h)))).toEqual(h);
+  });
+
+  it("treats a pre-U4.5 export (no harvest at all) as absent", () => {
+    expect(parseHarvest(undefined)).toBeUndefined();
+    expect(parseHarvest(null)).toBeUndefined();
+    expect(parseHarvest("nonsense")).toBeUndefined();
+  });
+
+  it("treats a slice with only a timestamp as absent — it states nothing", () => {
+    expect(parseHarvest({ fetchedAt: 123 })).toBeUndefined();
+  });
+
+  it("ignores fields of the wrong type rather than importing junk", () => {
+    const h = parseHarvest({ author: 42, language: "en", categories: "News", fetchedAt: 7 });
+    expect(h).toEqual({ language: "en", fetchedAt: 7 });
+  });
+});
+
+describe("mergeSubs — the harvest slice survives an import", () => {
+  it("an OPML/pre-U4.5 import keeps the stored identity", () => {
+    const stored: Sub[] = [
+      {
+        url: "a",
+        title: "Alpha",
+        harvest: { author: "A", fetchedAt: 100 },
+      },
+    ];
+    const merged = mergeSubs(stored, [{ url: "a", title: "Alpha" }]);
+    expect(merged[0].harvest).toEqual({ author: "A", fetchedAt: 100 });
+  });
+
+  it("an incoming harvest wins — a newer export is authoritative", () => {
+    const stored: Sub[] = [{ url: "a", title: "Alpha", harvest: { author: "Old", fetchedAt: 1 } }];
+    const merged = mergeSubs(stored, [
+      { url: "a", title: "Alpha", harvest: { author: "New", fetchedAt: 2 } },
+    ]);
+    expect(merged[0].harvest?.author).toBe("New");
   });
 });

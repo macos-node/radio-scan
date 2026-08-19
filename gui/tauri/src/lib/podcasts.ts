@@ -14,6 +14,26 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
+/** Channel-level identity exactly as the feed stated it (U4.5).
+ *
+ *  Every field optional: feeds omit most of these, and "not stated" must stay
+ *  distinguishable from "stated as blank" for the merge and for export. Replaced
+ *  wholesale on every fetch — the feed always wins — which is only safe because
+ *  user-authored values live in their own slice. */
+export interface Harvest {
+  author?: string;
+  ownerEmail?: string;
+  website?: string;
+  categories?: string[];
+  language?: string;
+  copyright?: string;
+  /** Cover-art URL: stored, deliberately not rendered (the U4 decision). */
+  image?: string;
+  description?: string;
+  /** Unix seconds — when this slice was taken, so stale is distinguishable from absent. */
+  fetchedAt: number;
+}
+
 export interface Sub {
   url: string;
   title: string;
@@ -24,6 +44,11 @@ export interface Sub {
    *  A feed URL is not stable: podbean serves the same document from two
    *  hostnames, which is how one show ended up listed twice. */
   guid?: string;
+  /** The feed's own account of itself (author, categories, language, …). Persisted
+   *  here — not just in the feed-cache — because THIS is the store that gets
+   *  exported and carried between machines; the cache is a cache, and is excluded
+   *  from backups by design. */
+  harvest?: Harvest;
   /** Harvested: unix seconds of the newest episode seen in this feed. Persisted
    *  so "recently updated" ordering is already right on the first paint, before
    *  the feeds re-fetch. Harvest, not user data — every fetch overwrites it
@@ -116,7 +141,7 @@ export function detectNpub(url: string): string | undefined {
 function mkSub(
   url: string,
   title: string,
-  extra?: { npub?: string; latestAt?: number; guid?: string },
+  extra?: { npub?: string; latestAt?: number; guid?: string; harvest?: Harvest },
 ): Sub {
   const npub = detectNpub(url) ?? extra?.npub;
   const sub: Sub = { url, title };
@@ -124,6 +149,7 @@ function mkSub(
   if (typeof extra?.latestAt === "number" && Number.isFinite(extra.latestAt))
     sub.latestAt = extra.latestAt;
   if (extra?.guid) sub.guid = extra.guid;
+  if (extra?.harvest) sub.harvest = extra.harvest;
   return sub;
 }
 
@@ -155,9 +181,62 @@ export function parseSubsJson(data: unknown): Sub[] {
         npub: typeof r.npub === "string" ? r.npub : undefined,
         latestAt: typeof r.latestAt === "number" ? r.latestAt : undefined,
         guid: typeof r.guid === "string" ? r.guid : undefined,
+        harvest: parseHarvest(r.harvest),
       });
     })
     .filter((s) => s.url);
+}
+
+/** Read a harvest slice out of imported JSON, keeping only what it actually
+ *  states. An entry without one is not an error — every export written before
+ *  U4.5, and every OPML file ever, has none. */
+export function parseHarvest(raw: unknown): Harvest | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : undefined);
+  const h: Harvest = {
+    fetchedAt: typeof r.fetchedAt === "number" ? r.fetchedAt : 0,
+  };
+  if (str(r.author)) h.author = String(r.author);
+  if (str(r.ownerEmail)) h.ownerEmail = String(r.ownerEmail);
+  if (str(r.website)) h.website = String(r.website);
+  if (str(r.language)) h.language = String(r.language);
+  if (str(r.copyright)) h.copyright = String(r.copyright);
+  if (str(r.image)) h.image = String(r.image);
+  if (str(r.description)) h.description = String(r.description);
+  if (Array.isArray(r.categories)) {
+    const cats = r.categories.filter((c): c is string => typeof c === "string");
+    if (cats.length > 0) h.categories = cats;
+  }
+  // A slice with nothing but a timestamp says nothing — treat it as absent.
+  return Object.keys(h).length > 1 ? h : undefined;
+}
+
+/** The harvest slice for a freshly fetched feed. `null`/empty fields are dropped
+ *  so "not stated" round-trips as absent rather than as an empty string. */
+export function harvestOf(
+  pod: {
+    author: string | null;
+    ownerEmail: string | null;
+    website: string | null;
+    categories: string[];
+    language: string | null;
+    copyright: string | null;
+    image: string | null;
+    description: string | null;
+  },
+  fetchedAt: number,
+): Harvest {
+  const h: Harvest = { fetchedAt };
+  if (pod.author) h.author = pod.author;
+  if (pod.ownerEmail) h.ownerEmail = pod.ownerEmail;
+  if (pod.website) h.website = pod.website;
+  if (pod.language) h.language = pod.language;
+  if (pod.copyright) h.copyright = pod.copyright;
+  if (pod.image) h.image = pod.image;
+  if (pod.description) h.description = pod.description;
+  if (pod.categories.length > 0) h.categories = [...pod.categories];
+  return h;
 }
 
 /** Serialize subs as OPML 1.1 — portable to any feed reader / podcast app. */
@@ -205,10 +284,13 @@ export function mergeSubs(existing: Sub[], incoming: Sub[]): Sub[] {
       if (!prev) return s;
       const latestAt = s.latestAt ?? prev.latestAt;
       const guid = s.guid ?? prev.guid;
-      if (latestAt === s.latestAt && guid === s.guid) return s;
+      const harvest = s.harvest ?? prev.harvest;
+      if (latestAt === s.latestAt && guid === s.guid && harvest === s.harvest)
+        return s;
       const merged: Sub = { ...s };
       if (latestAt != null) merged.latestAt = latestAt;
       if (guid) merged.guid = guid;
+      if (harvest) merged.harvest = harvest;
       return merged;
     }),
     ...existing.filter((s) => !urls.has(s.url)),

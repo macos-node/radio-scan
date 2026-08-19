@@ -36,6 +36,26 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   discarded — the export serializer-drift U4.5 exists to close, met early.
 
 ### Added
+- **Podcast identity is now stored, not just cached (U4.5 H1).** What a feed says
+  about itself — author, categories, language, copyright, website, owner email, cover
+  art URL, blurb — persists as a `harvest` slice on each subscription, with the
+  timestamp it was taken. It lived only in the session/feed cache before, and a cache
+  is explicitly not state: it is excluded from backups, pruned freely, and
+  invalidated whenever the parser changes. The subscription store is what gets
+  exported and carried between machines, so that is where a show's identity belongs.
+  The slice is replaced wholesale on every fetch — the feed always wins — and absent
+  fields stay absent rather than becoming empty strings, so "not stated" and "stated
+  as blank" remain distinguishable. Verified on a 10-feed profile: all 10 carry 6–7
+  fields.
+- **Owner email is finally harvested at all.** `feed-rs` does not surface
+  `<itunes:owner><itunes:email>` or `<managingEditor>`, so the Tier-A "owner email"
+  claimed since U4 had in fact **never** been captured — its identity chip could not
+  have rendered. The channel scanner that reads `<podcast:guid>` now returns both in
+  one pass (these documents reach 4 MB, so a second pass is not free), strips the RSS
+  `address (Name)` wrapper, and ignores an address inside an `<item>` just as it
+  ignores an episode's `<guid>`. Measured: 6 of 10 feeds state one and all 6 are now
+  captured; the other 4 genuinely publish none. Persisting the slice is what exposed
+  this — a live recompute hid it.
 - **Debug builds get their own store.** A `tauri dev` run now reads and writes
   `<app_data_dir>-dev` (and `radio-scan-dev/` for the now-playing bridge) instead of
   the installed app's data — the suite convention that already covered the keyring,

@@ -444,6 +444,25 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   plus the macOS-recorded state the app cannot exit (a deleted station's row is
   hidden, so no ✕ remains to re-issue from, while the publish guard blocks re-adding
   it to get a fresh event).
+- **U4.5 H1 — podcast harvest persisted (2026-08-19, Linux-verified).** The Tier-A
+  identity slice (author, categories, language, copyright, website, ownerEmail,
+  `image` stored-not-rendered, feed blurb, `fetchedAt`) now lives on each `Sub` in
+  `podcasts.json`, not only in the feed-cache — the cache is excluded from backups and
+  version-invalidated, while the subscription store is what export and cross-machine
+  carry actually use. Replaced wholesale per fetch (feed always wins); absent fields
+  stay **absent** so "not stated" ≠ "stated blank"; the reconcile ignores `fetchedAt`
+  when diffing, so an unchanged feed does not rewrite the store on every launch.
+  **10/10 subs carry 6–7 fields.**
+  **The bug persistence exposed:** `ownerEmail` came back empty on *every* feed
+  because `feed-rs` surfaces neither `<itunes:owner><itunes:email>` nor
+  `<managingEditor>` — so U4's Tier-A harvest has never captured one and its chip
+  could never have rendered. The guid scanner became `extract_channel_extras`,
+  returning guid + owner email in **one pass**, stripping the RSS `address (Name)`
+  form and ignoring item-level addresses. Now **6/10** (the other 4 state none —
+  audited against raw XML). `FEED_CACHE_VERSION` 2 → 3 accordingly: the second time
+  that counter has earned itself, since cached bodies would otherwise 304 forever
+  with the old parse. *Verification note: a version bump makes the store a moving
+  target for ~a minute as all feeds re-fetch sequentially — read it twice.*
 - **Dev/release store isolation — DONE 2026-08-19.** `app_data_dir()` and the
   now-playing bridge dir both gain a `-dev` sibling under `cfg(debug_assertions)`, so
   `tauri dev` no longer reads or writes installed state. Until now only the *keyring*

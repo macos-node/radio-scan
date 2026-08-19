@@ -32,6 +32,7 @@ import {
   type Show,
 } from "../lib/show";
 import {
+  harvestOf,
   isPodcastSort,
   latestEpisodeAt,
   loadSubs,
@@ -451,11 +452,17 @@ export function PodcastTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subUrlKey]);
 
-  // Persist the harvest as each feed arrives: the newest-episode date (so "Recent"
-  // ordering is right on the next launch's first paint instead of settling as the
-  // prefetch trickles in) and the feed's <podcast:guid> (the show's URL-independent
-  // identity — show.v1's `i` tag and U4.5's podcast key). Harvest only: the feed
-  // always wins, and a field the feed stops carrying is never blanked here.
+  // Persist the harvest as each feed arrives (U4.5): the newest-episode date (so
+  // "Recent" ordering is right on the next launch's first paint), the feed's
+  // <podcast:guid> (the show's URL-independent identity), and the Tier-A identity
+  // slice — author, categories, language, copyright, website, owner email, image
+  // URL, blurb — as the feed stated it.
+  //
+  // The subscription store carries this, not just the feed-cache, because THIS is
+  // what gets exported and carried between machines; the cache is explicitly a
+  // cache and is left out of backups. The slice is replaced wholesale on every
+  // fetch — the feed always wins — which is safe because nothing the user authors
+  // lives in it.
   useEffect(() => {
     let changed = false;
     const next = subs.map((s) => {
@@ -465,11 +472,23 @@ export function PodcastTab({
       const guid = pod.guid ?? undefined;
       const nextAt = at ?? s.latestAt;
       const nextGuid = guid ?? s.guid;
-      if (nextAt === s.latestAt && nextGuid === s.guid) return s;
+      // Keep the existing timestamp when nothing about the feed's account of
+      // itself changed, so a refetch does not rewrite the store on every launch.
+      const fresh = harvestOf(pod, s.harvest?.fetchedAt ?? Math.floor(Date.now() / 1000));
+      const same =
+        s.harvest != null &&
+        JSON.stringify({ ...s.harvest, fetchedAt: 0 }) ===
+          JSON.stringify({ ...fresh, fetchedAt: 0 });
+      const nextHarvest = same
+        ? s.harvest
+        : { ...fresh, fetchedAt: Math.floor(Date.now() / 1000) };
+      if (nextAt === s.latestAt && nextGuid === s.guid && nextHarvest === s.harvest)
+        return s;
       changed = true;
       const updated: Sub = { ...s };
       if (nextAt != null) updated.latestAt = nextAt;
       if (nextGuid) updated.guid = nextGuid;
+      updated.harvest = nextHarvest;
       return updated;
     });
     if (!changed) return;
