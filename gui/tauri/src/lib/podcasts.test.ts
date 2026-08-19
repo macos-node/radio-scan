@@ -4,6 +4,7 @@ import {
   harvestOf,
   loadSubs,
   saveSubs,
+  setEnrich,
   PODCASTS_EVENT,
   type AbsorbablePodcast,
   parseEnrich,
@@ -490,5 +491,60 @@ describe("absorbPodcast — persistence that does not need a mounted tab", () =>
       delete (globalThis as { window?: EventTarget }).window;
     }
     expect(fired).toBe(1);
+  });
+});
+
+describe("setEnrich — the editor's store operation", () => {
+  beforeEach(() => {
+    saveSubs([{ url: "u1", title: "One", harvest: { author: "Feed", fetchedAt: 1 } }]);
+  });
+
+  it("stores what the user typed, trimmed", () => {
+    expect(setEnrich("u1", { website: "  https://mine  ", author: "Me" })).toBe(true);
+    expect(loadSubs()[0].enrich).toMatchObject({ website: "https://mine", author: "Me" });
+  });
+
+  it("never touches the harvest slice", () => {
+    setEnrich("u1", { website: "https://mine" });
+    expect(loadSubs()[0].harvest).toEqual({ author: "Feed", fetchedAt: 1 });
+  });
+
+  it("drops blanks rather than storing empty strings", () => {
+    setEnrich("u1", { author: "Me", website: "   ", copyright: "" });
+    const e = loadSubs()[0].enrich!;
+    expect(e.author).toBe("Me");
+    expect("website" in e).toBe(false);
+    expect("copyright" in e).toBe(false);
+  });
+
+  it("splits and trims categories, dropping empty entries", () => {
+    setEnrich("u1", { categories: ["News", "  ", " Tech "] });
+    expect(loadSubs()[0].enrich?.categories).toEqual(["News", "Tech"]);
+  });
+
+  it("clearing every field removes the slice entirely", () => {
+    setEnrich("u1", { author: "Me" });
+    expect(loadSubs()[0].enrich).toBeDefined();
+    expect(setEnrich("u1", {})).toBe(true);
+    expect("enrich" in loadSubs()[0]).toBe(false);
+  });
+
+  it("saving without changing anything does not rewrite the store", () => {
+    setEnrich("u1", { author: "Me" });
+    const stamp = loadSubs()[0].enrich?.editedAt;
+    expect(setEnrich("u1", { author: "Me" })).toBe(false);
+    expect(loadSubs()[0].enrich?.editedAt).toBe(stamp);
+  });
+
+  it("a value the feed also states is stored anyway — dormant, not refused", () => {
+    // The editor lets you write it; podcastIdentity decides what shows.
+    setEnrich("u1", { author: "My own note" });
+    const sub = loadSubs()[0];
+    expect(sub.enrich?.author).toBe("My own note");
+    expect(podcastIdentity(sub).author).toBe("Feed");
+  });
+
+  it("ignores a url that is not subscribed", () => {
+    expect(setEnrich("nope", { author: "X" })).toBe(false);
   });
 });

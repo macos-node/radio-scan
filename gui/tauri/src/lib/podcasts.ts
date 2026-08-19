@@ -309,6 +309,55 @@ export function absorbPodcast(url: string, pod: AbsorbablePodcast): boolean {
   return true;
 }
 
+/** Write (or clear) the user's own values for a subscription.
+ *
+ *  Module-level for the same reason as absorbPodcast: the store is not a rendering
+ *  concern. Blank fields are dropped rather than stored as "", so a cleared field
+ *  becomes "not stated" and the feed's value — or nothing — takes over; a slice
+ *  with nothing left in it is removed entirely rather than lingering as an empty
+ *  object in every export.
+ *
+ *  `editedAt` is only bumped when a value actually changed, so opening the editor
+ *  and saving without typing does not rewrite the store. */
+export function setEnrich(url: string, values: Partial<Enrich>): boolean {
+  const subs = loadSubs();
+  const i = subs.findIndex((s) => s.url === url);
+  if (i < 0) return false;
+  const sub = subs[i];
+
+  const clean: Enrich = { editedAt: sub.enrich?.editedAt ?? 0 };
+  const text = (v: unknown) =>
+    typeof v === "string" && v.trim() ? v.trim() : undefined;
+  if (text(values.author)) clean.author = text(values.author);
+  if (text(values.ownerEmail)) clean.ownerEmail = text(values.ownerEmail);
+  if (text(values.website)) clean.website = text(values.website);
+  if (text(values.language)) clean.language = text(values.language);
+  if (text(values.copyright)) clean.copyright = text(values.copyright);
+  if (text(values.description)) clean.description = text(values.description);
+  const cats = (values.categories ?? [])
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
+  if (cats.length > 0) clean.categories = cats;
+
+  const stated = Object.keys(clean).length > 1;
+  const next: Enrich | undefined = stated ? clean : undefined;
+  const unchanged =
+    JSON.stringify({ ...(sub.enrich ?? {}), editedAt: 0 }) ===
+    JSON.stringify({ ...(next ?? {}), editedAt: 0 });
+  if (unchanged) return false;
+
+  const updated: Sub = { ...sub };
+  if (next) {
+    updated.enrich = { ...next, editedAt: Math.floor(Date.now() / 1000) };
+  } else {
+    delete updated.enrich;
+  }
+  const all = [...subs];
+  all[i] = updated;
+  setPodcasts(all);
+  return true;
+}
+
 /** The shape absorbPodcast needs — a fetched feed, or a cached body. */
 export interface AbsorbablePodcast {
   guid?: string | null;

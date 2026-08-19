@@ -73,6 +73,14 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   address a reader could use. Measured on a 10-feed profile: funding on 5, a
   lightning address on 3, each the highest-split recipient — platform cuts of 2% and
   7% correctly passed over.
+- **You can now fill in what a feed leaves out.** Expanding a podcast offers
+  **fill in** (or **edit**, once you have) — author, website, contact email,
+  language, copyright, categories, description. The screen makes the rule visible
+  rather than leaving you to infer it: a field the show states itself is dimmed and
+  says what the feed says, and anything you type there is **kept but not shown**,
+  ready if the feed ever stops. Blank fields are dropped rather than stored empty,
+  clearing every field removes your slice entirely, and saving without changing
+  anything doesn't touch the store. Your notes are never overwritten by a re-fetch.
 - **A show's identity can be filled in by hand (U4.5 H4, data model).** Each
   subscription gains an `enrich` slice beside its harvest, with two rules: **the feed
   always wins**, so hand-typed values show only where the feed says nothing; and

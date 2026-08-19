@@ -517,6 +517,23 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   plus the macOS-recorded state the app cannot exit (a deleted station's row is
   hidden, so no ✕ remains to re-issue from, while the publish guard blocks re-adding
   it to get a fresh event).
+- **Enrich editor — BUILT + Linux-verified (2026-08-19).** H4 shipped the model,
+  merge and persistence with no way in; this is the way in. `EnrichDialog` (7 fields)
+  reached from the identity row via **fill in** / **edit**, backed by a module-level
+  `setEnrich()` alongside `absorbPodcast()` — same rule, the store is not a rendering
+  concern. **The screen teaches the rule:** a field the feed states is dimmed and
+  quotes the feed's value, with "yours stays stored and shows only if the feed
+  stops", because typing there and seeing nothing change would otherwise read as
+  broken. Blanks are dropped (never stored as `""`), clearing everything removes the
+  slice rather than leaving `{}` in every export, and an unchanged save does not
+  rewrite the store or bump `editedAt`.
+  Verified by driving the real UI: filling a feed-silent show stored + displayed the
+  values (categories split/trimmed, empty entry dropped) and left `harvest`
+  untouched; on a feed that states things, a typed author was **stored yet hidden**
+  while the feed's author kept showing, and a typed email — a field the feed left
+  empty — appeared immediately. 104 TS + 35 Rust green. **The `fill in` affordance
+  deliberately appears even when a show states nothing** — that is exactly the show
+  worth annotating, and the identity row used to render nothing at all in that case.
 - **macOS pass on U4.5 found three defects — all fixed + Linux-verified
   (2026-08-19).** The pass checked stored fields against an independent parse of the
   raw XML rather than against the app's own extractor, which is why it found things a

@@ -57,6 +57,7 @@ import {
 import { podcastIconKey } from "../lib/mediaIcon";
 import { MediaGlyph } from "./MediaGlyph";
 import { Modal } from "./Modal";
+import { EnrichDialog } from "./EnrichDialog";
 import { cn } from "../lib/cn";
 
 type View = "list" | "cards";
@@ -171,12 +172,14 @@ function IdentityRow({
   row,
   pod,
   indent = false,
+  onEdit,
 }: {
   /** The stored subscription — the source of truth when nothing is fetched. */
   row: Sub;
   /** This session's fetched feed, when there is one. Outranks the stored slice. */
   pod?: Podcast;
   indent?: boolean;
+  onEdit?: () => void;
 }) {
   // Read through the merge, not off the fetched feed: the stored harvest is what
   // makes identity survive a restart (U4.5's "no re-fetch needed to re-render"),
@@ -184,8 +187,11 @@ function IdentityRow({
   // invalidated whenever the parser changes. `fromUser` marks values the user
   // supplied where the feed said nothing.
   const id = podcastIdentity(row, pod ? liveHarvest(pod) : undefined);
-  if (!id.author && !id.categories?.length && !id.website && !id.ownerEmail)
-    return null;
+  const saysNothing =
+    !id.author && !id.categories?.length && !id.website && !id.ownerEmail;
+  // A show that states nothing is exactly the one worth filling in by hand, so the
+  // way in cannot be hidden behind having something to show already.
+  if (saysNothing && !onEdit) return null;
   // Every chip caps at the row width and truncates with an ellipsis; the full
   // value is on the title tooltip (hover) until fields get real link-outs — so no
   // long copyright / URL / sentence can blow out the layout.
@@ -222,6 +228,16 @@ function IdentityRow({
         <span className={chip} title={id.ownerEmail}>
           {id.ownerEmail}
         </span>
+      )}
+      {onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          title="Fill in what this feed leaves out"
+          className="ml-auto shrink-0 rounded-sm border border-surface px-1.5 py-0.5 text-[9px] text-muted transition-colors hover:border-accent hover:text-accent"
+        >
+          {saysNothing ? "fill in" : "edit"}
+        </button>
       )}
     </div>
   );
@@ -335,6 +351,8 @@ export function PodcastTab({
   const cancelRef = useRef<HTMLButtonElement>(null);
   // Feed URL currently being published / retracted — disables just that row's control.
   const [publishing, setPublishing] = useState<string | null>(null);
+  // Feed whose "fill in" editor is open.
+  const [editing, setEditing] = useState<string | null>(null);
 
   // Re-sync when a restore (the app-level Backup dialog) writes subs from
   // outside this tab — same-document localStorage writes don't fire `storage`.
@@ -582,6 +600,7 @@ export function PodcastTab({
 
   const expandedSub = expanded ? rows.find((s) => s.url === expanded) : undefined;
   const confirmSub = confirmUrl ? rows.find((s) => s.url === confirmUrl) : undefined;
+  const editingRow = editing ? rows.find((s) => s.url === editing) : undefined;
 
   return (
     <div className="flex flex-col">
@@ -799,7 +818,12 @@ export function PodcastTab({
                             something even with no feed fetched — after a restore, or
                             offline. Gating this on `pod` made the persisted slice
                             invisible exactly when it is the only thing left. */}
-                        <IdentityRow row={s} pod={pod} indent />
+                        <IdentityRow
+                          row={s}
+                          pod={pod}
+                          indent
+                          onEdit={() => setEditing(s.url)}
+                        />
                         {pod ? (
                           <EpisodeList
                             pod={pod}
@@ -933,7 +957,11 @@ export function PodcastTab({
                       )}
                     </button>
                   </div>
-                  <IdentityRow row={expandedSub} pod={cache[expandedSub.url]} />
+                  <IdentityRow
+                    row={expandedSub}
+                    pod={cache[expandedSub.url]}
+                    onEdit={() => setEditing(expandedSub.url)}
+                  />
                   {cache[expandedSub.url] ? (
                     <EpisodeList
                       pod={cache[expandedSub.url]}
@@ -954,6 +982,17 @@ export function PodcastTab({
             </div>
           )}
         </>
+      )}
+
+      {editingRow && (
+        <EnrichDialog
+          sub={editingRow}
+          feed={{
+            ...(editingRow.harvest ?? {}),
+            ...(cache[editingRow.url] ? liveHarvest(cache[editingRow.url]) : {}),
+          }}
+          onClose={() => setEditing(null)}
+        />
       )}
 
       {/* Unsubscribing is confirmed — the hover-✕ sits right where the pointer
