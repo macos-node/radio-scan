@@ -1371,10 +1371,14 @@ fn now_secs() -> i64 {
 /// `<podcast:guid>` (v2) on top of eleven already-cached bodies (v1).
 /// v2 → v3 (2026-08-19): the parse gained the channel's owner email, which feed-rs
 /// was dropping. v3 → v4 (same day): it gained `podcast:funding` and the top
-/// `podcast:value` lightning address. Each bump exists because a cached body would
-/// otherwise revalidate to a 304 and keep the older parse forever — this counter
-/// has now earned itself three times.
-const FEED_CACHE_VERSION: u32 = 4;
+/// `podcast:value` lightning address. v4 → v5 (same day): owner-vs-editor
+/// precedence changed, so a feed stating both `<managingEditor>` and
+/// `<itunes:owner><itunes:email>` parses to a DIFFERENT owner than it did under v4
+/// — measured on macOS, where the store kept re-asserting `contact@taz0.org` over
+/// `bitstream@taz0.org` from a warm cache after the fix shipped. Each bump exists
+/// because a cached body would otherwise revalidate to a 304 and keep the older
+/// parse forever — this counter has now earned itself four times.
+const FEED_CACHE_VERSION: u32 = 5;
 
 fn feed_cache_v1() -> u32 {
     1 // entries written before the version field existed

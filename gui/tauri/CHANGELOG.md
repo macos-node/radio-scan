@@ -202,6 +202,17 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   feed plainly states. An episode's `<guid>` is never mistaken for the show's.
 
 ### Fixed
+- **The owner/editor precedence fix now reaches existing installs.** `70a8c25`
+  changed which contact a feed's channel resolves to, but left `FEED_CACHE_VERSION`
+  at 4 — so every cached body still counted as current, the parse never re-ran, and
+  the pre-fix owner stayed in the store. Worse in combination with the same commit's
+  startup healing pass: it faithfully re-asserted the stale value on every launch.
+  Measured on macOS with a warm 25-feed cache — Cypherpunk Bitstream kept
+  `contact@taz0.org` (its `<managingEditor>`) after the fix shipped, and flipped to
+  `bitstream@taz0.org` (its `<itunes:owner><itunes:email>`) only when that one cache
+  entry was deleted by hand, proving the fix correct but unreachable. Bumped to 5,
+  which is the rule S0 wrote down: **a parse change must bump the version or it lands
+  silently.** The counter has now earned itself four times.
 - **A follow published mid-session now marks its own row.** Following a podcast
   published the `show.v1` correctly but left the row reading `follow`; the chip only
   flipped to `following` after a restart (measured on macOS 2026-08-19 —
