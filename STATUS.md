@@ -388,6 +388,30 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   in ntune (client-side filtering) but visible to any other client, and they clear
   only by re-following/re-unfollowing with the current build or by fixing NIP-09
   server-side (root is macOS-only).
+- **U4.5 H3 — macOS pass: podcasts exact, stations lag the store (2026-08-19).**
+  Exported both lists from the installed build and diffed them against the store.
+  **Podcasts: 25/25 subs with harvest slices byte-identical**, 12 guids and every
+  `latestAt` preserved. **Stations: `eventId` correctly absent, but all three harvest
+  slices were dropped** — the export was written mid-session.
+  **`toExportStation` is not at fault** (`if (s.harvest) out.harvest = s.harvest`).
+  After a probe, [`App.tsx:379`](gui/tauri/src/App.tsx:379) calls `setStationHarvest`,
+  which writes through to the Rust store but **never updates the `localStations`
+  React state**; the export maps over that state, so it serialises rows that have no
+  slice in memory. Re-exporting **after a relaunch** produced a byte-exact match
+  (1486 → 2057 bytes, 3/3 slices) — so it is lag, not loss, and `stations.json` was
+  never wrong.
+  **Why the guard did not catch it:** `station.test.ts:172` calls `toExportStation`
+  on a hand-built station that already carries a harvest, so the "walks every
+  persisted field" test passes while the real export path never sees a
+  harvest-bearing `Station`. The test checks the serializer; the defect is one layer
+  up.
+  **This is the second instance of one pattern, not a separate bug.** The podcast
+  harvest lags the same way (see H1 above, finding 2): something is persisted through
+  Rust, the React state that mirrors it is not updated, and whatever reads from state
+  — the export, the row's chip — is stale until a remount or restart. H3's promise is
+  *export == persisted state*; what it delivers today is *export == in-memory state*.
+  The `useFollows.refresh()` fix (`8330464`) closed the same shape for published
+  follows; the store-backed slices want the equivalent.
 - **U4.5 H2 — macOS pass, VERIFIED against the wire (2026-08-19).** Three stations
   probed and persisted, checked by reading each stream's ICY headers with `curl`
   rather than by trusting the app: **SomaFM Indie Pop Rocks 5/5** (`icy-name`
