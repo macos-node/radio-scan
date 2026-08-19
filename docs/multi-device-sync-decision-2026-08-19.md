@@ -67,7 +67,7 @@ d              = airplay:station:<sha256(canonical)[:16]>      is NOT the spec)
 review was right that a sentence cannot carry this: default ports, query strings,
 percent-encoding and path case were all undecided, and two devices differing on any
 of them mint two addresses for one stream — this decision's own bug, one layer down.
-The algorithm and **18 conformance vectors** are now at
+The algorithm and **21 conformance vectors** are now at
 [`../schema/station-address.vectors.json`](../schema/station-address.vectors.json)
 with a `.sha256` sidecar, following ndisc's `master-key.vectors.json`. Every case the
 review named is decided there:

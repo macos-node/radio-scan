@@ -1,12 +1,12 @@
 {
-  "$comment": "Conformance vectors for station/show ADDRESS canonicalization (open decision #11). An implementation is conformant iff `canonical` and `station` match for every vector. Two devices disagreeing here mint two addresses for one stream \u2014 the bug this decision exists to end, one layer down \u2014 so this is pinned before either publisher implements it. Mirrors ndisc/schema/master-key.vectors.json. PROPOSAL: not adopted, not frozen; no consumer may rely on it until decision #11 is accepted.",
+  "$comment": "Conformance vectors for station/show ADDRESS canonicalization (open decision #11). An implementation is conformant iff `canonical` and `station` match for every vector. Two devices disagreeing here mint two addresses for one stream — the bug this decision exists to end, one layer down — so this is pinned before either publisher implements it. Mirrors ndisc/schema/master-key.vectors.json. PROPOSAL: not adopted, not frozen; no consumer may rely on it until decision #11 is accepted.",
   "schemaVersion": "station-address.v1 (PROPOSAL, UNFROZEN)",
   "algorithm": [
     "trim; if there is no scheme, assume http",
     "scheme: dropped entirely (not part of identity)",
     "host: lowercased",
     "port: dropped when it is the scheme default (80/http, 443/https); kept otherwise",
-    "path: percent-decoded then re-encoded consistently; CASE PRESERVED; one trailing slash dropped",
+    "path: percent-decoded then re-encoded consistently; CASE PRESERVED; ';' parameters kept verbatim; one trailing slash dropped",
     "query: kept verbatim when present (some mounts select format by it)",
     "fragment: dropped",
     "canonical = host[:port] + path + ('?' + query when present)",
@@ -16,7 +16,7 @@
   ],
   "notes": [
     "A URL-derived address is stable only while the URL is. A mount that moves host re-addresses, and cross-user #r discovery splits before-and-after; record that as a known manual repair (macOS review, caveat 1).",
-    "Stations have no publisher-stated identity to key on instead. icy-name is harvested (U4.5 H2) but is a banner \u2014 SomaFM's is prose, and Acid Jazz's stream states none \u2014 so it is too weak to serve as podcast:guid does for shows."
+    "Stations have no publisher-stated identity to key on instead. icy-name is harvested (U4.5 H2) but is a banner — SomaFM's is prose, and Acid Jazz's stream states none — so it is too weak to serve as podcast:guid does for shows."
   ],
   "vectors": [
     {
@@ -126,6 +126,24 @@
       "url": "79.111.14.76:8000/acidjazz",
       "canonical": "79.111.14.76:8000/acidjazz",
       "station": "airplay:station:762296657895e81f"
+    },
+    {
+      "case": "a Shoutcast ';' path parameter is preserved",
+      "url": "http://198.51.100.10:8000/;stream.nsv",
+      "canonical": "198.51.100.10:8000/;stream.nsv",
+      "station": "airplay:station:9678ddfa3f8f04da"
+    },
+    {
+      "case": "a Shoutcast ';' path parameter is preserved",
+      "url": "http://198.51.100.10:8000/;",
+      "canonical": "198.51.100.10:8000/;",
+      "station": "airplay:station:99da448ffd26eb07"
+    },
+    {
+      "case": "a Shoutcast ';' path parameter is preserved",
+      "url": "198.51.100.10:8000/;stream.nsv",
+      "canonical": "198.51.100.10:8000/;stream.nsv",
+      "station": "airplay:station:9678ddfa3f8f04da"
     }
   ]
 }
