@@ -369,3 +369,53 @@ describe("enrich survives what harvest does not", () => {
     expect(e).toEqual({ author: "A", editedAt: 3 });
   });
 });
+
+describe("funding + lightning address (U4.5 H5)", () => {
+  const feed = {
+    author: null,
+    ownerEmail: null,
+    website: null,
+    categories: [],
+    language: null,
+    copyright: null,
+    image: null,
+    description: null,
+    funding: { url: "https://fountain.fm/show/x/support", label: "Support the show" },
+    valueAddress: { address: "danielprince@fountain.fm", name: "Daniel Prince", split: 98 },
+  };
+
+  it("carries both into the stored slice", () => {
+    const h = harvestOf(feed, 100);
+    expect(h.funding).toEqual(feed.funding);
+    expect(h.valueAddress).toEqual(feed.valueAddress);
+  });
+
+  it("copies rather than aliasing the fetched objects", () => {
+    const h = harvestOf(feed, 100);
+    h.funding!.url = "https://mutated";
+    expect(feed.funding.url).toBe("https://fountain.fm/show/x/support");
+  });
+
+  it("round-trips through export and import", () => {
+    const sub: Sub = { url: "u", title: "T", harvest: harvestOf(feed, 100) };
+    expect(parseSubsJson(JSON.parse(JSON.stringify([sub])))[0]).toEqual(sub);
+  });
+
+  it("rejects funding with no url and a value with no address", () => {
+    const h = parseHarvest({
+      author: "A",
+      funding: { label: "Support us" },
+      valueAddress: { name: "Nobody", split: 100 },
+      fetchedAt: 1,
+    });
+    expect(h?.funding).toBeUndefined();
+    expect(h?.valueAddress).toBeUndefined();
+    expect(h?.author).toBe("A");
+  });
+
+  it("a feed stating neither stores neither", () => {
+    const h = harvestOf({ ...feed, funding: null, valueAddress: null }, 5);
+    expect("funding" in h).toBe(false);
+    expect("valueAddress" in h).toBe(false);
+  });
+});

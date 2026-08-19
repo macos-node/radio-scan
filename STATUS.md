@@ -444,6 +444,19 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   plus the macOS-recorded state the app cannot exit (a deleted station's row is
   hidden, so no ✕ remains to re-issue from, while the publish guard blocks re-adding
   it to get a fresh event).
+- **U4.5 H5 — funding + lightning address (2026-08-19, Linux-verified). U4.5 IS
+  COMPLETE; the v0.2.0 definition of done is MET on Linux.** `<podcast:funding>` and
+  the top `<podcast:value>` lnaddress join the harvest slice — **stored, never acted
+  on** (U4's no-payments line holds). `type="node"` recipients are skipped as keysend
+  plumbing. Measured: funding 5/10, lnaddress 3/10, each the top split (2%/7% platform
+  cuts correctly passed over); Bitcoin And stores funding and no address because its
+  only recipient is a node — the designed-for case. `FEED_CACHE_VERSION` → 4.
+  **Two process notes.** My first survey concluded "no feed carries funding" — an
+  artifact of `head -1` reading one line of pretty-printed XML instead of everything
+  before `<item>`; the real answer was 5/10. Second broken-probe-as-negative of the
+  day (see the `nak` note). And a test caught a real hole rather than a wrong
+  expectation: `<podcast:funding url="…"/>` is **self-closing** when it has no label,
+  arriving as `Empty` rather than `Start`, which the scanner ignored.
 - **U4.5 H4 — the enrich slice (2026-08-19, Linux-verified).** `Sub.enrich` sits
   beside `Sub.harvest` and is passed through Rust opaquely (a typed struct only so
   serde cannot drop it — the failure that cost the guid stamps once). Rules, both

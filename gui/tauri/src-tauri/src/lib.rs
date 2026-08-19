@@ -399,6 +399,14 @@ struct PodcastHarvest {
     /// Feed description — the show's own blurb, not the user's note.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     description: Option<String>,
+    /// Where the show says it takes support, and the top lightning address it
+    /// states. **Stored, never acted on** — the same posture as `image`: keeping
+    /// what a feed publishes costs nothing and rules out nothing, while paying
+    /// anyone from here is a decision U4 explicitly declined to make.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    funding: Option<Funding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    value_address: Option<ValueAddress>,
     /// When this slice was last taken, so a consumer can tell stale from absent.
     fetched_at: i64,
 }
@@ -1020,11 +1028,18 @@ struct Podcast {
     language: Option<String>,
     /// `<copyright>` / `rights`.
     copyright: Option<String>,
-    /// `<podcast:guid>` — the Podcasting-2.0 channel GUID (see extract_podcast_guid).
+    /// `<podcast:guid>` — the Podcasting-2.0 channel GUID (see extract_channel_extras).
     /// `serde(default)` so feed-cache entries written before this field still load
     /// instead of being discarded as unreadable.
     #[serde(default)]
     guid: Option<String>,
+    /// `<podcast:funding>` — where the show says it takes support. Stored as stated;
+    /// ntune does not act on it (U4: no payments, no writes).
+    #[serde(default)]
+    funding: Option<Funding>,
+    /// Top `<podcast:valueRecipient type="lnaddress">`. Same posture as funding.
+    #[serde(default)]
+    value_address: Option<ValueAddress>,
     episodes: Vec<Episode>,
 }
 
@@ -1050,10 +1065,41 @@ const PODCAST_NS: [&str; 4] = [
 
 /// What a channel states in namespaces `feed-rs` does not surface. One scan, since
 /// each of these otherwise costs a separate pass over a document that can be 4 MB.
+/// Where a show says it takes support. The URL and its label, as stated — this is
+/// identity, not a payment path: ntune stores it and does not act on it (the U4
+/// "no payments, no writes" line holds).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Funding {
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+}
+
+/// The largest-split `<podcast:valueRecipient>` of `type="lnaddress"`.
+///
+/// Only lnaddress: a `type="node"` recipient is a keysend pubkey — routing
+/// plumbing rather than a stated address, and meaningless to show a reader. So a
+/// show whose only recipient is a node (podhome's, measured 2026-08-19) stores
+/// funding and no value address, which is the honest reading of what it published.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ValueAddress {
+    pub address: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub split: Option<u32>,
+}
+
 #[derive(Default, Debug, PartialEq)]
 struct ChannelExtras {
     /// `<podcast:guid>` — the show's URL-independent identity.
     guid: Option<String>,
+    /// `<podcast:funding>` — url + label.
+    funding: Option<Funding>,
+    /// Top `<podcast:valueRecipient type="lnaddress">` by split.
+    value_address: Option<ValueAddress>,
     /// `<itunes:owner><itunes:email>`, else `<managingEditor>`. feed-rs exposes
     /// `feed.authors[].email` but leaves it empty for these feeds: measured
     /// 2026-08-19, podhome and the BBC both state an address that arrived as None,
@@ -1079,6 +1125,34 @@ fn rss_email(raw: &str) -> Option<String> {
 ///
 /// Only the CHANNEL's guid counts: `<guid>` inside an `<item>` is the episode id,
 /// an entirely different thing, and every RSS feed is full of them.
+/// Keep a `valueRecipient` if it is an lnaddress and outranks what we have. Highest
+/// split wins; ties keep the first, since feeds list the host first by convention.
+fn take_recipient(
+    out: &mut ChannelExtras,
+    e: &quick_xml::events::BytesStart,
+    attr: fn(&quick_xml::events::BytesStart, &[u8]) -> Option<String>,
+) {
+    if attr(e, b"type").as_deref() != Some("lnaddress") {
+        return; // a node pubkey is routing plumbing, not a stated address
+    }
+    let Some(address) = attr(e, b"address").filter(|a| !a.is_empty()) else {
+        return;
+    };
+    let split = attr(e, b"split").and_then(|s| s.parse::<u32>().ok());
+    let better = match (&out.value_address, split) {
+        (None, _) => true,
+        (Some(cur), Some(new)) => new > cur.split.unwrap_or(0),
+        (Some(_), None) => false,
+    };
+    if better {
+        out.value_address = Some(ValueAddress {
+            address,
+            name: attr(e, b"name").filter(|n| !n.is_empty()),
+            split,
+        });
+    }
+}
+
 /// Scan the channel head for the fields feed-rs drops. Item contents are skipped:
 /// an `<item>`'s own `<guid>` is the EPISODE id, and an `<itunes:email>` inside one
 /// is not the show owner's.
@@ -1092,15 +1166,39 @@ fn extract_channel_extras(bytes: &[u8]) -> ChannelExtras {
     let mut buf = Vec::new();
     let mut item_depth = 0usize;
 
+    // Attribute reader shared by funding + valueRecipient.
+    fn attr(e: &quick_xml::events::BytesStart, key: &[u8]) -> Option<String> {
+        e.attributes().flatten().find(|a| a.key.local_name().as_ref() == key).map(|a| {
+            String::from_utf8_lossy(a.value.as_ref()).trim().to_string()
+        })
+    }
+
     loop {
-        if out.guid.is_some() && out.owner_email.is_some() {
-            return out; // nothing left to find
-        }
         buf.clear();
         let (ns, ev) = match reader.read_resolved_event_into(&mut buf) {
             Ok(v) => v,
             Err(_) => return out, // malformed XML: feed-rs will report it
         };
+        // `<podcast:valueRecipient …/>` is self-closing, so it arrives as Empty, not
+        // Start — matching only Start would have silently found none of them.
+        if let Event::Empty(ref e) = ev {
+            // Self-closing forms of everything that can appear without a body. A
+            // funding link with no label is written `<podcast:funding url="…"/>`,
+            // and recipients are self-closing by convention — handling only Start
+            // events found neither.
+            if item_depth == 0 {
+                match e.local_name().as_ref() {
+                    b"valueRecipient" => take_recipient(&mut out, e, attr),
+                    b"funding" if out.funding.is_none() => {
+                        if let Some(url) = attr(e, b"url").filter(|u| !u.is_empty()) {
+                            out.funding = Some(Funding { url, label: None });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            continue;
+        }
         match ev {
             Event::Eof => return out,
             Event::Start(ref e) => {
@@ -1123,6 +1221,24 @@ fn extract_channel_extras(bytes: &[u8]) -> ChannelExtras {
                     if let Ok(text) = reader.read_text(end.name()) {
                         out.owner_email = rss_email(&String::from_utf8_lossy(text.as_ref()));
                     }
+                    continue;
+                }
+                if local == b"funding" && out.funding.is_none() {
+                    let url = attr(e, b"url").unwrap_or_default();
+                    let end = e.to_end().into_owned();
+                    let label = reader
+                        .read_text(end.name())
+                        .ok()
+                        .map(|t| String::from_utf8_lossy(t.as_ref()).trim().to_string())
+                        .filter(|t| !t.is_empty());
+                    if !url.is_empty() {
+                        out.funding = Some(Funding { url, label });
+                    }
+                    continue;
+                }
+                // Non-self-closing recipients are legal too.
+                if local == b"valueRecipient" {
+                    take_recipient(&mut out, e, attr);
                     continue;
                 }
                 if local != b"guid" {
@@ -1227,11 +1343,12 @@ fn now_secs() -> i64 {
 /// feed answers 304, we hand back the stored body, and the new field stays empty
 /// until the publisher happens to touch the feed. Found while adding
 /// `<podcast:guid>` (v2) on top of eleven already-cached bodies (v1).
-/// v2 → v3 (2026-08-19): the parse now extracts the channel's owner email, which
-/// feed-rs was dropping. Without the bump every cached body would revalidate to a
-/// 304 and keep its email-less parse — the exact starvation this counter exists
-/// for, met for the second time.
-const FEED_CACHE_VERSION: u32 = 3;
+/// v2 → v3 (2026-08-19): the parse gained the channel's owner email, which feed-rs
+/// was dropping. v3 → v4 (same day): it gained `podcast:funding` and the top
+/// `podcast:value` lightning address. Each bump exists because a cached body would
+/// otherwise revalidate to a 304 and keep the older parse forever — this counter
+/// has now earned itself three times.
+const FEED_CACHE_VERSION: u32 = 4;
 
 fn feed_cache_v1() -> u32 {
     1 // entries written before the version field existed
@@ -1396,6 +1513,8 @@ async fn fetch_podcast(app: tauri::AppHandle, url: String) -> Result<Podcast, St
     let extras = extract_channel_extras(&bytes);
     let podcast = Podcast {
         guid: extras.guid,
+        funding: extras.funding,
+        value_address: extras.value_address,
         title: feed.title.map(|t| t.content).unwrap_or_else(|| "Untitled".to_string()),
         description: feed.description.map(|t| t.content),
         image: feed.logo.or(feed.icon).map(|i| i.uri),
@@ -1971,6 +2090,68 @@ mod tests {
     fn a_non_address_is_not_an_email() {
         let xml = feed(CANON, "<managingEditor>Adam Curry</managingEditor>");
         assert_eq!(extract_channel_extras(xml.as_bytes()).owner_email, None);
+    }
+
+    #[test]
+    fn reads_funding_and_the_top_lightning_address() {
+        // Fountain's real shape: a funding link plus recipients split 98/2, the
+        // host first. The top split wins; the 2% platform cut does not.
+        let xml = feed(
+            CANON,
+            r#"<podcast:funding url="https://fountain.fm/show/x/support" params="uuid">Support the show</podcast:funding>
+               <podcast:value type="lightning" method="keysend">
+                 <podcast:valueRecipient name="Daniel Prince" split="98" type="lnaddress" address="danielprince@fountain.fm"/>
+                 <podcast:valueRecipient name="Fountain" split="2" type="lnaddress" address="fountain@fountain.fm"/>
+               </podcast:value>"#,
+        );
+        let x = extract_channel_extras(xml.as_bytes());
+        assert_eq!(
+            x.funding,
+            Some(Funding {
+                url: "https://fountain.fm/show/x/support".into(),
+                label: Some("Support the show".into()),
+            })
+        );
+        let v = x.value_address.expect("an lnaddress recipient");
+        assert_eq!(v.address, "danielprince@fountain.fm");
+        assert_eq!(v.split, Some(98));
+        assert_eq!(v.name.as_deref(), Some("Daniel Prince"));
+    }
+
+    #[test]
+    fn a_keysend_node_is_not_an_address() {
+        // podhome's real shape: funding, and a single recipient that is a node
+        // pubkey. Storing that as an "address" would be presenting routing
+        // plumbing as something a reader could use.
+        let xml = feed(
+            CANON,
+            r#"<podcast:funding url="https://www.podhome.fm/support/x"/>
+               <podcast:value type="lightning" method="keysend">
+                 <podcast:valueRecipient name="GoRedRaidersNode" type="node" address="03ee5caef01115a6ba7c85"/>
+               </podcast:value>"#,
+        );
+        let x = extract_channel_extras(xml.as_bytes());
+        assert_eq!(x.funding.map(|f| f.url).as_deref(), Some("https://www.podhome.fm/support/x"));
+        assert_eq!(x.value_address, None);
+    }
+
+    #[test]
+    fn funding_without_a_url_is_not_funding() {
+        let xml = feed(CANON, "<podcast:funding>Support us somehow</podcast:funding>");
+        assert_eq!(extract_channel_extras(xml.as_bytes()).funding, None);
+    }
+
+    #[test]
+    fn an_episodes_value_block_is_not_the_shows() {
+        // Per-episode <podcast:value> is legal and common; only the channel's counts.
+        let xml = format!(
+            r#"<?xml version="1.0"?><rss {CANON} version="2.0"><channel><title>T</title>
+                 <item><title>E</title>
+                   <podcast:value type="lightning"><podcast:valueRecipient split="100" type="lnaddress" address="episode@example.com"/></podcast:value>
+                 </item>
+               </channel></rss>"#
+        );
+        assert_eq!(extract_channel_extras(xml.as_bytes()).value_address, None);
     }
 
     #[test]

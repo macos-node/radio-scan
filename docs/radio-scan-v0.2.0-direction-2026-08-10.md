@@ -93,16 +93,42 @@ rather than left to the code):
 - **Feed always wins** over enrichment for any field the feed carries; enrichment
   stays dormant-but-stored if the feed later starts carrying it.
 
-### Definition of done
-- [ ] Restart preserves every harvested station + podcast field (no re-fetch needed
-      to re-render identity).
-- [ ] **Export == persisted state** — the drift is gone by construction (export
-      serializes the stored slice, not a live recompute).
-- [ ] Re-fetch/re-probe overwrites only the harvest slice; a manual enrich survives.
-- [ ] `image` URL is in the persisted model and round-trips through export/import;
+### Definition of done — **MET 2026-08-19** (Linux; macOS pass outstanding)
+
+Built in five phases, H1–H5; each verified against the real 10-feed / 10-station
+profile rather than fixtures alone.
+
+- [x] Restart preserves every harvested station + podcast field (no re-fetch needed
+      to re-render identity). *Proven with the feed-cache stashed and no network: a
+      subscription rendered author / category / website / owner email from
+      `podcasts.json` alone. Verifying this caught the last gap — expanding a row was
+      gated on a **fetched** feed, hiding the stored slice exactly when it was all
+      that remained.*
+- [x] **Export == persisted state** — the drift is gone by construction (export
+      serializes the stored slice, not a live recompute). *Both writers share
+      `toExportStation`, and a test walks every persisted key and fails if the export
+      omits one. Worth keeping: the drift **recreated itself** during this work — H2
+      added `harvest` to the store and the hand-listed exporter would have dropped it
+      two commits later.*
+- [x] Re-fetch/re-probe overwrites only the harvest slice; a manual enrich survives.
+      *`enrich` is a separate slice; a value the feed later states goes **dormant,
+      not deleted**.*
+- [x] `image` URL is in the persisted model and round-trips through export/import;
       still unrendered.
-- [ ] Import merges into the persisted slices (harvest-vs-enrich preserved), deduped
+- [x] Import merges into the persisted slices (harvest-vs-enrich preserved), deduped
       by the keys above.
+
+**What the harvest actually contains, measured on the reference profile:**
+`podcast:guid` 8/10 · owner email 6/10 · funding 5/10 · lightning address 3/10 ·
+Tier-A identity 10/10 (6–7 fields each) · station ICY slice on tune-in.
+
+**Three bugs this minor exposed by storing what had only been recomputed:**
+1. `feed-rs` surfaces no owner email — U4 claimed the field since it was written and
+   had never once captured one; its chip could not have rendered.
+2. A self-closing `<podcast:funding url="…"/>` was invisible to a scanner that
+   handled only `Start` events.
+3. `FEED_CACHE_VERSION` earned itself three times in a day: each parser gain would
+   otherwise have been starved by 304s on already-cached bodies.
 - [x] **Feed bodies survive a restart** — the tab paints from disk, then refreshes
       by conditional GET (slice 4, built 2026-08-18).
 - [x] **An import never wipes harvest.** `latestAt` proved the rule: `mergeSubs` is

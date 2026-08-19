@@ -47,6 +47,14 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   fields stay absent rather than becoming empty strings, so "not stated" and "stated
   as blank" remain distinguishable. Verified on a 10-feed profile: all 10 carry 6–7
   fields.
+- **Support links are harvested too (U4.5 H5).** `<podcast:funding>` and the top
+  `<podcast:value>` lightning address now persist with the rest of a show's identity.
+  Both are **stored and never acted on** — the U4 line (no payments, no writes)
+  stands; keeping what a feed publishes commits to nothing. A `type="node"` recipient
+  is deliberately skipped: it is a keysend pubkey, routing plumbing rather than an
+  address a reader could use. Measured on a 10-feed profile: funding on 5, a
+  lightning address on 3, each the highest-split recipient — platform cuts of 2% and
+  7% correctly passed over.
 - **A show's identity can be filled in by hand (U4.5 H4, data model).** Each
   subscription gains an `enrich` slice beside its harvest, with two rules: **the feed
   always wins**, so hand-typed values show only where the feed says nothing; and

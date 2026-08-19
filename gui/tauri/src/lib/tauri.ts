@@ -12,6 +12,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { Station, StationHarvest } from "./station";
+import type { Funding, ValueAddress } from "./podcasts";
 import { RELAYS } from "./relays";
 
 export type { Station, StationHarvest };
@@ -228,6 +229,10 @@ export interface Podcast {
   /** `<podcast:guid>` — the Podcasting-2.0 channel GUID: the show's identity
    *  independent of the URL serving it. Absent on plenty of feeds. */
   guid: string | null;
+  /** `<podcast:funding>` and the top `<podcast:value>` lightning address, as
+   *  stated. Stored, never acted on (U4: no payments, no writes). */
+  funding: Funding | null;
+  valueAddress: ValueAddress | null;
   episodes: Episode[];
 }
 

@@ -20,6 +20,23 @@ import { invoke } from "@tauri-apps/api/core";
  *  distinguishable from "stated as blank" for the merge and for export. Replaced
  *  wholesale on every fetch — the feed always wins — which is only safe because
  *  user-authored values live in their own slice. */
+/** Where a show says it takes support, as stated. Stored, never acted on — the
+ *  U4 line (no payments, no writes) holds; keeping what a feed publishes rules
+ *  nothing out and commits to nothing. */
+export interface Funding {
+  url: string;
+  label?: string;
+}
+
+/** The largest-split `podcast:valueRecipient` of type `lnaddress`. A `node`
+ *  recipient is a keysend pubkey — routing plumbing, not a stated address — and is
+ *  deliberately not captured. */
+export interface ValueAddress {
+  address: string;
+  name?: string;
+  split?: number;
+}
+
 export interface Harvest {
   author?: string;
   ownerEmail?: string;
@@ -30,6 +47,8 @@ export interface Harvest {
   /** Cover-art URL: stored, deliberately not rendered (the U4 decision). */
   image?: string;
   description?: string;
+  funding?: Funding;
+  valueAddress?: ValueAddress;
   /** Unix seconds — when this slice was taken, so stale is distinguishable from absent. */
   fetchedAt: number;
 }
@@ -240,6 +259,23 @@ export function parseHarvest(raw: unknown): Harvest | undefined {
   if (str(r.copyright)) h.copyright = String(r.copyright);
   if (str(r.image)) h.image = String(r.image);
   if (str(r.description)) h.description = String(r.description);
+  const fu = r.funding;
+  if (fu && typeof fu === "object") {
+    const f = fu as Record<string, unknown>;
+    if (typeof f.url === "string" && f.url.trim()) {
+      h.funding = { url: f.url };
+      if (typeof f.label === "string" && f.label.trim()) h.funding.label = f.label;
+    }
+  }
+  const va = r.valueAddress;
+  if (va && typeof va === "object") {
+    const v = va as Record<string, unknown>;
+    if (typeof v.address === "string" && v.address.trim()) {
+      h.valueAddress = { address: v.address };
+      if (typeof v.name === "string" && v.name.trim()) h.valueAddress.name = v.name;
+      if (typeof v.split === "number") h.valueAddress.split = v.split;
+    }
+  }
   if (Array.isArray(r.categories)) {
     const cats = r.categories.filter((c): c is string => typeof c === "string");
     if (cats.length > 0) h.categories = cats;
@@ -260,6 +296,8 @@ export function harvestOf(
     copyright: string | null;
     image: string | null;
     description: string | null;
+    funding?: Funding | null;
+    valueAddress?: ValueAddress | null;
   },
   fetchedAt: number,
 ): Harvest {
@@ -272,6 +310,8 @@ export function harvestOf(
   if (pod.image) h.image = pod.image;
   if (pod.description) h.description = pod.description;
   if (pod.categories.length > 0) h.categories = [...pod.categories];
+  if (pod.funding) h.funding = { ...pod.funding };
+  if (pod.valueAddress) h.valueAddress = { ...pod.valueAddress };
   return h;
 }
 
