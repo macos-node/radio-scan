@@ -283,6 +283,7 @@ export function PodcastTab({
   currentKey,
   playing,
   shows,
+  onPublished,
   signedIn,
 }: {
   onPlayEpisode: (ep: Episode, podcastTitle: string) => void;
@@ -290,6 +291,11 @@ export function PodcastTab({
   playing: boolean;
   /** The user's published `show.v1` follows, read off the relays (useFollows). */
   shows: Show[];
+  /** Re-read the published follows (useFollows().refresh). Called after a publish
+   *  or an unfollow: the open subscription does not reliably hand back an event
+   *  published mid-session, so the row is marked by re-asking the relays rather
+   *  than by trusting the click. */
+  onPublished?: () => void;
   /** A signing key is loaded — without one there is nothing to publish with. */
   signedIn: boolean;
 }) {
@@ -543,8 +549,11 @@ export function PodcastTab({
       const taken = rows.map((r) => r.show?.slug).filter((v): v is string => !!v);
       const slug = uniqueShowSlug(row.title, taken);
       await publishShow(slug, row.title, row.url, { guid: row.guid });
-      // No local state to flip: the live subscription reads the event straight
-      // back and mergeFollows marks the row, exactly as stations do.
+      // Published state is still never local state — but the open subscription
+      // cannot be relied on to hand the event back (macOS 2026-08-19: the chip
+      // stayed `follow` until restart), so re-read the relays and let
+      // mergeFollows mark the row from what they actually serve.
+      onPublished?.();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -557,6 +566,7 @@ export function PodcastTab({
     setPublishing(row.url);
     try {
       await unfollowShow(row.show.slug, row.show.eventId);
+      onPublished?.(); // same reason as follow(): re-read rather than assume
     } catch (e) {
       setError(String(e));
     } finally {

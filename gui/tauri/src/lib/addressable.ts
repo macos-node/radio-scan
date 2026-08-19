@@ -17,6 +17,29 @@ import type { Event as NostrEvent } from "nostr-tools";
 
 export const DELETE_KIND = 5; // NIP-09 deletion
 
+/** The key an event occupies in a live event map: addressable kinds collapse by
+ *  coordinate (a re-publish REPLACES its predecessor), everything else — kind:5
+ *  deletions — is distinct per event id. Shared by the live subscription and the
+ *  post-publish refetch so both fold an event in the same way. */
+export function streamKey(ev: NostrEvent, addressableKinds: number[]): string {
+  return addressableKinds.includes(ev.kind) ? addressOf(ev, ev.kind) : ev.id;
+}
+
+/** Fold one event into a live map, keeping the newest per key. Returns true when
+ *  the map changed, so a caller can skip recomputing on a duplicate — relays
+ *  re-send the same event across a reconnect and a refetch overlaps the stream. */
+export function ingestEvent(
+  map: Map<string, NostrEvent>,
+  ev: NostrEvent,
+  addressableKinds: number[],
+): boolean {
+  const key = streamKey(ev, addressableKinds);
+  const prev = map.get(key);
+  if (prev && ev.created_at <= prev.created_at) return false;
+  map.set(key, ev);
+  return true;
+}
+
 /** The addressable coordinate `<kind>:<pubkey>:<d>` — the replaceable identity. */
 export function addressOf(ev: NostrEvent, kind: number): string {
   const d = ev.tags.find((t) => t[0] === "d")?.[1] ?? "";

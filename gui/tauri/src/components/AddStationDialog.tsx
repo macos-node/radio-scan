@@ -40,10 +40,14 @@ async function audioVerdict(
  *  saved station is handed back for an immediate insert. */
 export function AddStationDialog({
   hasIdentity,
+  onPublished,
   onClose,
   onAdded,
 }: {
   hasIdentity: boolean;
+  /** Re-read the published station list after a successful publish — see
+   *  useFollows().refresh; the open subscription is not a reliable read-back. */
+  onPublished?: () => void;
   onClose: () => void;
   onAdded: (station: Station) => void;
 }) {
@@ -110,6 +114,7 @@ export function AddStationDialog({
             tags,
             description: trimmedDescription,
           });
+          onPublished?.();
         } catch (e) {
           console.error("publish_station failed (saved locally)", e);
         }

@@ -82,6 +82,22 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   feed plainly states. An episode's `<guid>` is never mistaken for the show's.
 
 ### Fixed
+- **A follow published mid-session now marks its own row.** Following a podcast
+  published the `show.v1` correctly but left the row reading `follow`; the chip only
+  flipped to `following` after a restart (measured on macOS 2026-08-19 —
+  `de61654e9d48…` was live on all three relays while the app still showed it
+  unfollowed). `follow()` keeps no local state by design, waiting for the open
+  `useFollows` subscription to hand the event back, and a subscription idle since
+  EOSE did not deliver it. `useFollows` now exposes **`refresh()`** — a one-shot
+  re-read on the same pool, folded into the same event map, so it can never blank
+  the list — and publish, unfollow and the station add/unfollow paths all call it.
+  **The rule that published state is never local state is kept:** the row is marked
+  from what the relays actually serve, by re-asking rather than by trusting the
+  click. The key/merge step is now `streamKey` + `ingestEvent` in `lib/addressable.ts`,
+  shared by the live stream and the refetch so both fold an event identically (a
+  duplicate reports no change, and a re-send across a reconnect costs no recompute);
+  7 unit tests cover it. Stations shared the defect through the same path — visible
+  only as a lagging published-marker, since the local store already rendered the row.
 - **The feed cache no longer starves a parser change.** Cache entries now record the
   parser generation that produced them (`FEED_CACHE_VERSION`). Conditional-GET
   validators are replayed only for a body the running build knows how to read, so a

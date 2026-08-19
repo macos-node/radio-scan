@@ -93,10 +93,12 @@ export default function App() {
 
   // U1: the station list is that pubkey's published `station.v1` (31241) events
   // off the relays. The Rust seed is the first-run fallback until any exist.
-  const { stations: relayStations, shows: relayShows, loading: relayLoading } = useFollows(
-    ownerHex,
-    true,
-  );
+  const {
+    stations: relayStations,
+    shows: relayShows,
+    loading: relayLoading,
+    refresh: refreshFollows,
+  } = useFollows(ownerHex, true);
   // The local, no-key station store (stations.json) — the always-available base
   // list. Seeded from the Rust seed set on first run; user adds/removes persist
   // to disk. The Nostr station.v1 list (relayStations) is an optional overlay.
@@ -227,12 +229,12 @@ export default function App() {
       if (identity) {
         // eventId is present when the row came from (or matched) a relay event —
         // it makes the deletion legible to relays that only delete by id.
-        unfollowStation(s.slug, s.eventId).catch((e) =>
-          console.error("unfollow failed", e),
-        );
+        unfollowStation(s.slug, s.eventId)
+          .then(() => refreshFollows())
+          .catch((e) => console.error("unfollow failed", e));
       }
     },
-    [identity],
+    [identity, refreshFollows],
   );
 
   // Export the current station list as JSON (native Save dialog). Exports the
@@ -635,6 +637,7 @@ export default function App() {
           ) : (
             <PodcastTab
               shows={relayShows}
+              onPublished={refreshFollows}
               signedIn={!!identity}
               onPlayEpisode={playEpisode}
               currentKey={current?.kind === "episode" ? current.key : null}
@@ -720,6 +723,7 @@ export default function App() {
       {showAdd && (
         <AddStationDialog
           hasIdentity={!!identity}
+          onPublished={refreshFollows}
           onClose={() => setShowAdd(false)}
           onAdded={onAdded}
         />
