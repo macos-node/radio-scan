@@ -370,6 +370,24 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   (deleted 12:41, re-published 12:45, resolves followed). Evidence:
   [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
   § S4.
+- **Duplicate Drone Zone row removed; store is 9 rows, 9 events, 1:1 (2026-08-20).**
+  Dropped the `http` row (`dronezone`), kept `drone-zone` (`https`) — https plays
+  direct while http goes through the loopback proxy, and the merge already displayed
+  the https row. All 9 published events now match exactly one local row. The wire's
+  `r` for that address still reads `http://…` (it was published from the row now
+  removed); harmless — the address is canonical so the match holds — and it would
+  only change if that station were unpublished and published again.
+  **Worth noting for the next dedupe:** the merge collapsing duplicates on display is
+  what made the redundant row **unreachable from the UI**, so this had to be done in
+  `stations.json` with the app closed. A "duplicates" affordance, or collapsing in the
+  *store* rather than only the view, is the real answer if this recurs.
+- **A control query on a DIFFERENT filter proves nothing (2026-08-20).** Sharpens the
+  earlier `nak` lesson. nos.lol returned 0 stations across 6 consecutive attempts
+  while answering kind:1 and our 10 shows in the same window — which reads exactly
+  like "that relay rejected the batch", and I nearly recorded it as such. Re-querying
+  minutes later: **9 stations on all three relays, 10 shows on all three, every one
+  matched by a local row.** The flakiness is per-query, not per-relay, so a control
+  must use the *same* filter before a zero means anything.
 - **Linux has published its whole list; macOS handoff written (2026-08-20).**
   `publish all` put **9 station.v1** on all three relays from 10 local rows — correct,
   not a miss: `drone-zone` (https) and `dronezone` (http) are one SomaFM mount, so
