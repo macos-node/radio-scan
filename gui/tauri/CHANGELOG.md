@@ -47,6 +47,24 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   fields stay absent rather than becoming empty strings, so "not stated" and "stated
   as blank" remain distinguishable. Verified on a 10-feed profile: all 10 carry 6–7
   fields.
+- **The podcast owner's email is no longer confused with the editor's.** The scan
+  kept whichever contact appeared first in the document, so a feed stating
+  `<managingEditor>` before `<itunes:owner><itunes:email>` stored the editorial
+  contact instead of the owner. Precedence is now decided after the scan: the
+  podcast-native owner wins, and the RSS editor stands in only when no owner is
+  stated.
+- **Harvest no longer depends on a tab being open.** Absorbing what a feed states
+  used to be an effect inside the Podcasts tab, so a fetch that resolved after the
+  tab closed wrote the feed cache and never the subscription store — leaving the
+  store thinner than what the app already knew, and an export thinner still. It is
+  now a plain store operation with no view attached, and a startup pass folds the
+  cache in, so a store that fell behind heals without the tab being visited.
+- **Backups taken mid-session no longer drop station details.** A probe wrote
+  through to the store but left the in-memory copy untouched, and the export reads
+  the in-memory copy — so a station probed during a session was exported without
+  what the stream had just told us, while the stored file was perfectly correct.
+  The app now re-reads the store after a probe, the same "re-ask rather than assume"
+  shape used for published follows.
 - **Support links are harvested too (U4.5 H5).** `<podcast:funding>` and the top
   `<podcast:value>` lightning address now persist with the rest of a show's identity.
   Both are **stored and never acted on** — the U4 line (no payments, no writes)

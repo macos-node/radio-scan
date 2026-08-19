@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
+  absorbPodcast,
   harvestOf,
+  loadSubs,
+  saveSubs,
+  PODCASTS_EVENT,
+  type AbsorbablePodcast,
   parseEnrich,
   parseSubsJson,
   podcastIdentity,
@@ -417,5 +422,73 @@ describe("funding + lightning address (U4.5 H5)", () => {
     const h = harvestOf({ ...feed, funding: null, valueAddress: null }, 5);
     expect("funding" in h).toBe(false);
     expect("valueAddress" in h).toBe(false);
+  });
+});
+
+describe("absorbPodcast — persistence that does not need a mounted tab", () => {
+  const feed = (over: Partial<AbsorbablePodcast> = {}): AbsorbablePodcast => ({
+    guid: "g-1",
+    author: "Author",
+    ownerEmail: null,
+    website: null,
+    categories: ["News"],
+    language: "en",
+    copyright: null,
+    image: null,
+    description: null,
+    episodes: [{ publishedAt: 1_787_000_000 }],
+    ...over,
+  });
+
+  beforeEach(() => {
+    saveSubs([{ url: "u1", title: "One" }]);
+  });
+
+  it("folds guid, latestAt and harvest into the stored sub", () => {
+    expect(absorbPodcast("u1", feed())).toBe(true);
+    const [sub] = loadSubs();
+    expect(sub.guid).toBe("g-1");
+    expect(sub.latestAt).toBe(1_787_000_000);
+    expect(sub.harvest?.author).toBe("Author");
+    expect(sub.harvest?.categories).toEqual(["News"]);
+  });
+
+  it("reports no change when the feed says the same thing again", () => {
+    absorbPodcast("u1", feed());
+    const before = loadSubs()[0].harvest?.fetchedAt;
+    expect(absorbPodcast("u1", feed())).toBe(false);
+    expect(loadSubs()[0].harvest?.fetchedAt).toBe(before); // no churn, no rewrite
+  });
+
+  it("updates when the feed's account of itself changes", () => {
+    absorbPodcast("u1", feed());
+    expect(absorbPodcast("u1", feed({ author: "New Author" }))).toBe(true);
+    expect(loadSubs()[0].harvest?.author).toBe("New Author");
+  });
+
+  it("ignores a feed that is not subscribed", () => {
+    expect(absorbPodcast("not-subscribed", feed())).toBe(false);
+    expect(loadSubs()).toHaveLength(1);
+  });
+
+  it("never touches the user's enrich slice", () => {
+    saveSubs([{ url: "u1", title: "One", enrich: { website: "https://mine", editedAt: 3 } }]);
+    absorbPodcast("u1", feed());
+    expect(loadSubs()[0].enrich).toEqual({ website: "https://mine", editedAt: 3 });
+  });
+
+  it("notifies a mounted tab when there is a DOM, and works when there is not", () => {
+    // No window here by default — absorbing must still persist (the tests above
+    // all ran that way). With one present, the tab gets its nudge.
+    const target = new EventTarget();
+    let fired = 0;
+    target.addEventListener(PODCASTS_EVENT, () => (fired += 1));
+    (globalThis as { window?: EventTarget }).window = target;
+    try {
+      expect(absorbPodcast("u1", feed())).toBe(true);
+    } finally {
+      delete (globalThis as { window?: EventTarget }).window;
+    }
+    expect(fired).toBe(1);
   });
 });

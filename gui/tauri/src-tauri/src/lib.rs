@@ -1100,11 +1100,17 @@ struct ChannelExtras {
     funding: Option<Funding>,
     /// Top `<podcast:valueRecipient type="lnaddress">` by split.
     value_address: Option<ValueAddress>,
-    /// `<itunes:owner><itunes:email>`, else `<managingEditor>`. feed-rs exposes
+    /// `<itunes:owner><itunes:email>` — the podcast OWNER. feed-rs exposes
     /// `feed.authors[].email` but leaves it empty for these feeds: measured
     /// 2026-08-19, podhome and the BBC both state an address that arrived as None,
     /// so U4's "Tier-A harvest" has never actually captured one.
     owner_email: Option<String>,
+    /// `<managingEditor>` — the RSS editorial contact. A DIFFERENT person in
+    /// general, kept separately so the owner can win regardless of document order.
+    /// The first cut kept whichever appeared first, which stored the editorial
+    /// contact for any feed that lists it earlier (macOS found Cypherpunk Bitstream
+    /// stating managingEditor at byte 415 and itunes:email at 986).
+    managing_editor: Option<String>,
 }
 
 /// Strip an RSS `email (Name)` wrapper — `<managingEditor>` is specified that way,
@@ -1157,6 +1163,17 @@ fn take_recipient(
 /// an `<item>`'s own `<guid>` is the EPISODE id, and an `<itunes:email>` inside one
 /// is not the show owner's.
 fn extract_channel_extras(bytes: &[u8]) -> ChannelExtras {
+    let mut out = scan_channel(bytes);
+    // The owner wins. <itunes:email> is the podcast-native owner contact;
+    // <managingEditor> is RSS's editorial contact and only stands in when the feed
+    // states no owner at all.
+    if out.owner_email.is_none() {
+        out.owner_email = out.managing_editor.take();
+    }
+    out
+}
+
+fn scan_channel(bytes: &[u8]) -> ChannelExtras {
     use quick_xml::events::Event;
     use quick_xml::name::ResolveResult;
 
@@ -1175,6 +1192,8 @@ fn extract_channel_extras(bytes: &[u8]) -> ChannelExtras {
 
     loop {
         buf.clear();
+        // No early exit on "found an email": <itunes:email> may still be ahead of us
+        // even when <managingEditor> has already been seen.
         let (ns, ev) = match reader.read_resolved_event_into(&mut buf) {
             Ok(v) => v,
             Err(_) => return out, // malformed XML: feed-rs will report it
@@ -1212,14 +1231,21 @@ fn extract_channel_extras(bytes: &[u8]) -> ChannelExtras {
                 if item_depth > 0 {
                     continue;
                 }
-                // `<managingEditor>` (unprefixed) and `<itunes:email>` both state
-                // the owner; keep whichever appears first.
-                if out.owner_email.is_none()
-                    && (local == b"email" || local == b"managingEditor")
+                // Collect both contacts; precedence is decided after the scan, not
+                // by whichever the document happens to state first.
+                let is_owner_email = local == b"email";
+                let is_editor = local == b"managingEditor";
+                if (is_owner_email && out.owner_email.is_none())
+                    || (is_editor && out.managing_editor.is_none())
                 {
                     let end = e.to_end().into_owned();
                     if let Ok(text) = reader.read_text(end.name()) {
-                        out.owner_email = rss_email(&String::from_utf8_lossy(text.as_ref()));
+                        let addr = rss_email(&String::from_utf8_lossy(text.as_ref()));
+                        if is_owner_email {
+                            out.owner_email = addr;
+                        } else {
+                            out.managing_editor = addr;
+                        }
                     }
                     continue;
                 }
@@ -2071,6 +2097,43 @@ mod tests {
             extract_channel_extras(editor.as_bytes()).owner_email.as_deref(),
             Some("adam@curry.com"),
             "the `(Name)` half is not part of the address"
+        );
+    }
+
+    #[test]
+    fn the_owner_wins_over_the_editor_whatever_the_order() {
+        // macOS 2026-08-19: Cypherpunk Bitstream states managingEditor at byte 415
+        // and itunes:email at 986, and the first cut stored the editorial contact.
+        // <itunes:email> is the podcast-native OWNER; document order is not a rule.
+        let editor_first = feed(
+            CANON,
+            "<managingEditor>contact@taz0.org (Editor)</managingEditor>\
+             <itunes:owner><itunes:email>bitstream@taz0.org</itunes:email></itunes:owner>",
+        );
+        assert_eq!(
+            extract_channel_extras(editor_first.as_bytes()).owner_email.as_deref(),
+            Some("bitstream@taz0.org")
+        );
+
+        // …and the same the other way round, so this is precedence, not reordering.
+        let owner_first = feed(
+            CANON,
+            "<itunes:owner><itunes:email>bitstream@taz0.org</itunes:email></itunes:owner>\
+             <managingEditor>contact@taz0.org (Editor)</managingEditor>",
+        );
+        assert_eq!(
+            extract_channel_extras(owner_first.as_bytes()).owner_email.as_deref(),
+            Some("bitstream@taz0.org")
+        );
+    }
+
+    #[test]
+    fn the_editor_stands_in_when_no_owner_is_stated() {
+        // No Agenda's shape: managingEditor only. Better than nothing.
+        let xml = feed(CANON, "<managingEditor>adam@curry.com (Adam Curry)</managingEditor>");
+        assert_eq!(
+            extract_channel_extras(xml.as_bytes()).owner_email.as_deref(),
+            Some("adam@curry.com")
         );
     }
 

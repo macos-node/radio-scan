@@ -517,6 +517,41 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   plus the macOS-recorded state the app cannot exit (a deleted station's row is
   hidden, so no ✕ remains to re-issue from, while the publish guard blocks re-adding
   it to get a fresh event).
+- **macOS pass on U4.5 found three defects — all fixed + Linux-verified
+  (2026-08-19).** The pass checked stored fields against an independent parse of the
+  raw XML rather than against the app's own extractor, which is why it found things a
+  green suite did not.
+  1. **Owner vs editor.** `extract_channel_extras` kept whichever contact appeared
+     FIRST; Cypherpunk Bitstream states `managingEditor` at byte 415 and
+     `itunes:email` at 986, so the editorial contact was stored as the owner.
+     Precedence is now resolved after the scan (owner wins; editor only stands in) —
+     2 tests, both document orders.
+  2. **Harvest lag.** The reconcile was a `useEffect` in `PodcastTab`, so a fetch
+     resolving after unmount wrote the Rust feed-cache and never the store: 8 of 25
+     macOS subs stuck on the earliest `fetchedAt`, one ownerEmail in the cache with
+     no counterpart in the store. Now a module-level `absorbPodcast()` (no view
+     attached) plus a **startup sweep** that folds the cache into the store.
+     Verified by stripping owner/funding/value from 9 subs and relaunching **without
+     opening the tab** — all restored.
+  3. **Mid-session station export dropped every slice.** `setStationHarvest` wrote
+     through to Rust but never updated `localStations`, and the export maps over
+     that state. App now re-reads the store after a probe — same shape as
+     `useFollows.refresh()`. Verified end-to-end on the real timeline: app launched
+     17:01:35, Boot Liquor probed 17:02:51, export written 17:06:43 **with no
+     relaunch** — 3/3 slices identical to the store, `eventId` leaked 0.
+  **macOS's own framing is the durable lesson:** 2 and 3 are one pattern, not two
+  bugs — something is persisted through Rust, the React mirror is not updated, and
+  whatever reads from state is stale until a remount. Worth checking any future
+  write-through against it.
+  **Two bugs I introduced while fixing these**, both caught by the suite within
+  minutes: `saveSubs` called `localStorage` and `invoke` unguarded (unlike
+  `settings.ts`), and a blanket replace left `notifyPodcastsChanged` calling itself —
+  infinite recursion that would have thrown on **every podcast save**.
+  **Known limit, recorded rather than papered over:** H3's export guard tests
+  `toExportStation` against a hand-built station that already carries a harvest, so
+  it validates the serializer while never exercising the state→export path where the
+  defect lived. Closing that needs component-level tests; the suite has no setup for
+  them (`environment: node`, no jsdom).
 - **U4.5 H5 — funding + lightning address (2026-08-19, Linux-verified). U4.5 IS
   COMPLETE; the v0.2.0 definition of done is MET on Linux.** `<podcast:funding>` and
   the top `<podcast:value>` lnaddress join the harvest slice — **stored, never acted

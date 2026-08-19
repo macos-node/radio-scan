@@ -131,16 +131,36 @@ export function loadSubs(): Sub[] {
  *  a non-graceful exit. */
 export function saveSubs(subs: Sub[]): void {
   cache = subs;
-  localStorage.setItem(PODCASTS_KEY, JSON.stringify(subs)); // offline mirror / fallback
-  void invoke("save_local_podcasts", { subs }).catch((e) =>
-    console.error("save_local_podcasts failed", e),
-  );
+  // Both sinks are optional: localStorage is absent in private mode, and `invoke`
+  // only exists inside Tauri. The in-memory cache above is authoritative for this
+  // session either way, so neither failure may take the write down with it —
+  // settings.ts has always been written this way; this one had not.
+  try {
+    localStorage.setItem(PODCASTS_KEY, JSON.stringify(subs)); // offline mirror
+  } catch {
+    /* no storage — the Rust store below is the durable one anyway */
+  }
+  try {
+    void invoke("save_local_podcasts", { subs }).catch((e) =>
+      console.error("save_local_podcasts failed", e),
+    );
+  } catch (e) {
+    console.error("save_local_podcasts unavailable", e);
+  }
 }
 
 /** Save + notify — for writes OUTSIDE the Podcasts tab (Backup restore) so the
  *  tab, if open, re-syncs. */
 export function setPodcasts(subs: Sub[]): void {
   saveSubs(subs);
+  notifyPodcastsChanged();
+}
+
+/** Tell any mounted tab to re-read. A no-op where there is no DOM (unit tests, and
+ *  anywhere this store is used outside a window), so persistence never depends on
+ *  a renderer being present — the point absorbPodcast exists to make. */
+function notifyPodcastsChanged(): void {
+  if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(PODCASTS_EVENT));
 }
 
@@ -170,8 +190,12 @@ export async function initSubs(): Promise<void> {
       cache = [];
     }
   }
-  localStorage.setItem(PODCASTS_KEY, JSON.stringify(cache));
-  window.dispatchEvent(new Event(PODCASTS_EVENT));
+  try {
+    localStorage.setItem(PODCASTS_KEY, JSON.stringify(cache));
+  } catch {
+    /* no storage */
+  }
+  notifyPodcastsChanged();
 }
 
 const NPUB_RE = /npub1[a-z0-9]{58}/i;
@@ -240,6 +264,69 @@ export function parseSubsJson(data: unknown): Sub[] {
       });
     })
     .filter((s) => s.url);
+}
+
+/** Fold what a fetched feed states into the stored subscription — harvest slice,
+ *  `<podcast:guid>` and newest-episode date — and persist it.
+ *
+ *  Module-level ON PURPOSE. This used to be a `useEffect` inside the Podcasts tab,
+ *  so a fetch that resolved after the tab unmounted wrote the Rust feed-cache and
+ *  never the subscription store: macOS measured 8 of 25 subs stuck on the earliest
+ *  `fetchedAt` while their cached bodies were up to five minutes newer, and an
+ *  owner email that existed in the cache with no counterpart in the store. The
+ *  store is not a rendering concern, and must not depend on anything being mounted.
+ *
+ *  Returns true when it changed something, and notifies any mounted tab. `fetchedAt`
+ *  is only bumped when the feed's account of itself actually changed, so an
+ *  unchanged feed does not rewrite the store on every launch. */
+export function absorbPodcast(url: string, pod: AbsorbablePodcast): boolean {
+  const subs = loadSubs();
+  const i = subs.findIndex((s) => s.url === url);
+  if (i < 0) return false; // not subscribed (a relay-only show) — nothing to store
+  const sub = subs[i];
+
+  const at = latestEpisodeAt(pod);
+  const nextAt = at ?? sub.latestAt;
+  const nextGuid = pod.guid ?? sub.guid;
+  const fresh = harvestOf(pod, sub.harvest?.fetchedAt ?? nowSecs());
+  const unchanged =
+    sub.harvest != null &&
+    JSON.stringify({ ...sub.harvest, fetchedAt: 0 }) ===
+      JSON.stringify({ ...fresh, fetchedAt: 0 });
+  const nextHarvest = unchanged ? sub.harvest : { ...fresh, fetchedAt: nowSecs() };
+
+  if (nextAt === sub.latestAt && nextGuid === sub.guid && nextHarvest === sub.harvest)
+    return false;
+
+  const updated: Sub = { ...sub };
+  if (nextAt != null) updated.latestAt = nextAt;
+  if (nextGuid) updated.guid = nextGuid;
+  updated.harvest = nextHarvest;
+
+  const next = [...subs];
+  next[i] = updated;
+  setPodcasts(next); // saves + notifies, so a mounted tab re-reads
+  return true;
+}
+
+/** The shape absorbPodcast needs — a fetched feed, or a cached body. */
+export interface AbsorbablePodcast {
+  guid?: string | null;
+  author: string | null;
+  ownerEmail: string | null;
+  website: string | null;
+  categories: string[];
+  language: string | null;
+  copyright: string | null;
+  image: string | null;
+  description: string | null;
+  funding?: Funding | null;
+  valueAddress?: ValueAddress | null;
+  episodes: { publishedAt: number | null }[];
+}
+
+function nowSecs(): number {
+  return Math.floor(Date.now() / 1000);
 }
 
 /** Read a harvest slice out of imported JSON, keeping only what it actually

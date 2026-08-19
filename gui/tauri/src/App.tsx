@@ -27,6 +27,7 @@ import {
   importJson,
   importLocalStations,
   listFavorites,
+  cachedPodcasts,
   listLocalStations,
   onNowPlaying,
   onTrayFavorite,
@@ -44,7 +45,7 @@ import {
   type NowPlaying,
   type Station,
 } from "./lib/tauri";
-import { initSubs } from "./lib/podcasts";
+import { absorbPodcast, initSubs, loadSubs } from "./lib/podcasts";
 import {
   getSetting,
   initSettings,
@@ -176,7 +177,24 @@ export default function App() {
       .catch((e) => console.error("list_local_stations failed", e));
     // Load the durable podcast store (podcasts.json) and migrate any legacy
     // localStorage subs on the first launch after the Rust store landed.
-    initSubs().catch((e) => console.error("initSubs failed", e));
+    initSubs()
+      .then(async () => {
+        // Heal any harvest the store missed while the Podcasts tab was closed. The
+        // Rust feed-cache is written by every fetch regardless of what is mounted,
+        // so it is the record of what the app already knows; folding it in at
+        // startup means an export never ships a store thinner than the app's own
+        // knowledge — H3's promise is export == PERSISTED state, and this is what
+        // keeps "persisted" from quietly meaning "whatever the last mounted tab
+        // happened to record".
+        const urls = loadSubs().map((s) => s.url);
+        if (urls.length === 0) return;
+        const cached = await cachedPodcasts(urls);
+        const healed = cached.filter((c) => absorbPodcast(c.url, c.podcast)).length;
+        if (healed > 0) {
+          console.info(`harvest: folded ${healed} cached feed(s) into the store`);
+        }
+      })
+      .catch((e) => console.error("initSubs failed", e));
     // Same for UI prefs (theme / volume / list-view) — settings.json.
     initSettings().catch((e) => console.error("initSettings failed", e));
     getIdentity()
@@ -381,7 +399,17 @@ export default function App() {
                 if (!stored) {
                   // No local row (a relay-only station), or the slice is unchanged.
                   console.info(`icy: ${s.slug} not stored — no local row, or unchanged`);
+                  return;
                 }
+                // Re-read the store into state. Writing through to Rust without
+                // this left React holding stations with no harvest, and the export
+                // maps over state — so a backup taken mid-session dropped every
+                // slice while stations.json was perfectly correct (macOS
+                // 2026-08-19). Same shape as useFollows.refresh(): after a
+                // write-through, re-ask rather than assume.
+                listLocalStations()
+                  .then(setLocalStations)
+                  .catch((e) => console.error("re-reading stations failed", e));
               })
               .catch((e) => console.error(`icy: storing ${s.slug} failed`, e));
           })
