@@ -113,17 +113,43 @@ for src, f in [("otw", "otw_log.jsonl"), ("duck", "duck_log.jsonl")]:
 PY
 ```
 
-Expect **more** than the macOS baseline of 30,235 / 9,214 rows — the feed carries
-412 On The Wire episodes the Mac never logged, so a large jump after `--all` is the
-correct outcome, not a fault.
+**Measured on Linux, 2026-08-19 — expect NO change at all: 30,235 / 9,214.**
+
+The correction above is right that the feed serves more *episodes* than the Mac
+logged, and wrong about what that implies for rows. Counting episodes that actually
+carry a tracklist:
+
+```
+feed episodes served      1,814   (1,674 distinct dates)
+  …carrying >= 1 track    1,279
+dates in feed, not in log   417
+  …carrying >= 1 track       0     <- every one is a pre-tracklist post
+```
+
+So `--all` correctly appends **zero rows**: the 417 extra dates are 1980s–2000s
+posts from before the tracklist format, and the parser prints each as `0 tracks`.
+A large jump is *not* expected here, and treating zero as a failure would be the
+same false alarm this section was rewritten to remove, pointing the other way.
+Check the row totals against the manifest instead — they should match exactly.
 
 > **The failure mode to watch for is duplication, and row count does not show it.**
-> The tell is `duplicate (episode,pos) rows` above being non-zero: the dedupe key is
-> the `episode` string, so a parse yielding even slightly different episode names
-> re-appends episodes already present, and the same track position then appears
-> twice under two spellings. Zero duplicates means the union worked however much it
-> grew. If it is non-zero, stop before enabling the timers and restore the file from
-> Proton rather than trying to de-duplicate in place.
+> The dedupe key is the `episode` string, so a parse yielding even slightly different
+> episode names re-appends episodes already present, and the same track position then
+> appears twice under two spellings.
+>
+> **But do not read a non-zero count as that failure — the baseline is already
+> non-zero.** Measured on the untouched macOS archive after import (0 rows added):
+> **otw 12 duplicated keys, duck 12**. Neither is an import fault:
+>
+> - **duck: all 12 are two different tracks at one position**, because `pos` carries
+>   markers (`"00"`, `"++"`) that legitimately repeat within an episode — the same
+>   `FlexPos` quirk RadioBar had to handle.
+> - **otw: 11 of 12 are genuinely identical rows** already in the Mac's log (e.g.
+>   `Dub Review - July 2007` listing its tracks twice in the source post).
+>
+> So the signal is an **increase**, not a value. Record the count before `--all` and
+> compare after; unchanged means the union worked however much it grew. Only if it
+> climbs should you stop and restore from Proton rather than de-duplicate in place.
 
 **6. Only then, on macOS**, stop the duplicate jobs:
 
@@ -138,14 +164,16 @@ Leave `com.tigger.acidjazz` alone.
 
 ## Still owed
 
-`Needs-verify: linux` on `0af91ce`: the units are generated and were dry-run
-against a stubbed `systemctl`, but **no timer has ever actually fired**. Confirm
-with a real firing rather than by inspection:
+~~`Needs-verify: linux` on `0af91ce`~~ — **done 2026-08-19.** Both services were
+started for real: `Result=success`, exit 0, and On The Wire parsed a live episode's
+23 tracks while correctly appending nothing. Timers are installed and enabled
+(otw Mon 09:00, duck Wed 09:00, `Persistent=true`), with `Linger=yes` already set so
+they run while logged out.
 
-```bash
-systemctl --user start otw-playlist.service && journalctl --user -u otw-playlist -n 20
-systemctl --user list-timers otw-playlist.timer duck-playlist.timer
-```
+One note for anyone repeating step 2 → 3: a first-ever `enable --now` does **not**
+fire a timer whose `OnCalendar` has already passed this week — `Persistent=true`
+replays runs missed while a timer was *already installed*, and a fresh enable has no
+recorded last-run. Installing before copying the archive is therefore safe.
 
 RadioBar (macOS) reads these logs and can toggle the launchd jobs, but it does not
 run them — quitting it changes nothing. It has no Linux counterpart; on Linux the
