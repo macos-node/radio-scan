@@ -448,14 +448,27 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   `timeout` kills it mid-write to a redirect or `tee`; an empty capture read as
   "resolves 0 shows" during the 2026-08-19 session and was briefly mistaken for a
   result. `S=$(timeout 25 nak req …)` is reliable.
-- **No single-instance guard (found 2026-08-19).** Two ntune processes were running
-  against one data dir — a `--tray` instance from before S0 plus a leftover test run.
-  Nothing prevents it (no `tauri-plugin-single-instance`), yet every durable store
-  assumes one writer, last-writer-wins. The risk is the **serde-drop bug from an old
-  process rather than old code**: the pre-S0 instance's `PodcastSub` has no `guid`
-  field, so any subscription write from it strips all 8 harvested guids. Nothing was
-  lost this time (store checked intact, both instances quit before testing), but the
-  class has now bitten twice and wants closing structurally.
+- **Single-instance guard — FIXED 2026-08-19 (`tauri-plugin-single-instance`).**
+  Two ntune processes had been running against one data dir (a pre-S0 `--tray`
+  instance plus a leftover test run). Every durable store is a whole-file rewrite
+  from an in-memory cache, so two processes clobber each other last-writer-wins — and
+  an **older process** is worse than a race, since serde drops every field its
+  structs predate: the pre-S0 instance's `PodcastSub` had no `guid`, leaving 8
+  harvested guids one subscription write from gone. Nothing was lost, but the class
+  had bitten twice (see the `latestAt` drop above), so it is now closed structurally
+  rather than by remembering to quit stale apps. A second launch hands its argv to
+  the callback and exits; `tray::reveal_main_window` (now shared with the tray's
+  "Show ntune") brings the existing window forward, so double-clicking the launcher
+  reads as "bring it to the front". Verified on Linux: a third launch exits 0
+  immediately and the process count stays at one.
+  **Two consequences worth knowing.** (1) *`make dev` and the installed app now
+  exclude each other* — the plugin keys its lock on the bundle identifier, which is
+  the same in both profiles. That is arguably correct rather than a regression, since
+  (2) **debug and release also SHARE the data directory**: only the keyring is split
+  by `cfg(debug_assertions)` (`ntune-dev`), while `app_data_dir()` has no `-dev`
+  suffix, so a dev run already writes the installed stores. The suite convention says
+  debug builds should have their own DB/config — worth doing, and only then would
+  scoping the guard per-profile make sense.
 - **`show.v1` S3 — Podcasts-tab Follow UI, BUILT + preview-verified (2026-08-18).**
   Per-row **follow** control (publishes `show.v1`) → `following` chip once the event
   reads back off the relays; published state is never local state, so the chip

@@ -23,6 +23,12 @@ tauri-plugin-opener = "2"
 # plugins; the file itself is written by our own `export_file` command.
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
+# One instance per user, because every durable store here assumes ONE writer:
+# stations/podcasts/settings are whole-file rewrites from an in-memory cache, so a
+# second process silently overwrites the first (and an OLDER build additionally
+# drops any field its structs don't know — that is how 8 harvested podcast:guids
+# were nearly lost on 2026-08-19). Desktop-only by nature; see lib.rs.
+tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Loopback stream proxy (src/proxy.rs) — lets the webview play http:// radio from

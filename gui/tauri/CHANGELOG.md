@@ -36,6 +36,16 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   discarded — the export serializer-drift U4.5 exists to close, met early.
 
 ### Added
+- **One instance per user.** ntune now refuses to start a second copy of itself:
+  launching again reveals the window you already have. Every durable store here is a
+  whole-file rewrite from an in-memory cache (`stations.json`, `podcasts.json`,
+  `settings.json`, `feed-cache/`), so two processes silently overwrite each other —
+  and a process running an **older build** is worse than a race, because serde drops
+  every field its structs predate. Two instances were found running on 2026-08-19, a
+  pre-guid `--tray` one alongside a newer one, with 8 harvested `podcast:guid`s a
+  single subscription write away from being erased. **Note for developers:** a
+  `make dev` run and the installed app now exclude each other, because they share
+  both the bundle identifier and the data directory — quit one to run the other.
 - **`show.v1` write path (S1).** `publish_show` (kind 31242) and `unfollow_show`
   land in Rust: a follow carries `d`/`name`/`r` (the **feed** URL), the feed's
   `<podcast:guid>` as a NIP-73 `i` tag when it states one, topic `t` tags and `alt`;

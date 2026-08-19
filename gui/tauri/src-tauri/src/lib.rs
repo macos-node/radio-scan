@@ -1374,6 +1374,21 @@ fn remove_favorite(app: tauri::AppHandle, id: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // MUST be registered first (plugin docs): a second launch hands its argv to
+        // this callback and exits, rather than becoming a second writer.
+        //
+        // Not a nicety. stations.json / podcasts.json / settings.json are each
+        // rewritten whole from an in-memory cache, so two processes silently clobber
+        // one another — and a process running an OLDER build is worse than a race:
+        // serde drops every field its structs predate, so a stale instance writing
+        // subscriptions would erase the harvested `guid` and `latestAt` values. That
+        // very pair of processes was found running on 2026-08-19 (a pre-guid `--tray`
+        // instance alongside a newer one) with 8 guids a single write away from gone.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            // Reveal the window the user already has instead of doing nothing —
+            // clicking the launcher twice should look like "bring it to the front".
+            tray::reveal_main_window(app);
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())

@@ -264,8 +264,11 @@ are **follow-ups, not gaps in the slice**:
       ✕ on a published row does both and the `following` chip is not a toggle, so a
       follow cannot be retracted while keeping the subscription. Local housekeeping
       and a public act should not share a control.
-- [ ] **Single-instance guard** — no `tauri-plugin-single-instance`, yet every
-      durable store assumes one writer (see the hazard below).
+- [x] **Single-instance guard** — done 2026-08-19 with
+      `tauri-plugin-single-instance`; a second launch reveals the existing window and
+      exits. Note it also excludes `make dev` from running beside the installed app,
+      since both share the identifier *and* the data dir (only the keyring is split
+      by profile) — giving debug builds their own `-dev` store is the follow-up.
 - [ ] 5 stale station tombstones on `relay.fizx.uk`, and the state the app cannot
       exit that the macOS session recorded (a deleted station's row is hidden, so no
       ✕ remains to re-issue from, while the publish guard blocks re-adding it).

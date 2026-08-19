@@ -158,8 +158,9 @@ fn spawn_bridge_poller(app: AppHandle, np_item: MenuItem<Wry>, fav_item: MenuIte
     });
 }
 
-/// Show + unminimize + focus the main window (the tray's "Show ntune").
-fn reveal_main_window(app: &AppHandle) {
+/// Show + unminimize + focus the main window (the tray's "Show ntune", and what a
+/// second launch does instead of starting a rival process — see lib.rs).
+pub fn reveal_main_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show();
         let _ = win.unminimize();
