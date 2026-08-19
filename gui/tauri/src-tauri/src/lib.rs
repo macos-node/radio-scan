@@ -61,6 +61,35 @@ pub struct Station {
     /// local store and surfaced like the podcast harvest.
     #[serde(default)]
     pub description: Option<String>,
+    /// What the STREAM said about itself on the last tune-in (U4.5). Distinct from
+    /// the fields above, which the user typed or published: this is replaced
+    /// wholesale on every probe, while `name` / `tags` / `description` are never
+    /// touched by it. It was in-memory only, so it evaporated on every restart —
+    /// a station's homepage and genre came back only after tuning in again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harvest: Option<StationHarvest>,
+}
+
+/// The ICY headers a stream advertises. All optional — a plain file, or a server
+/// that sends none, yields an empty slice rather than a wrong one.
+#[derive(Serialize, Deserialize, Clone, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StationHarvest {
+    /// `icy-name` — often a fuller description than the user's own label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icy_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub genre: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bitrate: Option<u32>,
+    /// `icy-url` — a homepage stations otherwise have nowhere to state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub homepage: Option<String>,
+    /// Content-Type as served (audio/mpeg, audio/aacp, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fmt: Option<String>,
+    /// Unix seconds of the probe, so stale is distinguishable from absent.
+    pub probed_at: i64,
 }
 
 fn station(
@@ -79,6 +108,7 @@ fn station(
         bitrate: Some(bitrate),
         tags: tags.iter().map(|t| t.to_string()).collect(),
         description: None,
+        harvest: None, // filled on first tune-in
     }
 }
 
@@ -249,6 +279,7 @@ fn add_local_station(
         bitrate,
         tags,
         description,
+        harvest: None, // nothing probed yet; filled on the first tune-in
     };
     // Ensure the store is materialised (seeds on first run) before mutating.
     let mut stations = list_local_stations(app.clone())?;
@@ -375,6 +406,30 @@ fn list_local_podcasts(app: tauri::AppHandle) -> Result<Vec<PodcastSub>, String>
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// Record what a stream advertised on tune-in, against the local station with this
+/// slug. Whole-slice replacement — a re-probe is the feed's latest word — while the
+/// user's `name` / `tags` / `description` are never touched.
+///
+/// A station that exists only on the relays has no local row to write to; that is
+/// not an error, it just means there is nowhere durable to keep the probe yet.
+#[tauri::command]
+fn set_station_harvest(
+    app: tauri::AppHandle,
+    slug: String,
+    harvest: StationHarvest,
+) -> Result<bool, String> {
+    let mut stations = list_local_stations(app.clone())?;
+    let Some(st) = stations.iter_mut().find(|s| s.slug == slug) else {
+        return Ok(false);
+    };
+    if st.harvest.as_ref() == Some(&harvest) {
+        return Ok(false); // nothing new — do not rewrite the file
+    }
+    st.harvest = Some(harvest);
+    write_local_stations(&app, &stations)?;
+    Ok(true)
 }
 
 /// Replace the whole subscription list. The renderer owns merge/dedupe (exactly
@@ -1544,6 +1599,7 @@ pub fn run() {
             add_local_station,
             remove_local_station,
             import_local_stations,
+            set_station_harvest,
             list_local_podcasts,
             save_local_podcasts,
             get_settings,

@@ -444,6 +444,23 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   plus the macOS-recorded state the app cannot exit (a deleted station's row is
   hidden, so no ✕ remains to re-issue from, while the publish guard blocks re-adding
   it to get a fresh event).
+- **U4.5 H2 — station harvest persisted (2026-08-19, Linux-verified).** The ICY
+  probe (`icyName`, `genre`, `bitrate`, `homepage`, `fmt`, `probedAt`) now lands on
+  the local station via `set_station_harvest`, replacing the slice wholesale per
+  probe and skipping the write when nothing changed. It was component state before,
+  so homepage/genre evaporated on every quit. **Stations invert the podcast rule** —
+  the user's typed name/description/bitrate always win, because `icy-name` is a
+  banner while a podcast's harvest is the publisher describing their own show; the
+  three-source merge is now a pure `stationIdentity()` with 6 tests. Verified live:
+  tuning Fluid wrote all five fields (`"Fluid: Drown in the electronic sound…"`,
+  genre `Hiphop Future Soul`, 128k, somafm.com, audio/mpeg) with user fields
+  untouched. Relay-only stations have no local row to write to — reported, not
+  silently dropped.
+  **Diagnosis note:** an earlier "nothing persisted" read was *not* a bug — that
+  build simply had never had a station tuned in it, and the probe only fires on
+  tune-in. The silent `.catch(() => {})` on the probe made a failed probe and an
+  un-run probe indistinguishable; every outcome now logs (probe failed / advertises
+  nothing / no local row / store failed).
 - **U4.5 H1 — podcast harvest persisted (2026-08-19, Linux-verified).** The Tier-A
   identity slice (author, categories, language, copyright, website, ownerEmail,
   `image` stored-not-rendered, feed blurb, `fetchedAt`) now lives on each `Sub` in

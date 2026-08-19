@@ -47,6 +47,17 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   fields stay absent rather than becoming empty strings, so "not stated" and "stated
   as blank" remain distinguishable. Verified on a 10-feed profile: all 10 carry 6–7
   fields.
+- **Station identity survives a restart (U4.5 H2).** What a stream advertises on
+  tune-in — `icy-name`, genre, bitrate, homepage, content-type — now persists as a
+  `harvest` slice on the local station, with the time it was probed. It lived only in
+  component state before, so a station's homepage and genre vanished on every quit
+  and came back only after tuning in again. **Stations invert the podcast rule**:
+  there the publisher's account of their own show wins, but `icy-name` is a stream
+  banner and the name you typed is yours — so a probe only fills a description you
+  never wrote, and a stated bitrate is never overwritten. The three-way merge (your
+  words, this session's probe, the stored slice) moved into a pure, unit-tested
+  `stationIdentity()`. A station that exists only on the relays has no local row, so
+  its probe has nowhere durable to go; that reports rather than failing silently.
 - **Owner email is finally harvested at all.** `feed-rs` does not surface
   `<itunes:owner><itunes:email>` or `<managingEditor>`, so the Tier-A "owner email"
   claimed since U4 had in fact **never** been captured — its identity chip could not

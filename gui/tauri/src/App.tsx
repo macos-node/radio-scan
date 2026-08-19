@@ -32,6 +32,7 @@ import {
   onTrayFavorite,
   removeFavorite,
   removeLocalStation,
+  setStationHarvest,
   stationIcy,
   streamUrl,
   unfollowStation,
@@ -353,10 +354,44 @@ export default function App() {
       play({ kind: "station", key: s.slug, title: s.name, url: s.url, seekable: false });
       // Win #2: probe the stream's ICY headers once to enrich the station
       // (homepage / live genre / description). Best-effort; failures are ignored.
+      //
+      // U4.5: the probe is also PERSISTED against the local row, so what the stream
+      // said survives a restart. It used to live only in this component's state, so
+      // a station's homepage and genre vanished on every quit and came back only
+      // after tuning in again.
       if (!icyByUrl[s.url]) {
+        // Every outcome says something. A silent catch here cost real debugging
+        // time on 2026-08-19: a probe that failed and a probe that never ran looked
+        // identical from outside the app, so the only way to tell them apart was
+        // watching stations.json for a write that might never come.
         stationIcy(s.url)
-          .then((info) => setIcyByUrl((m) => ({ ...m, [s.url]: info })))
-          .catch(() => {});
+          .then((info) => {
+            setIcyByUrl((m) => ({ ...m, [s.url]: info }));
+            const harvest = {
+              ...(info.name ? { icyName: info.name } : {}),
+              ...(info.genre ? { genre: info.genre } : {}),
+              ...(info.bitrate != null ? { bitrate: info.bitrate } : {}),
+              ...(info.homepage ? { homepage: info.homepage } : {}),
+              ...(info.fmt ? { fmt: info.fmt } : {}),
+              probedAt: Math.floor(Date.now() / 1000),
+            };
+            // A slice with nothing but a timestamp says nothing — don't store it,
+            // but do say so: "the server advertises nothing" is a real answer and
+            // otherwise indistinguishable from a broken write path.
+            if (Object.keys(harvest).length === 1) {
+              console.info(`icy: ${s.slug} advertises no metadata — nothing to store`);
+              return;
+            }
+            setStationHarvest(s.slug, harvest)
+              .then((stored) => {
+                if (!stored) {
+                  // No local row (a relay-only station), or the slice is unchanged.
+                  console.info(`icy: ${s.slug} not stored — no local row, or unchanged`);
+                }
+              })
+              .catch((e) => console.error(`icy: storing ${s.slug} failed`, e));
+          })
+          .catch((e) => console.warn(`icy: probing ${s.slug} failed`, e));
       }
     },
     [current, playing, stop, play, icyByUrl],

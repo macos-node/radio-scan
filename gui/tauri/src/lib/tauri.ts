@@ -11,10 +11,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import type { Station } from "./station";
+import type { Station, StationHarvest } from "./station";
 import { RELAYS } from "./relays";
 
-export type { Station };
+export type { Station, StationHarvest };
 
 // --- clipboard + JSON import/export (stations / podcasts) -------------------
 
@@ -263,6 +263,17 @@ export interface IcyInfo {
   bitrate: number | null;
   homepage: string | null;
   fmt: string | null;
+}
+
+/** Persist what a stream advertised, against the local station with this slug.
+ *  Returns false when there is no local row (a relay-only station has nowhere
+ *  durable to keep it) or when the slice is unchanged — in both cases the store is
+ *  left alone rather than rewritten. */
+export function setStationHarvest(
+  slug: string,
+  harvest: StationHarvest,
+): Promise<boolean> {
+  return invoke<boolean>("set_station_harvest", { slug, harvest });
 }
 
 /** Probe a stream's ICY headers without playing it (header-only read). */

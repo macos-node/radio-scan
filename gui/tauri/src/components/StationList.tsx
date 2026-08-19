@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy, LayoutGrid, List, Loader2, Radio, X } from "lucide-react";
 import { copyText, type IcyInfo, type Station } from "../lib/tauri";
+import { stationIdentity } from "../lib/station";
 import { stationIconKey } from "../lib/mediaIcon";
 import {
   getSetting,
@@ -60,16 +61,11 @@ export function StationList({
     return () => window.removeEventListener(SETTINGS_EVENT, onSettings);
   }, []);
 
-  // Merge the harvested station.v1 description with ICY headers captured on
-  // tune-in (win #2). Gap-fill only — the station's own description wins; ICY's
-  // icy-name backfills it, and icy-url adds a homepage stations otherwise lack.
-  const enrich = (s: Station) => {
-    const info = icy?.[s.url];
-    const homepage = info?.homepage
-      ? info.homepage.replace(/^https?:\/\//, "").replace(/\/+$/, "")
-      : null;
-    return { description: s.description || info?.name || null, homepage };
-  };
+  // Merge the station's own words with what the stream advertised. The logic lives
+  // in lib/station.ts (pure, unit-tested) because it now has three sources to weigh:
+  // the user's text, this session's probe, and the PERSISTED slice that carries the
+  // answer before anything is tuned — which is the whole point of storing it.
+  const enrich = (s: Station) => stationIdentity(s, icy?.[s.url]);
 
   // Focus Cancel, not the destructive button — a stray Enter/Space right after
   // the mis-click then dismisses rather than confirms.

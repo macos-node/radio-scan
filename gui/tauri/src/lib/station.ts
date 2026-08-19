@@ -24,6 +24,17 @@ export const OWNER_PUBKEY =
 
 const D_PREFIX = "airplay:station:";
 
+/** ICY headers a stream advertises. All optional: plenty of servers state none. */
+export interface StationHarvest {
+  icyName?: string;
+  genre?: string;
+  bitrate?: number;
+  homepage?: string;
+  fmt?: string;
+  /** Unix seconds of the probe — stale is distinguishable from absent. */
+  probedAt: number;
+}
+
 /** A tunable stream — the subset of station.v1 the UI needs. Shared by the
  *  relay reader and the Rust seed fallback (lib/tauri.ts). */
 export interface Station {
@@ -41,6 +52,11 @@ export interface Station {
   /** Optional human description — the station.v1 event *content* (plain text).
    *  Feed-authoritative like the podcast harvest; absent on bare follows. */
   description: string | null;
+  /** What the STREAM advertised on the last tune-in (U4.5) — replaced wholesale by
+   *  each probe, and never mixed into the user's own `name` / `tags` /
+   *  `description`. Persisted, so a station's homepage and genre survive a restart
+   *  instead of returning only after tuning in again. */
+  harvest?: StationHarvest;
   /** Relay-sourced only: the id of the kind:31241 event this row came from, so an
    *  unfollow can name it in an `e` tag as well as the `a` coordinate. Absent for
    *  seed / local-store rows, which were never published. Never persisted — the
@@ -133,4 +149,31 @@ export function resolveStations(
     parseStation,
     (s) => s.name,
   );
+}
+
+/** What to show for a station, merging the user's own words with what the stream
+ *  said about itself.
+ *
+ *  **The user always wins here** — the opposite of the podcast rule, and
+ *  deliberately so: a podcast's `harvest` is the *publisher* describing their own
+ *  show, while a station's is a stream banner, and the name you typed for a station
+ *  is yours. So `icy-name` only fills a description you never wrote.
+ *
+ *  `live` is this session's probe when there is one; otherwise the persisted slice
+ *  carries the answer, which is the point of storing it. */
+export function stationIdentity(
+  station: Station,
+  live?: { name: string | null; genre: string | null; bitrate: number | null; homepage: string | null; fmt: string | null },
+): { description: string | null; homepage: string | null; bitrate: number | null; genre: string | null } {
+  const h = station.harvest;
+  const icyName = live?.name ?? h?.icyName ?? null;
+  const rawHomepage = live?.homepage ?? h?.homepage ?? null;
+  return {
+    description: station.description || icyName || null,
+    homepage: rawHomepage
+      ? rawHomepage.replace(/^https?:\/\//, "").replace(/\/+$/, "")
+      : null,
+    bitrate: station.bitrate ?? live?.bitrate ?? h?.bitrate ?? null,
+    genre: live?.genre ?? h?.genre ?? null,
+  };
 }
