@@ -588,7 +588,7 @@ export function PodcastTab({
     setConfirmUnfollow(null);
     setPublishing(row.url);
     try {
-      await unfollowShow(row.url, row.guid, row.show.eventId);
+      await unfollowShow(row.url, row.guid, row.show.eventId, row.show.d);
       onPublished?.(); // same reason as follow(): re-read rather than assume
     } catch (e) {
       setError(String(e));

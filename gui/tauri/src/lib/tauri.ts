@@ -392,11 +392,13 @@ export function unfollowShow(
   url: string,
   guid?: string,
   eventId?: string,
+  d?: string,
 ): Promise<PublishResult> {
   return invoke<PublishResult>("unfollow_show", {
     url,
     guid,
     eventId,
+    d,
     relays: RELAYS,
   });
 }
@@ -413,8 +415,9 @@ export function unfollowShow(
 export function unfollowStation(
   url: string,
   eventId?: string,
+  d?: string,
 ): Promise<PublishResult> {
-  return invoke<PublishResult>("unfollow_station", { url, eventId, relays: RELAYS });
+  return invoke<PublishResult>("unfollow_station", { url, eventId, d, relays: RELAYS });
 }
 
 // --- favorites (local curated log) ------------------------------------------

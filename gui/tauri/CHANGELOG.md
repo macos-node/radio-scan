@@ -210,6 +210,19 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   feed plainly states. An episode's `<guid>` is never mistaken for the show's.
 
 ### Fixed
+- **A retraction now names the address the event actually occupies.** Both unfollow
+  paths re-derived the `d` from the item's URL/guid, which is only correct while the
+  `d` format never changes — and decision #11 changed it. Measured on macOS with two
+  real follows published before the change: the app computed the **new**
+  content-derived address while the `e` tag named the **old** event, so the deletion
+  pointed at two different things at once. A relay honouring NIP-09 by id would have
+  dropped the orphan; one honouring it by address would have tombstoned the *good*
+  follow instead — a different, worse split per relay. The two events had to be
+  retracted out-of-band with `nak` because the app had no way to name them.
+  `Show`/`Station` now carry the event's own `d` verbatim on relay-sourced rows, and
+  `retraction_d()` uses it, deriving only for a row that exists solely on this
+  device. Stations shared the defect through the same path and are fixed with it.
+  Confirmed by mutation: making it derive unconditionally fails both new tests.
 - **The cache-version rule is now enforced by the suite, not by memory.** Three tests
   pin the parse to `FEED_CACHE_VERSION`: one snapshots the channel scan's **output**
   for a fixture exercising every rule it encodes (guid, `<managingEditor>` stated

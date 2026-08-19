@@ -34,6 +34,11 @@ export interface Show {
   description: string | null;
   /** Id of the event this came from, so an unfollow can name it in an `e` tag. */
   eventId?: string;
+  /** The event's own `d`, verbatim. Set only for relay-sourced rows, and used
+   *  INSTEAD of re-deriving when retracting: an event published under an older
+   *  `d` format (pre-decision-#11 name-derived slugs) must be deleted at the
+   *  address it actually occupies, not at the one today's rules would compute. */
+  d?: string;
 }
 
 const tag = (ev: NostrEvent, k: string): string | undefined =>
@@ -61,6 +66,7 @@ export function parseShow(ev: NostrEvent): Show | null {
     .trim();
   const show: Show = {
     slug: d.startsWith(D_PREFIX) ? d.slice(D_PREFIX.length) : d,
+    d,
     title: name,
     url,
     tags: all(ev, "t"),

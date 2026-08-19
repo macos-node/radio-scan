@@ -874,6 +874,23 @@ fn show_d(guid: Option<&str>, url: &str) -> String {
     format!("{D_SHOW_PREFIX}{}", address_hash(&basis))
 }
 
+/// Which `d` a retraction names: the one the event ACTUALLY carries when the row
+/// came from a relay, else the derived one for a row that only exists locally.
+///
+/// Deriving unconditionally is only correct while the `d` format never changes,
+/// and decision #11 changed it. Measured on macOS 2026-08-19: two follows
+/// published under name-derived slugs became unretractable from the app the
+/// moment content-derived addressing landed — the deletion named the NEW address
+/// while its `e` tag named the OLD event, so an id-honouring relay dropped the
+/// orphan while an address-honouring one would have tombstoned the good follow
+/// instead. Reading the address off the event cannot drift with the format.
+fn retraction_d(stored: Option<&str>, derive: impl FnOnce() -> String) -> String {
+    match stored.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(d) => d.to_string(),
+        None => derive(),
+    }
+}
+
 /// Publish (or replace) a `station.v1` (kind 31241) — "follow this stream".
 /// Parameterised-replaceable: re-publishing the same slug edits in place.
 /// Signed with the owner nsec; `relays` come from the renderer so the read
@@ -965,11 +982,15 @@ fn deletion_tags(address: &str, event_id: Option<&str>) -> Result<Vec<Tag>, Stri
 async fn unfollow_station(
     url: String,
     event_id: Option<String>,
+    d: Option<String>,
     relays: Vec<String>,
 ) -> Result<PublishResult, String> {
     let keys = owner_keys()?;
-    // Same derivation as the publisher, so a retraction cannot miss its target.
-    let address = format!("{STATION_KIND}:{}:{}", keys.public_key().to_hex(), station_d(&url));
+    let address = format!(
+        "{STATION_KIND}:{}:{}",
+        keys.public_key().to_hex(),
+        retraction_d(d.as_deref(), || station_d(&url))
+    );
 
     let event = EventBuilder::new(Kind::EventDeletion, "")
         .tags(deletion_tags(&address, event_id.as_deref())?)
@@ -1062,13 +1083,14 @@ async fn unfollow_show(
     url: String,
     guid: Option<String>,
     event_id: Option<String>,
+    d: Option<String>,
     relays: Vec<String>,
 ) -> Result<PublishResult, String> {
     let keys = owner_keys()?;
     let address = format!(
         "{SHOW_KIND}:{}:{}",
         keys.public_key().to_hex(),
-        show_d(guid.as_deref(), &url)
+        retraction_d(d.as_deref(), || show_d(guid.as_deref(), &url))
     );
 
     let event = EventBuilder::new(Kind::EventDeletion, "")
@@ -1950,6 +1972,34 @@ mod tests {
     }
 
     // --- addressing conformance (decision #11) ------------------------------
+
+    /// A retraction must name the address the event OCCUPIES, not the one today's
+    /// rules would derive for it. This is what made the two pre-#11 follows
+    /// unretractable on macOS 2026-08-19: the app computed the new content-derived
+    /// address while the `e` tag named the old event, so the deletion pointed at
+    /// two different things at once.
+    #[test]
+    fn a_retraction_names_the_events_own_address() {
+        let legacy = "airplay:show:the-peter-mccormack-show";
+        let derived = || show_d(None, "https://feeds.acast.com/public/shows/69d4f193b76468caacc5068f");
+        assert_eq!(derived(), "airplay:show:f5a81dadd784fbf5", "derivation drifted");
+
+        // Relay-sourced: the stored `d` wins, however the rules have since changed.
+        assert_eq!(retraction_d(Some(legacy), derived), legacy);
+        // Local-only row: nothing stored, so derive.
+        assert_eq!(retraction_d(None, derived), "airplay:show:f5a81dadd784fbf5");
+        // Blank/whitespace is absence, not an address.
+        assert_eq!(retraction_d(Some("   "), derived), "airplay:show:f5a81dadd784fbf5");
+    }
+
+    /// Stations carry the same hazard through the same path.
+    #[test]
+    fn a_station_retraction_also_names_its_own_address() {
+        let legacy = "airplay:station:acid-jazz";
+        let derived = || station_d("http://79.111.14.76:8000/acidjazz");
+        assert_eq!(retraction_d(Some(legacy), derived), legacy);
+        assert_eq!(retraction_d(None, derived), derived());
+    }
 
     /// THE GATE. schema/station-address.vectors.json is contract: two publishers
     /// disagreeing on a default port, a path's case or a Shoutcast `;` would mint

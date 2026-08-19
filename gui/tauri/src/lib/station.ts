@@ -62,6 +62,10 @@ export interface Station {
    *  seed / local-store rows, which were never published. Never persisted — the
    *  Rust store's Station struct has no such field, so it drops on the way in. */
   eventId?: string;
+  /** The event's own `d`, verbatim — see the same field on `Show`. Retraction
+   *  uses it rather than re-deriving, so an event published under an older `d`
+   *  format is deleted where it actually is. */
+  d?: string;
 }
 
 /** Parse an imported JSON array into Stations — accepts the app's own export
@@ -122,6 +126,7 @@ export function parseStation(ev: NostrEvent): Station | null {
   const br = brRaw != null ? parseInt(brRaw, 10) : NaN;
   return {
     slug: d.startsWith(D_PREFIX) ? d.slice(D_PREFIX.length) : d,
+    d,
     name,
     url,
     fmt: tag(ev, "fmt") ?? null,

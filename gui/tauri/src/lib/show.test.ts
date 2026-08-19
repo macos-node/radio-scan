@@ -203,3 +203,25 @@ describe("mergeFollows", () => {
   });
 });
 
+describe("a relay-sourced show carries its own d", () => {
+  it("keeps the event's `d` verbatim, so a retraction can name it", () => {
+    // A follow published before decision #11: a name-derived slug that today's
+    // rules would never compute. Losing it here is what made it unretractable.
+    const ev = {
+      kind: 31242,
+      id: "ab".repeat(32),
+      pubkey: "cd".repeat(32),
+      created_at: 1,
+      content: "",
+      sig: "",
+      tags: [
+        ["d", "airplay:show:the-peter-mccormack-show"],
+        ["name", "The Peter McCormack Show"],
+        ["r", "https://feeds.acast.com/public/shows/69d4f193b76468caacc5068f"],
+      ],
+    } as unknown as Parameters<typeof parseShow>[0];
+    const show = parseShow(ev)!;
+    expect(show.d).toBe("airplay:show:the-peter-mccormack-show");
+    expect(show.slug).toBe("the-peter-mccormack-show");
+  });
+});
