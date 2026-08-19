@@ -1078,6 +1078,23 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   state**. Direction (incl. the open decisions to settle inside the minor):
   [`docs/radio-scan-v0.2.0-direction-2026-08-10.md`](docs/radio-scan-v0.2.0-direction-2026-08-10.md).
 
+- **Decision #11 steps 1–3 — macOS pass: cross-device convergence MEASURED
+  (2026-08-20).** The property the whole decision exists for, checked between two
+  independently-maintained stores rather than asserted: Linux published 9 stations
+  and 10 shows, and this machine's local rows derive **the same addresses** for
+  everything the two have in common — **4 of 6 stations, 9 of 10 shows**.
+  The station that proves it is `f6916d13d3603b75`: typed here as *"SomaFM — Indie
+  Pop Rocks"* and there as *"Indie Pop Rocks!"*, **two names, one address**. Under the
+  old scheme those were two events for one stream — the same bug that produced
+  `acid-jazz` / `aj` / `acid-j` / `acid-jazz-2`. Duck and Once Bitten! converge too,
+  subscribed separately on each machine. All published `d` values are 16 lowercase
+  hex, so the self-describing property that made `dfmt` unnecessary holds on the wire.
+  Suites green here: **45 Rust + 138 TS**.
+  *Method note:* the first run of this check reported everything as unmatched because
+  `timeout … nak > file` produced empty captures — exactly the gotcha `4327ddd`
+  recorded on Linux, hit on a second machine within a day. Command substitution is
+  the workaround; a silent empty capture reads as a clean negative result, which is
+  the dangerous shape.
 - **Episodic logging hands off to Linux (2026-08-19).** `otw_playlist.py` and
   `duck_playlist.py` are vendored into `episodic/` (`0af91ce`) with the
   `--data-dir` convention and a systemd-timer installer, so the two feed-parsed
