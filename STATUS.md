@@ -370,6 +370,33 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   (deleted 12:41, re-published 12:45, resolves followed). Evidence:
   [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
   § S4.
+- **Stale station tombstones CLEARED from the wire — 2026-08-19.** The five
+  acid-jazz naming experiments (`abstract-hiphop`, `acid-jazz-2`, `acid-j`, `aj`,
+  `acid-jazz`, published 08-05/08-06) had survived their `a`-only deletions on
+  `relay.fizx.uk` and were still being served to any client that did not filter
+  client-side. Retracted with a single `kind:5` naming all five by **event id**,
+  published from the operator's key via `nak … --prompt-sec` (interactive, so the
+  nsec stayed out of shell history and `/proc/<pid>/cmdline`). Verified after: **0
+  station.v1 across 5 reads on each of the three relays**, and each id queried
+  directly returns nothing — with a control query in the same window (releases 10,
+  shows 2, profile 1) proving the relay was answering, not merely quiet. The
+  published set is now exactly 2 `show.v1` and 0 stations.
+  This also closes the loop on the finding below: the `e` tag `24c874d` added is what
+  made these clearable at all — an `a`-only retraction had already been accepted and
+  ignored by this relay.
+- **`relay.fizx.uk` health — my earlier "serving nothing" call was WRONG.** I
+  reported the relay up-but-answering-nothing, partly on `kind:1` returning zero.
+  That is a genuine empty result on a personal relay that holds no notes, not a
+  symptom: it serves every kind the operator publishes (profile, 31237 releases,
+  31238 labels, stations, shows), and the operator's own publishing was accepted 3/3
+  all day. What is real is that **reads flap** — 27 consecutive empty station queries,
+  then all four capture forms returning 5 seconds later. I also twice blamed the
+  `nak` invocation form (pipeline vs command substitution); testing all four in one
+  window disproved it. **Lesson, recorded because it recurred:** a broken or
+  mis-scoped probe reads exactly like a real negative. Three instances today — an
+  empty `nak` capture read as "resolves 0 shows", a `head -1` survey read as "no feed
+  carries funding", and a `--since` timestamp **in the future** read as "the deletion
+  did not land". Run a control query before believing a zero.
 - **NIP-09: the `e` tag is what makes deletion work on `relay.fizx.uk` — MEASURED
   2026-08-19.** The unfollow of the show above published `b85b4216a2a2` with **both**
   targets (`a` coordinate + `e` id `ad61c99d…`) to all three relays, and **fizx.uk
