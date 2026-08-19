@@ -132,6 +132,43 @@ Each JSONL record has `utc`, `local`, `epoch`, `raw`, `artist`, `title`,
 `stream_url`, `prev_airtime_sec` (how long the previous track was on air — handy
 for disambiguating a match), and `meta_raw` (the full metadata block).
 
+## Episodic shows (no live stream)
+
+Some shows never broadcast their tracklist live — they publish it, per episode, in
+a feed. Nothing to catch in real time, so these are **parsers on a weekly timer**
+rather than a logger on a socket. Two ship in `episodic/`:
+
+| Script | Show | Source | Schedule |
+|---|---|---|---|
+| `otw_playlist.py` | On The Wire (Steve Barker) | Blogger feed, one post per episode (paginated) | Mon 09:00 |
+| `duck_playlist.py` | A Duck in a Tree (:zoviet*france:) | Podbean feed — the whole 700+ archive in one document | Wed 09:00 |
+
+```bash
+python3 episodic/otw_playlist.py                 # latest episode
+python3 episodic/duck_playlist.py --all          # backfill the archive (one pass)
+python3 episodic/otw_playlist.py --clean         # filter prose/embeds out of the raw log
+```
+
+They write `data_dir/otw/` and `data_dir/duck/` using the same `--data-dir` /
+`$RADIOSCAN_DATA` convention as `radioscan.py`, so all three sources land in one
+tree. Re-running is safe: episodes already in the log are not appended twice.
+
+Install as weekly systemd user timers:
+
+```bash
+cd service && ./install-linux-episodic.sh
+```
+
+`Persistent=true` means a week the machine was off is picked up on next boot —
+worth having, since a missed weekly run is a missed episode. On macOS these ran as
+launchd jobs (`com.tigger.otwradio` / `com.tigger.duckradio`); pass
+`--data-dir ~/RadioTuner` to keep appending to logs written before they moved here.
+
+Both parsers are stdlib-only and share the live logger's row shape
+(`episode`, `episode_date`, `pos`, `artist`, `title`, `raw`), so the same readers
+work across all three sources — `duck` adds `theme`, `ep_num`, `audio_url` and
+`duration`, which readers that don't know them ignore.
+
 ## Analyse
 
 ```bash
