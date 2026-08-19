@@ -433,12 +433,16 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   invalidation. **Still `Needs-verify: macos`** for S1–S4: all three relays currently
   serve **0** `show.v1` (the S4 event was published then unfollowed), so the in-app
   `following` render needs a fresh signed follow — the operator's call, not a code
-  question. *(Build note: `tauri build` reliably fails its **dmg** step under a
-  sandboxed shell — `bundle_dmg.sh` dies after writing the intermediate `rw.*.dmg`,
-  where it would attach the image — while `ntune.app` bundles fine. The same command
-  in a normal terminal produces the dmg. Not a packaging bug; use
-  `install.sh --skip-build` from a sandboxed agent, and delete any `rw.*.dmg` debris
-  left in `bundle/macos/`.)*
+  question. *(Build note: `tauri build` failed its **dmg** step twice on 2026-08-19
+  — `bundle_dmg.sh` died after writing the intermediate `rw.*.dmg`, while `ntune.app`
+  bundled fine — and has succeeded on every run since, four in a row, including from
+  the same sandboxed shell that saw the failures. **Cause unknown.** Two hypotheses
+  were tested and both are wrong: it is not the sandbox (the dmg builds there), and it
+  is not the leftover `rw.*.dmg` debris (planting one does not reproduce it). Tauri
+  swallows the script's stderr, so there is no diagnostic. Treat a one-off dmg failure
+  as unexplained rather than as a release blocker — `ntune.app` is unaffected and
+  release dmgs come from CI — but if it returns, capture `bundle_dmg.sh` stderr
+  directly, since that is the missing evidence.)*
 - **`show.v1` S1–S4 — macOS pass, VERIFIED with one bug (2026-08-19).** Followed
   *The Peter McCormack Show* from the installed build: `de61654e9d48…` is on **all
   three relays**, tags `d`/`name`/`r`/`alt`. **No `i` tag, correctly** — acast states
