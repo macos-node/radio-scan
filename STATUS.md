@@ -370,6 +370,17 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   (deleted 12:41, re-published 12:45, resolves followed). Evidence:
   [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
   § S4.
+- **TODO — check the live Acid Jazz logger (noted 2026-08-20, not done).** The one
+  piece untouched while the episodic pair moved to Linux and decision #11 landed. It
+  stayed on macOS by design (`com.tigger.acidjazz`, uptime not schedule), and nobody
+  has looked at it in three weeks: STATUS still records **~1,161 plays over
+  2026-07-28 → 2026-08-01**. Unlike the episodic timers, **a gap here is permanent** —
+  the station broadcasts only the current track, so there is nothing to backfill from.
+  Check running/rows/date-range/gap-shape, then decide where it should live with that
+  data in hand (macOS as-is · Linux via `service/install-linux.sh` · a VPS, which the
+  episodic handoff already called the eventual answer). Also an input to the unbuilt
+  `airplay.v1`: a sensor that is up half the time publishes a misleading picture.
+  Checklist: [`docs/live-logger-checkup-todo-2026-08-20.md`](docs/live-logger-checkup-todo-2026-08-20.md).
 - **Duplicate Drone Zone row removed; store is 9 rows, 9 events, 1:1 (2026-08-20).**
   Dropped the `http` row (`dronezone`), kept `drone-zone` (`https`) — https plays
   direct while http goes through the loopback proxy, and the merge already displayed
