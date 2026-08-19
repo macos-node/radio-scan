@@ -517,6 +517,18 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   plus the macOS-recorded state the app cannot exit (a deleted station's row is
   hidden, so no ✕ remains to re-issue from, while the publish guard blocks re-adding
   it to get a fresh event).
+- **✕ / unfollow conflation — FIXED + Linux-verified (2026-08-19).** The S4
+  affordance gap, hit on both platforms: ✕ on a published row unsubscribed *and*
+  unfollowed, so local housekeeping and a public retraction shared one control.
+  `following` is now a **toggle** (retracts the follow, subscription untouched); ✕ is
+  **local only**; a relay-only row shows no ✕ (nothing local to remove). Asymmetric
+  confirms by design — following is additive and one click, **unfollowing asks**,
+  since it publishes a kind:5 to every relay. Verified by driving all three row types
+  in the preview: subscribed+followed (both controls), subscribed-only (`follow` + ✕),
+  relay-only (`following`, no ✕); the unfollow dialog names the address and promises
+  the subscription stays; and unsubscribing a followed show removed it from the store
+  while the row **remained, re-marked `relay`** — exactly what its dialog said would
+  happen.
 - **Enrich editor — BUILT + Linux-verified (2026-08-19).** H4 shipped the model,
   merge and persistence with no way in; this is the way in. `EnrichDialog` (7 fields)
   reached from the identity row via **fill in** / **edit**, backed by a module-level

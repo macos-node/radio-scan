@@ -258,40 +258,41 @@ function FollowControl({
   signedIn,
   busy,
   onFollow,
+  onUnfollow,
   compact = false,
 }: {
   row: FollowRow;
   signedIn: boolean;
   busy: boolean;
   onFollow: (row: FollowRow) => void;
+  onUnfollow: (row: FollowRow) => void;
   compact?: boolean;
 }) {
   if (!signedIn) return null;
-  if (row.show) {
-    return (
-      <span
-        className={cn(
-          "shrink-0 rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[9px] text-nostr",
-          compact && "px-1",
-        )}
-        title={`Published as show.v1 — airplay:show:${row.show.slug}\nOthers can discover this follow on the relays.`}
-      >
-        following
-      </span>
-    );
-  }
+  // `following` is a TOGGLE, not a badge. It used to be a label, which left ✕ as
+  // the only way to retract a follow — and ✕ also removes the subscription, so
+  // "stop publishing this" and "remove it from my list" could not be done
+  // separately. One is a public act, the other is local housekeeping.
+  const published = !!row.show;
   return (
     <button
       type="button"
-      onClick={() => onFollow(row)}
+      onClick={() => (published ? onUnfollow(row) : onFollow(row))}
       disabled={busy}
-      title="Publish a show.v1 follow to the relays"
+      title={
+        published
+          ? `Published as show.v1 — airplay:show:${row.show!.slug}\nClick to unfollow (publishes a kind:5). Your subscription stays.`
+          : "Publish a show.v1 follow to the relays"
+      }
       className={cn(
-        "shrink-0 rounded-sm border border-surface px-1.5 py-0.5 text-[9px] text-muted transition-colors hover:border-nostr hover:text-nostr disabled:opacity-40",
+        "shrink-0 rounded-sm px-1.5 py-0.5 text-[9px] transition-colors disabled:opacity-40",
+        published
+          ? "bg-surface font-mono text-nostr hover:text-alert"
+          : "border border-surface text-muted hover:border-nostr hover:text-nostr",
         compact && "px-1",
       )}
     >
-      {busy ? "…" : "follow"}
+      {busy ? "…" : published ? "following" : "follow"}
     </button>
   );
 }
@@ -349,10 +350,15 @@ export function PodcastTab({
   // drop a subscription outright with no undo.
   const [confirmUrl, setConfirmUrl] = useState<string | null>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const unfollowCancelRef = useRef<HTMLButtonElement>(null);
   // Feed URL currently being published / retracted — disables just that row's control.
   const [publishing, setPublishing] = useState<string | null>(null);
   // Feed whose "fill in" editor is open.
   const [editing, setEditing] = useState<string | null>(null);
+  // Feed whose follow is about to be retracted. Following is one click (additive,
+  // and undone by clicking again); UNfollowing publishes a deletion to every relay,
+  // so it asks first — the same line the app draws between adding and removing.
+  const [confirmUnfollow, setConfirmUnfollow] = useState<string | null>(null);
 
   // Re-sync when a restore (the app-level Backup dialog) writes subs from
   // outside this tab — same-document localStorage writes don't fire `storage`.
@@ -382,6 +388,9 @@ export function PodcastTab({
   useEffect(() => {
     if (confirmUrl) cancelRef.current?.focus();
   }, [confirmUrl]);
+  useEffect(() => {
+    if (confirmUnfollow) unfollowCancelRef.current?.focus();
+  }, [confirmUnfollow]);
 
   const chooseSort = (v: PodcastSort) => {
     setSort(v);
@@ -537,10 +546,9 @@ export function PodcastTab({
   };
 
   const remove = (url: string) => {
-    const row = rows.find((r) => r.url === url);
-    // A published follow is retracted alongside the local subscription — the same
-    // bargain the Stations tab makes, and the confirm dialog says so.
-    if (row?.show) void unfollow(row);
+    // Local only. Retracting the published follow is the `following` toggle's job —
+    // conflating them meant you could not stop publishing a show without also
+    // dropping it from your list, or tidy your list without telling the relays.
     setSubs((prev) => {
       const next = prev.filter((s) => s.url !== url);
       saveSubs(next);
@@ -575,6 +583,7 @@ export function PodcastTab({
 
   const unfollow = async (row: FollowRow) => {
     if (!row.show) return;
+    setConfirmUnfollow(null);
     setPublishing(row.url);
     try {
       await unfollowShow(row.show.slug, row.show.eventId);
@@ -601,6 +610,9 @@ export function PodcastTab({
   const expandedSub = expanded ? rows.find((s) => s.url === expanded) : undefined;
   const confirmSub = confirmUrl ? rows.find((s) => s.url === confirmUrl) : undefined;
   const editingRow = editing ? rows.find((s) => s.url === editing) : undefined;
+  const unfollowRow = confirmUnfollow
+    ? rows.find((s) => s.url === confirmUnfollow)
+    : undefined;
 
   return (
     <div className="flex flex-col">
@@ -781,6 +793,7 @@ export function PodcastTab({
                           signedIn={signedIn}
                           busy={publishing === s.url}
                           onFollow={follow}
+                          onUnfollow={(r) => setConfirmUnfollow(r.url)}
                         />
                       </div>
                       <button
@@ -801,15 +814,19 @@ export function PodcastTab({
                           <Copy size={14} />
                         )}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmUrl(s.url)}
-                        title="Unsubscribe"
-                        aria-label={`Unsubscribe ${s.title}`}
-                        className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
-                      >
-                        <X size={14} />
-                      </button>
+                      {/* Nothing local to remove on a relay-only row: that one is
+                          a published follow, and `following` is how it goes. */}
+                      {!s.relayOnly && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmUrl(s.url)}
+                          title="Remove from my list"
+                          aria-label={`Unsubscribe ${s.title}`}
+                          className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
                     </div>
 
                     {open && (
@@ -917,18 +934,21 @@ export function PodcastTab({
                           signedIn={signedIn}
                           busy={publishing === s.url}
                           onFollow={follow}
+                          onUnfollow={(r) => setConfirmUnfollow(r.url)}
                           compact
                         />
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmUrl(s.url)}
-                        title="Unsubscribe"
-                        aria-label={`Unsubscribe ${s.title}`}
-                        className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-sm bg-panel/80 text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
-                      >
-                        <X size={12} />
-                      </button>
+                      {!s.relayOnly && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmUrl(s.url)}
+                          title="Remove from my list"
+                          aria-label={`Unsubscribe ${s.title}`}
+                          className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-sm bg-panel/80 text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -995,6 +1015,40 @@ export function PodcastTab({
         />
       )}
 
+      {unfollowRow?.show && (
+        <Modal title="Unfollow?" onClose={() => setConfirmUnfollow(null)}>
+          <p className="text-sm text-fg">
+            Stop publishing <span className="font-medium">{unfollowRow.title}</span>{" "}
+            as a show you follow?
+          </p>
+          <p className="mt-1.5 break-all font-mono text-[10px] text-muted">
+            airplay:show:{unfollowRow.show.slug}
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            {unfollowRow.relayOnly
+              ? "A Nostr unfollow (kind:5) is published to your relays and the row goes — this show is followed but not subscribed on this device. You can follow it again at any time."
+              : "A Nostr unfollow (kind:5) is published to your relays. Your subscription and its episodes stay exactly as they are; only the public follow goes."}
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              ref={unfollowCancelRef}
+              onClick={() => setConfirmUnfollow(null)}
+              className="rounded-sm border border-surface px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void unfollow(unfollowRow)}
+              className="rounded-sm bg-alert px-3 py-1.5 text-xs font-medium text-bg transition-opacity hover:opacity-90"
+            >
+              Unfollow
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {/* Unsubscribing is confirmed — the hover-✕ sits right where the pointer
           already is, and there's no undo once the sub is gone. */}
       {confirmSub && (
@@ -1008,9 +1062,7 @@ export function PodcastTab({
           </p>
           <p className="mt-2 text-xs text-muted">
             {confirmSub.show
-              ? confirmSub.relayOnly
-                ? "This show is followed on the relays, not subscribed here — removing it publishes a Nostr unfollow (kind:5), so it leaves your published list. You can follow it again at any time."
-                : "The subscription goes from this device AND a Nostr unfollow (kind:5) is published, so it also leaves your published show list. Nothing is deleted from the feed itself."
+              ? "Only the subscription goes. You still publish this show as a follow, so it stays in the list marked “relay” until you turn “following” off — nothing is sent to the relays by removing it here."
               : "Only the subscription goes — nothing is deleted from the feed or from disk, and you can add the URL back at any time."}
           </p>
           <div className="mt-4 flex justify-end gap-2">

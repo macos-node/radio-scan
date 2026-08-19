@@ -73,6 +73,15 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   address a reader could use. Measured on a 10-feed profile: funding on 5, a
   lightning address on 3, each the highest-split recipient — platform cuts of 2% and
   7% correctly passed over.
+- **Unsubscribing and unfollowing are separate acts now.** The ✕ on a published
+  podcast used to do both at once, so you could not stop publishing a show without
+  also dropping it from your list, or tidy your list without announcing it to your
+  relays. **`following` is a toggle**: click it to retract the follow, and your
+  subscription and episodes stay exactly as they are. ✕ is local only — remove a
+  show you still follow and it stays listed, marked `relay`, until you turn
+  `following` off. Following is one click; **unfollowing asks first**, because it
+  publishes a deletion to every relay. A relay-only row has no ✕ at all, since there
+  is nothing local to remove.
 - **You can now fill in what a feed leaves out.** Expanding a podcast offers
   **fill in** (or **edit**, once you have) — author, website, contact email,
   language, copyright, categories, description. The screen makes the rule visible
