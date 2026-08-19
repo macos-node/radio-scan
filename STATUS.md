@@ -392,7 +392,12 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   invalidation. **Still `Needs-verify: macos`** for S1–S4: all three relays currently
   serve **0** `show.v1` (the S4 event was published then unfollowed), so the in-app
   `following` render needs a fresh signed follow — the operator's call, not a code
-  question.
+  question. *(Build note: `tauri build` reliably fails its **dmg** step under a
+  sandboxed shell — `bundle_dmg.sh` dies after writing the intermediate `rw.*.dmg`,
+  where it would attach the image — while `ntune.app` bundles fine. The same command
+  in a normal terminal produces the dmg. Not a packaging bug; use
+  `install.sh --skip-build` from a sandboxed agent, and delete any `rw.*.dmg` debris
+  left in `bundle/macos/`.)*
 - **`show.v1` S1–S4 — macOS pass, VERIFIED with one bug (2026-08-19).** Followed
   *The Peter McCormack Show* from the installed build: `de61654e9d48…` is on **all
   three relays**, tags `d`/`name`/`r`/`alt`. **No `i` tag, correctly** — acast states
