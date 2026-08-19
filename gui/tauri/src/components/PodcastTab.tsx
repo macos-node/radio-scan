@@ -27,7 +27,6 @@ import {
 } from "../lib/tauri";
 import {
   mergeFollows,
-  uniqueShowSlug,
   type FollowRow,
   type Show,
 } from "../lib/show";
@@ -568,9 +567,10 @@ export function PodcastTab({
     setPublishing(row.url);
     setError(null);
     try {
-      const taken = rows.map((r) => r.show?.slug).filter((v): v is string => !!v);
-      const slug = uniqueShowSlug(row.title, taken);
-      await publishShow(slug, row.title, row.url, { guid: row.guid });
+      // No slug to pick, and no collisions to dodge: the address comes from the
+      // feed's guid or its canonical URL, so two devices following the same show
+      // land on the same replaceable event (decision #11).
+      await publishShow(row.title, row.url, { guid: row.guid });
       // Published state is still never local state — but the open subscription
       // cannot be relied on to hand the event back (macOS 2026-08-19: the chip
       // stayed `follow` until restart), so re-read the relays and let
@@ -588,7 +588,7 @@ export function PodcastTab({
     setConfirmUnfollow(null);
     setPublishing(row.url);
     try {
-      await unfollowShow(row.show.slug, row.show.eventId);
+      await unfollowShow(row.url, row.guid, row.show.eventId);
       onPublished?.(); // same reason as follow(): re-read rather than assume
     } catch (e) {
       setError(String(e));

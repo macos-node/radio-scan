@@ -4,7 +4,6 @@ import {
   mergeFollows,
   parseShow,
   resolveShows,
-  uniqueShowSlug,
   SHOW_KIND,
   type Show,
 } from "./show";
@@ -204,17 +203,3 @@ describe("mergeFollows", () => {
   });
 });
 
-describe("uniqueShowSlug", () => {
-  it("slugifies a title", () => {
-    expect(uniqueShowSlug("No Agenda Show!", [])).toBe("no-agenda-show");
-  });
-
-  it("suffixes on collision — the d-tag IS the identity", () => {
-    expect(uniqueShowSlug("The Show", ["the-show"])).toBe("the-show-2");
-    expect(uniqueShowSlug("The Show", ["the-show", "the-show-2"])).toBe("the-show-3");
-  });
-
-  it("never yields an empty slug", () => {
-    expect(uniqueShowSlug("!!!", [])).toBe("show");
-  });
-});

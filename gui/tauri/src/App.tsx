@@ -253,7 +253,8 @@ export default function App() {
       if (identity) {
         // eventId is present when the row came from (or matched) a relay event —
         // it makes the deletion legible to relays that only delete by id.
-        unfollowStation(s.slug, s.eventId)
+        // Addressed by the stream, not the slug — the publisher derives the same.
+        unfollowStation(s.url, s.eventId)
           .then(() => refreshFollows())
           .catch((e) => console.error("unfollow failed", e));
       }

@@ -1,64 +1,112 @@
 {
-  "$comment": "PROPOSAL — NOT canonical, NOT vendored into the suite, NOT SHA-pinned, NOT adopted. Wire-contract draft for SHOW events: a podcast/scheduled show a user follows in radio-scan, published so others can discover and follow it. The feed-shaped sibling of station.v1 (a stream you tune) — see 'whyNotStation' below for the incident that forced the split. Lives in the external repo github.com/macos-node/radio-scan for TESTING ONLY. Kinds are locked provisionally against the suite's used set (1063/4550/27235/30000/31237/31238/31239 + radio-scan's 31240 airplay.v1 / 31241 station.v1): show.v1 = 31242, the next free slot, contiguous with the block. No .sha256 pin and no freeze governance apply until this is proposed to merge into the suite (ndisc/schema). Settles open decision #10 in docs/radio-scan-v0.2.0-direction-2026-08-10.md.",
+  "$comment": "PROPOSAL \u2014 NOT canonical, NOT vendored into the suite, NOT SHA-pinned, NOT adopted. Wire-contract draft for SHOW events: a podcast/scheduled show a user follows in radio-scan, published so others can discover and follow it. The feed-shaped sibling of station.v1 (a stream you tune) \u2014 see 'whyNotStation' below for the incident that forced the split. Lives in the external repo github.com/macos-node/radio-scan for TESTING ONLY. Kinds are locked provisionally against the suite's used set (1063/4550/27235/30000/31237/31238/31239 + radio-scan's 31240 airplay.v1 / 31241 station.v1): show.v1 = 31242, the next free slot, contiguous with the block. No .sha256 pin and no freeze governance apply until this is proposed to merge into the suite (ndisc/schema). Settles open decision #10 in docs/radio-scan-v0.2.0-direction-2026-08-10.md.",
   "schemaVersion": "show.v1",
   "status": "proposal",
   "frozen": false,
   "pinned": false,
-  "canonicalHome": "macos-node/radio-scan — schema/show.v1.json (proposal; not yet in ndisc/schema)",
+  "canonicalHome": "macos-node/radio-scan \u2014 schema/show.v1.json (proposal; not yet in ndisc/schema)",
   "authority": {
-    "model": "per-publisher key — any pubkey publishes its OWN followed-shows set; there is no single owner or gate. Identical to station.v1's model.",
-    "note": "Cross-user 'who else follows this show' filters on the feed URL via #r, and — when the feed carries a podcast:guid — on the stable #i identity. Prefer #i: it survives a feed moving host."
+    "model": "per-publisher key \u2014 any pubkey publishes its OWN followed-shows set; there is no single owner or gate. Identical to station.v1's model.",
+    "note": "Cross-user 'who else follows this show' filters on the feed URL via #r, and \u2014 when the feed carries a podcast:guid \u2014 on the stable #i identity. Prefer #i: it survives a feed moving host."
   },
   "kinds": {
     "show": {
       "kind": 31242,
       "spec": "NIP-01 parameterised-replaceable (addressable) event",
-      "class": "addressable — re-publishing the same d-tag replaces in place (edit metadata, no event spam)",
-      "kindRationale": "A followed show is the same shape of record as a followed station — small, editable, per-user — so it takes the same addressable form. 31242 is the next free slot after station.v1's 31241 and is unused across the suite.",
-      "content": "Optional human description of the show (plain text). The feed's own description is harvest, not wire — publish a note only if the user wrote one.",
-      "writtenBy": "ntune (radio-scan's L4 UI), signed with the owner nsec from the OS keyring — the same key as ndisc/ntree/nsmpl (one person = one npub).",
+      "class": "addressable \u2014 re-publishing the same d-tag replaces in place (edit metadata, no event spam)",
+      "kindRationale": "A followed show is the same shape of record as a followed station \u2014 small, editable, per-user \u2014 so it takes the same addressable form. 31242 is the next free slot after station.v1's 31241 and is unused across the suite.",
+      "content": "Optional human description of the show (plain text). The feed's own description is harvest, not wire \u2014 publish a note only if the user wrote one.",
+      "writtenBy": "ntune (radio-scan's L4 UI), signed with the owner nsec from the OS keyring \u2014 the same key as ndisc/ntree/nsmpl (one person = one npub).",
       "tags": {
-        "d": { "required": true, "format": "airplay:show:<slug>", "note": "Addressable identity within the author. <slug> is a stable, filesystem-safe show name, derived from the feed title (same slugify as station.v1)." },
-        "name": { "required": true, "type": "string", "note": "Human display name of the show." },
-        "r": { "required": true, "type": "string", "note": "The RSS/Atom FEED URL — not an episode enclosure, and not a stream mount. Single-letter tag so it is RELAY-FILTERABLE (#r), the same cross-user role it plays in station.v1. Note a feed URL is NOT a stable identity: measured 2026-08-18, feed.podbean.com/<show>/feed.xml and <show>.podbean.com/feed.xml served the byte-identical 4,053,739-byte document, and a URL-keyed dedupe treated them as two shows. Publish the URL the user subscribed with; use `i` for identity." },
-        "i": { "required": false, "type": "string", "format": "podcast:guid:<guid>", "note": "NIP-73 external content id carrying the feed's <podcast:guid> — the Podcasting-2.0 namespace GUID, stable across host moves and shared with non-Nostr podcast tooling. Single-letter, so #i is relay-filterable and is the PREFERRED cross-user key when present. Optional because plenty of feeds still omit it: of six live subscriptions sampled 2026-08-18, four carried one (podhome, yellowball, fountain.fm, nashownotes) and two did not (the BBC's, and podbean's — the very show that motivated this contract)." },
-        "t": { "required": false, "repeatable": true, "type": "string", "note": "Genre / topic slug(s), lowercased (#t filterable). Align with the suite's genre slugs where they fit; free tags otherwise. ACCEPTED BUT NOT YET EMITTED by ntune: shows have no topic control (stations get theirs from the Add-station dialog), and the two candidate sources are both wrong to publish unasked — the feed's own categories are harvest, which this contract keeps off the wire, and the user's categories are typed into a private notes dialog and must not reach a relay by surprise. A deliberate topic control is the way in; until then the fixtures carry no `t` so they describe what is actually published." },
-        "alt": { "required": false, "type": "string", "note": "NIP-31 human-readable fallback for generic clients." }
+        "d": {
+          "required": true,
+          "format": "airplay:show:<sha256-16>",
+          "note": "Derived from what the follow POINTS AT, never from the show's title: `airplay:show:` + the first 16 hex of SHA-256 of the feed's <podcast:guid> when it states one, else of its canonical URL (vectors: station-address.vectors.json, which a publisher MUST pass). Preferring the guid is the same URL-independence argument this contract already makes for `i`: podbean serves one byte-identical feed from two hostnames, so a URL-derived address would split it. Title-derived slugs needed a `-2` suffix on collision, which is how one show becomes several events across devices. Decision #11.",
+          "vectors": "schema/station-address.vectors.json"
+        },
+        "name": {
+          "required": true,
+          "type": "string",
+          "note": "Human display name of the show."
+        },
+        "r": {
+          "required": true,
+          "type": "string",
+          "note": "The RSS/Atom FEED URL \u2014 not an episode enclosure, and not a stream mount. Single-letter tag so it is RELAY-FILTERABLE (#r), the same cross-user role it plays in station.v1. Note a feed URL is NOT a stable identity: measured 2026-08-18, feed.podbean.com/<show>/feed.xml and <show>.podbean.com/feed.xml served the byte-identical 4,053,739-byte document, and a URL-keyed dedupe treated them as two shows. Publish the URL the user subscribed with; use `i` for identity."
+        },
+        "i": {
+          "required": false,
+          "type": "string",
+          "format": "podcast:guid:<guid>",
+          "note": "NIP-73 external content id carrying the feed's <podcast:guid> \u2014 the Podcasting-2.0 namespace GUID, stable across host moves and shared with non-Nostr podcast tooling. Single-letter, so #i is relay-filterable and is the PREFERRED cross-user key when present. Optional because plenty of feeds still omit it: of six live subscriptions sampled 2026-08-18, four carried one (podhome, yellowball, fountain.fm, nashownotes) and two did not (the BBC's, and podbean's \u2014 the very show that motivated this contract)."
+        },
+        "t": {
+          "required": false,
+          "repeatable": true,
+          "type": "string",
+          "note": "Genre / topic slug(s), lowercased (#t filterable). Align with the suite's genre slugs where they fit; free tags otherwise. ACCEPTED BUT NOT YET EMITTED by ntune: shows have no topic control (stations get theirs from the Add-station dialog), and the two candidate sources are both wrong to publish unasked \u2014 the feed's own categories are harvest, which this contract keeps off the wire, and the user's categories are typed into a private notes dialog and must not reach a relay by surprise. A deliberate topic control is the way in; until then the fixtures carry no `t` so they describe what is actually published."
+        },
+        "alt": {
+          "required": false,
+          "type": "string",
+          "note": "NIP-31 human-readable fallback for generic clients."
+        }
       },
-      "rule": "Consumers MUST require only d + name + r structurally; every other tag (i/t/alt) is optional. A show with no descriptive tags is still valid — it is a bare 'I follow this feed' record.",
-      "harvestIsNotWire": "The Tier-A identity ntune harvests from a feed (author, categories, language, copyright, website, owner email, funding, value) stays LOCAL — it is the feed's to state and any consumer can fetch it. The event publishes the follow, not a copy of the feed's metadata."
+      "rule": "Consumers MUST require only d + name + r structurally; every other tag (i/t/alt) is optional. A show with no descriptive tags is still valid \u2014 it is a bare 'I follow this feed' record.",
+      "harvestIsNotWire": "The Tier-A identity ntune harvests from a feed (author, categories, language, copyright, website, owner email, funding, value) stays LOCAL \u2014 it is the feed's to state and any consumer can fetch it. The event publishes the follow, not a copy of the feed's metadata."
     }
   },
   "deletion": {
     "spec": "NIP-09 kind:5",
     "rule": "An unfollow MUST tag BOTH the addressable `a` coordinate AND the concrete `e` event id.",
-    "why": "Measured 2026-08-18: relay.fizx.uk accepted a-only deletions and went on serving every tombstoned station (7 of 7), while nos.lol and relay.primal.net honoured them — several implementations delete by event id only. Clients that filter deletions themselves are unaffected; anything trusting the relay is not."
+    "why": "Measured 2026-08-18: relay.fizx.uk accepted a-only deletions and went on serving every tombstoned station (7 of 7), while nos.lol and relay.primal.net honoured them \u2014 several implementations delete by event id only. Clients that filter deletions themselves are unaffected; anything trusting the relay is not."
   },
   "whyNotStation": {
-    "incident": "2026-08-10, two podcast feeds were published as station.v1 (airplay:station:on-the-wire — a blogspot RSS with ZERO audio enclosures — and airplay:station:a-duck-in-a-tree). They were removed locally but the relay copies survived until kind:5 deletions were issued 2026-08-18.",
+    "incident": "2026-08-10, two podcast feeds were published as station.v1 (airplay:station:on-the-wire \u2014 a blogspot RSS with ZERO audio enclosures \u2014 and airplay:station:a-duck-in-a-tree). They were removed locally but the relay copies survived until kind:5 deletions were issued 2026-08-18.",
     "reason": "station.v1 defines `r` as 'the direct stream URL (the mount)' and #r as the cross-user identity of a TUNABLE stream. A feed URL there publishes a non-tunable row into that shared discovery space: any client filtering #r for a station gets something it cannot play. The two kinds keep #r honest per-kind.",
-    "guardrail": "ntune's publish_station now probes the URL and refuses a conclusively non-audio content-type, so the mistake cannot reach a relay again. That is a guard, not a home — this contract is the home.",
+    "guardrail": "ntune's publish_station now probes the URL and refuses a conclusively non-audio content-type, so the mistake cannot reach a relay again. That is a guard, not a home \u2014 this contract is the home.",
     "rootCause": "Podcast follows had no wire form at all, so 'follow this stream' was the only publish button in the app."
   },
   "subscription": {
     "ownShows": {
-      "filter": { "kinds": [31242], "authors": ["<this npub>"] },
-      "note": "Rebuild the user's own followed-show set from the relays (relay = truth, local = cache) — exactly how ntune already reads its stations."
+      "filter": {
+        "kinds": [
+          31242
+        ],
+        "authors": [
+          "<this npub>"
+        ]
+      },
+      "note": "Rebuild the user's own followed-show set from the relays (relay = truth, local = cache) \u2014 exactly how ntune already reads its stations."
     },
     "showFollowersByGuid": {
-      "filter": { "kinds": [31242], "#i": ["podcast:guid:e22a2294-d951-51dd-9498-cd04b4467ce1"] },
+      "filter": {
+        "kinds": [
+          31242
+        ],
+        "#i": [
+          "podcast:guid:e22a2294-d951-51dd-9498-cd04b4467ce1"
+        ]
+      },
       "note": "Cross-user discovery, PREFERRED: everyone who follows this show, however they reached its feed."
     },
     "showFollowersByUrl": {
-      "filter": { "kinds": [31242], "#r": ["https://example.com/feed.xml"] },
+      "filter": {
+        "kinds": [
+          31242
+        ],
+        "#r": [
+          "https://example.com/feed.xml"
+        ]
+      },
       "note": "Cross-user discovery fallback for feeds with no podcast:guid. URL-keyed, so it misses followers who subscribed via a different hostname for the same feed."
     }
   },
   "relatedContracts": {
-    "station.v1": "schema/station.v1.json — the streaming sibling (kind 31241). Same author model, same addressable shape; `r` is a stream mount there and a feed URL here.",
-    "airplay.v1": "schema/airplay.v1.json — an observation of something heard. A future episode observation can reference its show by #i / #r or by this event's addressable `a` coordinate, exactly as it references a station today.",
-    "nip73": "External Content IDs — the source of the `i` tag format (podcast:guid:<guid>). Chosen over a bespoke tag so the identity is shared with non-Nostr podcast tooling.",
-    "nip51-sets": "A curated shared show list can reuse the suite's kind:30000 pattern. NIP-51 collection AUTHORING is open decision #9 and stays deferred — a show.v1 follow is the read-side half and does not cross that boundary."
+    "station.v1": "schema/station.v1.json \u2014 the streaming sibling (kind 31241). Same author model, same addressable shape; `r` is a stream mount there and a feed URL here.",
+    "airplay.v1": "schema/airplay.v1.json \u2014 an observation of something heard. A future episode observation can reference its show by #i / #r or by this event's addressable `a` coordinate, exactly as it references a station today.",
+    "nip73": "External Content IDs \u2014 the source of the `i` tag format (podcast:guid:<guid>). Chosen over a bespoke tag so the identity is shared with non-Nostr podcast tooling.",
+    "nip51-sets": "A curated shared show list can reuse the suite's kind:30000 pattern. NIP-51 collection AUTHORING is open decision #9 and stays deferred \u2014 a show.v1 follow is the read-side half and does not cross that boundary."
   },
-  "changePolicy": "PROPOSAL — free to edit; no SHA pin, no coordinated-wave governance yet. If/when proposed to merge into the suite, it adopts the suite discipline (SHA-pin at the authority, additive-only after freeze, kind confirmed unused, coordinated re-vendor across consumers) — see clip.v1.json for the model."
+  "changePolicy": "PROPOSAL \u2014 free to edit; no SHA pin, no coordinated-wave governance yet. If/when proposed to merge into the suite, it adopts the suite discipline (SHA-pin at the authority, additive-only after freeze, kind confirmed unused, coordinated re-vendor across consumers) \u2014 see clip.v1.json for the model."
 }

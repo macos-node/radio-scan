@@ -779,13 +779,107 @@ async fn probe_content_type(url: &str) -> String {
     }
 }
 
+// --- addressing (decision #11) ----------------------------------------------
+// A follow's `d` tag is derived from WHAT IT POINTS AT, not from what the user
+// typed. Name-derived slugs gave one station several addresses across devices —
+// `acid-jazz`, `acid-jazz-2`, `acid-j` and `aj` were one stream — because each
+// device slugged its own label and suffixed on collision. A content-derived
+// address is replaceable by construction: same stream, same `d`, every device, no
+// coordination.
+//
+// The canonicalization is CONTRACT, pinned with conformance vectors at
+// schema/station-address.vectors.json — two publishers disagreeing on a default
+// port or a `;` would mint two addresses for one stream, which is this decision's
+// own bug one layer down. Change nothing here without regenerating those.
+
+/// Characters that must be percent-encoded in a canonical path. Everything else —
+/// unreserved plus sub-delims plus `:@/` — is kept literal, which is what preserves
+/// Shoutcast's `/;stream.nsv` verbatim.
+const PATH_ENCODE: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'%')
+    .add(b'<')
+    .add(b'>')
+    .add(b'?')
+    .add(b'[')
+    .add(b'\\')
+    .add(b']')
+    .add(b'^')
+    .add(b'`')
+    .add(b'{')
+    .add(b'|')
+    .add(b'}');
+
+/// The canonical form of a stream or feed URL: `host[:port] + path + ?query`.
+/// See schema/station-address.vectors.json for the rules and their reasons.
+fn canonical_url(raw: &str) -> String {
+    let trimmed = raw.trim();
+    // Users paste `host:port/mount`; read that as http rather than rejecting it.
+    let with_scheme = if trimmed.contains("://") {
+        trimmed.to_string()
+    } else {
+        format!("http://{trimmed}")
+    };
+    let Ok(parsed) = url::Url::parse(&with_scheme) else {
+        // Unparseable: fall back to the trimmed input so an address still exists
+        // and is at least stable for this exact string.
+        return trimmed.to_string();
+    };
+
+    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+    // `Url::port()` is already None for a scheme's default (80/443), which is the
+    // rule we want; any other port is identity and stays.
+    let authority = match parsed.port() {
+        Some(p) => format!("{host}:{p}"),
+        None => host,
+    };
+
+    // Path keeps its CASE (Icecast mounts are case-sensitive) and its `;`
+    // parameter; percent-encoding is normalized by decoding then re-encoding.
+    let decoded = percent_encoding::percent_decode_str(parsed.path())
+        .decode_utf8_lossy()
+        .to_string();
+    let mut path = percent_encoding::utf8_percent_encode(&decoded, PATH_ENCODE).to_string();
+    while path.ends_with('/') {
+        path.pop();
+    }
+
+    match parsed.query().filter(|q| !q.is_empty()) {
+        Some(q) => format!("{authority}{path}?{q}"),
+        None => format!("{authority}{path}"),
+    }
+}
+
+fn address_hash(input: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(input.as_bytes());
+    hex::encode(&digest[..8])
+}
+
+/// `d` for a station: always derived from the stream URL.
+fn station_d(url: &str) -> String {
+    format!("{D_STATION_PREFIX}{}", address_hash(&canonical_url(url)))
+}
+
+/// `d` for a show: the feed's `<podcast:guid>` when it states one — a publisher-
+/// stated identity that survives the feed moving host (decision #10) — else the
+/// canonical feed URL, which does not.
+fn show_d(guid: Option<&str>, url: &str) -> String {
+    let basis = match guid.map(str::trim).filter(|g| !g.is_empty()) {
+        Some(g) => g.to_string(),
+        None => canonical_url(url),
+    };
+    format!("{D_SHOW_PREFIX}{}", address_hash(&basis))
+}
+
 /// Publish (or replace) a `station.v1` (kind 31241) — "follow this stream".
 /// Parameterised-replaceable: re-publishing the same slug edits in place.
 /// Signed with the owner nsec; `relays` come from the renderer so the read
 /// subscription and the publish target stay in sync.
 #[tauri::command]
 async fn publish_station(
-    slug: String,
     name: String,
     url: String,
     fmt: Option<String>,
@@ -812,7 +906,8 @@ async fn publish_station(
     }
 
     let keys = owner_keys()?;
-    let d = format!("{D_STATION_PREFIX}{slug}");
+    // Derived from the stream, never from the typed name — see the addressing note.
+    let d = station_d(&url);
 
     let mut ev_tags = vec![
         Tag::parse(["d", &d]).map_err(|e| e.to_string())?,
@@ -868,15 +963,13 @@ fn deletion_tags(address: &str, event_id: Option<&str>) -> Result<Vec<Tag>, Stri
 /// is no published event to name, and the `a` tag alone is the whole truth.
 #[tauri::command]
 async fn unfollow_station(
-    slug: String,
+    url: String,
     event_id: Option<String>,
     relays: Vec<String>,
 ) -> Result<PublishResult, String> {
     let keys = owner_keys()?;
-    let address = format!(
-        "{STATION_KIND}:{}:{D_STATION_PREFIX}{slug}",
-        keys.public_key().to_hex()
-    );
+    // Same derivation as the publisher, so a retraction cannot miss its target.
+    let address = format!("{STATION_KIND}:{}:{}", keys.public_key().to_hex(), station_d(&url));
 
     let event = EventBuilder::new(Kind::EventDeletion, "")
         .tags(deletion_tags(&address, event_id.as_deref())?)
@@ -932,7 +1025,6 @@ fn show_tags(
 /// Parameterised-replaceable: re-publishing the same slug edits in place.
 #[tauri::command]
 async fn publish_show(
-    slug: String,
     name: String,
     url: String,
     guid: Option<String>,
@@ -952,7 +1044,7 @@ async fn publish_show(
     }
 
     let keys = owner_keys()?;
-    let d = format!("{D_SHOW_PREFIX}{slug}");
+    let d = show_d(guid.as_deref(), &url);
     let event = EventBuilder::new(Kind::Custom(SHOW_KIND), description)
         .tags(show_tags(&d, &name, &url, guid.as_deref(), &tags)?)
         .sign_with_keys(&keys)
@@ -967,14 +1059,16 @@ async fn publish_show(
 /// second one is not optional in practice.
 #[tauri::command]
 async fn unfollow_show(
-    slug: String,
+    url: String,
+    guid: Option<String>,
     event_id: Option<String>,
     relays: Vec<String>,
 ) -> Result<PublishResult, String> {
     let keys = owner_keys()?;
     let address = format!(
-        "{SHOW_KIND}:{}:{D_SHOW_PREFIX}{slug}",
-        keys.public_key().to_hex()
+        "{SHOW_KIND}:{}:{}",
+        keys.public_key().to_hex(),
+        show_d(guid.as_deref(), &url)
     );
 
     let event = EventBuilder::new(Kind::EventDeletion, "")
@@ -1855,6 +1949,91 @@ mod tests {
         }
     }
 
+    // --- addressing conformance (decision #11) ------------------------------
+
+    /// THE GATE. schema/station-address.vectors.json is contract: two publishers
+    /// disagreeing on a default port, a path's case or a Shoutcast `;` would mint
+    /// two addresses for one stream, silently and permanently. This runs the real
+    /// implementation over every pinned vector.
+    #[test]
+    fn canonicalization_matches_the_pinned_vectors() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../schema/station-address.vectors.json");
+        let raw = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("vectors at {}: {e}", path.display()));
+        let doc: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        let vectors = doc["vectors"].as_array().expect("vectors array");
+        assert!(!vectors.is_empty(), "vectors file must not be empty");
+
+        let mut failures = Vec::new();
+        for v in vectors {
+            let url = v["url"].as_str().unwrap();
+            let want_canonical = v["canonical"].as_str().unwrap();
+            let want_station = v["station"].as_str().unwrap();
+            let got_canonical = canonical_url(url);
+            let got_station = station_d(url);
+            if got_canonical != want_canonical || got_station != want_station {
+                failures.push(format!(
+                    "{url}\n     canonical got {got_canonical:?} want {want_canonical:?}\n     address   got {got_station} want {want_station}"
+                ));
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "{} of {} vectors failed:\n  {}",
+            failures.len(),
+            vectors.len(),
+            failures.join("\n  ")
+        );
+    }
+
+    #[test]
+    fn the_same_stream_is_one_address_however_it_is_written() {
+        // The bug this decision exists to end: four events for one stream, because
+        // each device slugged its own label.
+        let variants = [
+            "http://ice1.somafm.com/dronezone-128-mp3",
+            "https://ice1.somafm.com/dronezone-128-mp3",
+            "https://ICE1.SomaFM.com/dronezone-128-mp3/",
+            "ice1.somafm.com/dronezone-128-mp3",
+        ];
+        let addrs: std::collections::HashSet<String> =
+            variants.iter().map(|u| station_d(u)).collect();
+        assert_eq!(addrs.len(), 1, "one stream must have one address: {addrs:?}");
+    }
+
+    #[test]
+    fn different_mounts_keep_different_addresses() {
+        // Over-normalizing is the opposite failure: these must NOT collapse.
+        let distinct = [
+            "http://example.com/mount",
+            "http://example.com/Mount",          // Icecast paths are case-sensitive
+            "http://example.com/mount?fmt=aac",  // query selects a format
+            "http://example.com:8000/mount",     // non-default port is identity
+            "http://other.example/mount",
+        ];
+        let addrs: std::collections::HashSet<String> =
+            distinct.iter().map(|u| station_d(u)).collect();
+        assert_eq!(addrs.len(), distinct.len(), "distinct mounts must not merge");
+    }
+
+    #[test]
+    fn a_show_prefers_its_guid_over_its_url() {
+        // podbean serves one feed from two hosts (decision #10). With a guid the
+        // address must not move; without one it falls back to the URL and does.
+        let guid = Some("43a4f801-04a3-5897-bc32-9f905e163a36");
+        assert_eq!(
+            show_d(guid, "https://feed.podbean.com/zovietfrance/feed.xml"),
+            show_d(guid, "https://zovietfrance.podbean.com/feed.xml"),
+            "a stated guid outranks the host it is served from"
+        );
+        assert_ne!(
+            show_d(None, "https://feed.podbean.com/zovietfrance/feed.xml"),
+            show_d(None, "https://zovietfrance.podbean.com/feed.xml"),
+            "without a guid the URL is all there is — the known weakness"
+        );
+    }
+
     // --- dev/release store isolation ---------------------------------------
 
     #[test]
@@ -2147,6 +2326,15 @@ mod tests {
         // stayed green while the fixture advertised a `t: talk` tag ntune could
         // never emit. A fixture may only describe records the app can produce.
         let topics: Vec<String> = Vec::new();
+
+        // The fixture's own `d` must be the DERIVED address, not a name-slug. The
+        // diff below rebuilds from the fixture's values, so without this it would
+        // happily bless a hand-written address that no publisher can produce.
+        assert_eq!(
+            d,
+            show_d(guid.as_deref(), &url),
+            "fixture `d` must equal the derived address (decision #11)"
+        );
 
         let built: Vec<Vec<String>> = show_tags(&d, &name, &url, guid.as_deref(), &topics)
             .unwrap()

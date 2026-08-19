@@ -352,7 +352,8 @@ export interface StationInput {
 /** Follow / edit a station — sign & publish a `station.v1` to the suite relays. */
 export function publishStation(input: StationInput): Promise<PublishResult> {
   return invoke<PublishResult>("publish_station", {
-    slug: input.slug,
+    // No `slug`: the address is derived from the stream URL in Rust, so the same
+    // station published from two devices is one replaceable event (decision #11).
     name: input.name,
     url: input.url,
     fmt: input.fmt ?? null,
@@ -371,13 +372,11 @@ export function publishStation(input: StationInput): Promise<PublishResult> {
  *  cross-user key. Rust refuses a URL that conclusively serves audio, the mirror of
  *  publishStation refusing a feed. */
 export function publishShow(
-  slug: string,
   name: string,
   url: string,
   opts: { guid?: string; tags?: string[]; description?: string } = {},
 ): Promise<PublishResult> {
   return invoke<PublishResult>("publish_show", {
-    slug,
     name,
     url,
     guid: opts.guid,
@@ -390,10 +389,16 @@ export function publishShow(
 /** Unfollow a show — publish a kind:5 deletion of its `show.v1`. Pass `eventId`
  *  when the row came from a relay, for the same reason unfollowStation does. */
 export function unfollowShow(
-  slug: string,
+  url: string,
+  guid?: string,
   eventId?: string,
 ): Promise<PublishResult> {
-  return invoke<PublishResult>("unfollow_show", { slug, eventId, relays: RELAYS });
+  return invoke<PublishResult>("unfollow_show", {
+    url,
+    guid,
+    eventId,
+    relays: RELAYS,
+  });
 }
 
 /** Unfollow a station — publish a kind:5 deletion of its `station.v1`.
@@ -406,10 +411,10 @@ export function unfollowShow(
  *  station; nos.lol dropped them. Clients that filter deletions themselves (ntune
  *  does) were fine either way; anything trusting the relay was not. */
 export function unfollowStation(
-  slug: string,
+  url: string,
   eventId?: string,
 ): Promise<PublishResult> {
-  return invoke<PublishResult>("unfollow_station", { slug, eventId, relays: RELAYS });
+  return invoke<PublishResult>("unfollow_station", { url, eventId, relays: RELAYS });
 }
 
 // --- favorites (local curated log) ------------------------------------------

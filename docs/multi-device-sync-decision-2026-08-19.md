@@ -1,6 +1,6 @@
 # Multi-device sync for stations & podcasts — decision needed
 
-> **Status: DECISION DRAFT — nothing built.** This settles *how* a user's stations
+> **Status: ACCEPTED 2026-08-19. Step 1 built; steps 2–3 outstanding.** This settles *how* a user's stations
 > and shows reach every one of their devices intact, before any code depends on the
 > answer. It touches the **`d` tag format** in
 > [`../schema/station.v1.json`](../schema/station.v1.json) and
@@ -214,6 +214,23 @@ implements it, since a canonicalization disagreement is silent and permanent.
 
 Neither caveat changes the recommended order below; both belong in step 1, which is
 where the contract is written.
+
+## Migration — the two events published under the old scheme
+
+Both existing `show.v1` follows were addressed by name-slug and re-address under
+this decision:
+
+```
+airplay:show:the-peter-mccormack-show        -> airplay:show:f5a81dadd784fbf5  (url-derived, no guid)
+airplay:show:bitcoin-and-bitcoin-economic-news -> airplay:show:070f66ab867bb7ce  (guid-derived)
+```
+
+Nothing migrates them automatically, and nothing should: re-addressing is a publish,
+and this app does not publish without being asked. **Toggle `following` off, then on**
+for each. The retraction still lands on the old event because `unfollow_show` sends
+the `e` tag (its event id) alongside the `a` coordinate — which is why the 2026-08-19
+`e`-tag fix had to come first; an `a`-only retraction would now compute the *new*
+address and miss the old event entirely, orphaning it permanently.
 
 ## Recommended order if accepted
 

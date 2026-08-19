@@ -370,6 +370,28 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   (deleted 12:41, re-published 12:45, resolves followed). Evidence:
   [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
   § S4.
+- **Decision #11 ACCEPTED; step 1 (content-derived addressing) BUILT 2026-08-19.**
+  A follow's `d` now comes from what it points at, not what the user typed:
+  `airplay:station:` + first 16 hex of SHA-256 of the **canonical stream URL**, and
+  `airplay:show:` + the same over the feed's `<podcast:guid>` when stated, else its
+  canonical URL. Same stream ⇒ same replaceable address on every device, so the
+  four-events-for-one-station bug cannot recur. **The gate held:** the Rust
+  implementation reproduced all 21 pinned vectors first time — a third independent
+  implementation after macOS's and the Python reference, which is what the vectors
+  file is for. Three property tests back it (one stream = one address however
+  written; case/port/query variants must NOT merge; a show's guid outranks its host).
+  **`uniqueShowSlug` and its `-2` suffix are deleted** — collisions are impossible
+  once the address is content-derived, and that suffix *was* the duplication bug.
+  Contracts updated (`d.format` + a `vectors` pointer in both), fixtures re-addressed,
+  and the fixture test now asserts `d == show_d(guid,url)` so a hand-written address
+  fails rather than being blessed — verified by mutation.
+  **Migration, deliberately manual:** the 2 published shows re-address
+  (`the-peter-mccormack-show` → `f5a81dadd784fbf5` url-derived,
+  `bitcoin-and-bitcoin-economic-news` → `070f66ab867bb7ce` guid-derived). Toggle
+  `following` off then on for each; the retraction still finds the old event via its
+  `e` tag, which is why the 2026-08-19 `e`-tag fix had to land first — an `a`-only
+  retraction would now compute the new address and orphan the old event permanently.
+  **Steps 2–3 outstanding:** station ✕/publish separation, then "publish my list".
 - **Multi-device sync — DECISION DRAFTED, nothing built (2026-08-19).** "Acid Jazz is
   missing on Linux" turned out not to be a sync failure: it was never in this
   machine's local store, arrived only via the relay overlay, and that copy had been

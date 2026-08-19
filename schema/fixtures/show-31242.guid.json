@@ -1,11 +1,11 @@
 {
-  "_comment": "show.v1 example \u2014 the identified case. No Agenda's feed carries <podcast:guid>856cd618-7f34-57ea-9b84-3600f1f65e7f (read from the live feed 2026-08-18), so the follow can name it as a NIP-73 `i` tag. #i is then the preferred cross-user key: it matches every follower of this show regardless of which URL they subscribed with, and survives the feed moving host. The #r URL is still published \u2014 it is what this user actually subscribed with. NO `t` TAGS: the contract allows them, but ntune has no topic control for shows, so a fixture carrying them would document a capability the app does not have (unlike station-31241.example.json, whose `t` tags come from the Add-station dialog's genres field). id/pubkey/created_at/sig are illustrative.",
+  "_comment": "show.v1 example \u2014 the identified case. No Agenda's feed carries <podcast:guid>856cd618-7f34-57ea-9b84-3600f1f65e7f (read from the live feed 2026-08-18), so the follow can name it as a NIP-73 `i` tag. #i is then the preferred cross-user key: it matches every follower of this show regardless of which URL they subscribed with, and survives the feed moving host. The #r URL is still published \u2014 it is what this user actually subscribed with. NO `t` TAGS: the contract allows them, but ntune has no topic control for shows, so a fixture carrying them would document a capability the app does not have (unlike station-31241.example.json, whose `t` tags come from the Add-station dialog's genres field). id/pubkey/created_at/sig are illustrative. ADDRESS (decision #11): `d` is now derived \u2014 was `airplay:show:no-agenda-show`, a name-slug, which is precisely the per-device duplication that decision ends.",
   "kind": 31242,
   "content": "",
   "tags": [
     [
       "d",
-      "airplay:show:no-agenda-show"
+      "airplay:show:75795b08451912c2"
     ],
     [
       "name",

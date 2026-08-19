@@ -1,11 +1,11 @@
 {
-  "_comment": "show.v1 example \u2014 A Duck in a Tree, the show whose feed was wrongly published as a station.v1 on 2026-08-10 and deleted on 2026-08-18. Deliberately the case with NO podcast:guid (podbean's feed carries none, verified 2026-08-18), so it shows the minimal legal record: d + name + r, no `i`, and no `t` \u2014 ntune emits no topic tags for shows. Cross-user discovery for this show therefore falls back to the #r URL \u2014 and that URL is not stable, since feed.podbean.com/zovietfrance/feed.xml and zovietfrance.podbean.com/feed.xml serve the byte-identical document. id/pubkey/created_at/sig are illustrative; pubkey is the suite owner.",
+  "_comment": "show.v1 example \u2014 A Duck in a Tree, the show whose feed was wrongly published as a station.v1 on 2026-08-10 and deleted on 2026-08-18. Deliberately the case with NO podcast:guid (podbean's feed carries none, verified 2026-08-18), so it shows the minimal legal record: d + name + r, no `i`, and no `t` \u2014 ntune emits no topic tags for shows. Cross-user discovery for this show therefore falls back to the #r URL \u2014 and that URL is not stable, since feed.podbean.com/zovietfrance/feed.xml and zovietfrance.podbean.com/feed.xml serve the byte-identical document. id/pubkey/created_at/sig are illustrative; pubkey is the suite owner. ADDRESS (decision #11): `d` is now derived \u2014 was `airplay:show:a-duck-in-a-tree`, a name-slug, which is precisely the per-device duplication that decision ends.",
   "kind": 31242,
   "content": "Weekly ~59-minute continuous mix by :zoviet*france:. Show notes carry the full tracklist.",
   "tags": [
     [
       "d",
-      "airplay:show:a-duck-in-a-tree"
+      "airplay:show:bc11fa4a0242305d"
     ],
     [
       "name",

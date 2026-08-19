@@ -129,21 +129,3 @@ export function mergeFollows(subs: Sub[], shows: Show[]): FollowRow[] {
   }
   return rows;
 }
-
-/** A `d`-slug for a new follow, unique within `taken`. Two shows can slugify
- *  identically, and `airplay:show:<slug>` IS the addressable identity — a
- *  collision would silently replace the other show's event rather than create
- *  one. Suffixes `-2`, `-3`, … on collision. */
-export function uniqueShowSlug(title: string, taken: Iterable<string>): string {
-  const base =
-    title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "show";
-  const used = new Set(taken);
-  if (!used.has(base)) return base;
-  for (let n = 2; ; n++) {
-    const candidate = `${base}-${n}`;
-    if (!used.has(candidate)) return candidate;
-  }
-}

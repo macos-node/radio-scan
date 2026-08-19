@@ -2687,6 +2687,7 @@ version = "0.1.1-beta.4"
 dependencies = [
  "encoding_rs",
  "feed-rs",
+ "hex",
  "keyring",
  "nostr",
  "nostr-sdk",
@@ -2695,6 +2696,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
@@ -2702,6 +2704,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "tokio",
+ "url",
 ]
 
 [[package]]
