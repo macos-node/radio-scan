@@ -388,6 +388,38 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   in ntune (client-side filtering) but visible to any other client, and they clear
   only by re-following/re-unfollowing with the current build or by fixing NIP-09
   server-side (root is macOS-only).
+- **U4.5 H1 + H5 — macOS pass, VERIFIED with two findings (2026-08-19).** A 25-sub
+  profile, checked field-by-field against an **independent parse of the raw XML**
+  (channel-level only, `<itunes:owner><itunes:email>` with a `<managingEditor>`
+  fallback, `<podcast:funding url>`, highest-split `<podcast:valueRecipient>` skipping
+  `type="node"`) rather than against the app's own extractor:
+  - **funding 9/9 exact**, **lightning 4/4 exact plus a 5th the app found and the
+    hand-parse missed** (No Agenda's `<podcast:value>` layout); splits stored are
+    98/93/90/98/99, so highest-split and the node-skip both hold.
+  - **owner email 15/15** once the harvest completed — 2.5× the Linux sample's 6.
+  - **Absent stays absent:** not one field across 25 subs is stored as `""` or `[]`.
+  - **Finding 1 — the implementation disagrees with its own doc comment.** `lib.rs`
+    says the source is "`<itunes:owner><itunes:email>`, else `<managingEditor>`", but
+    the scan keeps **whichever appears first in document order**. Cypherpunk Bitstream
+    states `<managingEditor>contact@taz0.org` at byte 415 and `<itunes:email>
+    bitstream@taz0.org` at 986, and the app stores the **editorial contact** rather
+    than the owner. Confirmed by running `extract_channel_extras` over the real feed
+    bytes, not inferred. Either the comment or the precedence is wrong; the itunes tag
+    is the podcast-native one, so the comment is probably right.
+  - **Finding 2 — the stored harvest lags the cache until the tab remounts.** A fetch
+    resolving after `PodcastTab` unmounts writes the feed-cache (Rust) but never the
+    subscription store, because the persistence effect only runs while the tab is
+    mounted. Measured: 8 of 25 subs carried the single earliest `harvest.fetchedAt`
+    while their cache was fetched up to 5 minutes later, and **Syntax's `ownerEmail`
+    existed in the cache but not in the store**. Switching tabs and back healed it
+    (15/15, store == cached parse). Not permanent data loss, but H3's promise is
+    *export == persisted state*, and a profile exported without revisiting the tab
+    ships a thinner store than the app already knows about. Only one field was lost
+    here because the other 7 late feeds are zero-enclosure blogs with nothing extra to
+    state — which is why a smaller profile would not have caught it.
+  **Still `Needs-verify: macos`** for H2 (needs a station tuned in to probe ICY) and
+  H3's export round-trip (needs the backup dialog). H4 ships no editor, so its data
+  model is covered by the suite: 90 TS + 33 Rust green here.
 - **`show.v1` S0 — macOS pass, VERIFIED 2026-08-19.** The guid harvest and the cache
   version gate both hold on a second platform and a larger, hostile profile: 29 subs
   whose cached bodies all predated the extractor and all carried live ETags — exactly
