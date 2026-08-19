@@ -153,10 +153,43 @@ fn seed_stations() -> Vec<Station> {
 // user-added — is then removable. Independent of the Nostr station.v1 layer,
 // which stays an optional overlay for signed-in users.
 
+/// Give a debug build its own sibling directory (`…-dev`), so `tauri dev` never
+/// reads or writes installed state — the suite convention, already applied to the
+/// keyring service. It matters more than it looks: every store here is a whole-file
+/// rewrite from an in-memory cache, so a dev run against the installed data is not
+/// a read-only visit, it is a second writer with different code (2026-08-19).
+/// Release builds are untouched, so no user data moves.
+fn dev_sibling(dir: std::path::PathBuf) -> std::path::PathBuf {
+    if !cfg!(debug_assertions) {
+        return dir;
+    }
+    match dir.file_name().and_then(|n| n.to_str()) {
+        Some(name) => dir.with_file_name(format!("{name}-dev")),
+        None => dir, // no final component to rename — leave it be
+    }
+}
+
 fn app_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let dir = dev_sibling(app.path().app_data_dir().map_err(|e| e.to_string())?);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
+}
+
+/// The now-playing bridge directory — `<local_data_dir()>/radio-scan`, the frozen
+/// cross-app rendezvous (docs/nowplaying-bridge-2026-08-11.md). ONE resolver, used
+/// by the producer here and the tray consumer, which previously computed it
+/// separately and stayed in step by comment alone.
+///
+/// A debug build writes `radio-scan-dev/` instead: the release path is read by
+/// RadioBar, a different application, so a dev run must not overwrite what it
+/// shows. Within one binary both ends agree, so the dev tray still works.
+pub(crate) fn nowplaying_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    Ok(dev_sibling(
+        app.path()
+            .local_data_dir()
+            .map_err(|e| e.to_string())?
+            .join("radio-scan"),
+    ))
 }
 
 fn stations_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
@@ -368,11 +401,7 @@ fn read_text_file(path: String) -> Result<String, String> {
 /// ntune's Tauri identifier. One resolver on every OS — no per-OS `cfg` branch.
 #[tauri::command]
 fn write_nowplaying(app: tauri::AppHandle, state: serde_json::Value) -> Result<(), String> {
-    let dir = app
-        .path()
-        .local_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("radio-scan");
+    let dir = nowplaying_dir(&app)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let text = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
     std::fs::write(dir.join("nowplaying.json"), text).map_err(|e| e.to_string())
@@ -1373,22 +1402,31 @@ fn remove_favorite(app: tauri::AppHandle, id: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        // MUST be registered first (plugin docs): a second launch hands its argv to
-        // this callback and exits, rather than becoming a second writer.
-        //
-        // Not a nicety. stations.json / podcasts.json / settings.json are each
-        // rewritten whole from an in-memory cache, so two processes silently clobber
-        // one another — and a process running an OLDER build is worse than a race:
-        // serde drops every field its structs predate, so a stale instance writing
-        // subscriptions would erase the harvested `guid` and `latestAt` values. That
-        // very pair of processes was found running on 2026-08-19 (a pre-guid `--tray`
-        // instance alongside a newer one) with 8 guids a single write away from gone.
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+    // ONE INSTANCE PER USER — release builds only.
+    //
+    // Not a nicety: stations.json / podcasts.json / settings.json / feed-cache are
+    // each rewritten whole from an in-memory cache, so two processes silently
+    // clobber one another. A process running an OLDER build is worse than a race —
+    // serde drops every field its structs predate, so a stale instance writing
+    // subscriptions erases harvested `guid` / `latestAt` values. Exactly that pair
+    // was found running on 2026-08-19 (a pre-guid `--tray` instance beside a newer
+    // one), with 8 guids one write away from gone.
+    //
+    // Debug is deliberately exempt. The plugin keys its lock on the bundle
+    // identifier, which both profiles share, so guarding debug would stop
+    // `make dev` running beside the installed app — and now that a dev build has
+    // its own `-dev` stores (see dev_sibling), that pairing is safe and useful.
+    let builder = tauri::Builder::default();
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(
+        |app, _argv, _cwd| {
             // Reveal the window the user already has instead of doing nothing —
-            // clicking the launcher twice should look like "bring it to the front".
+            // clicking the launcher twice should read as "bring it to the front".
             tray::reveal_main_window(app);
-        }))
+        },
+    ));
+
+    builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -1472,6 +1510,41 @@ mod tests {
         ] {
             assert_eq!(non_audio_hint(ct), None, "{ct} should publish");
         }
+    }
+
+    // --- dev/release store isolation ---------------------------------------
+
+    #[test]
+    fn dev_sibling_renames_only_the_final_component() {
+        use std::path::PathBuf;
+        let out = dev_sibling(PathBuf::from("/home/u/.local/share/uk.fizx.ntune"));
+        if cfg!(debug_assertions) {
+            // What `tauri dev` gets: a sibling directory, so the installed store is
+            // untouched — the parent path must NOT be rewritten.
+            assert_eq!(out, PathBuf::from("/home/u/.local/share/uk.fizx.ntune-dev"));
+        } else {
+            // What users get: no change at all, so no data moves on upgrade.
+            assert_eq!(out, PathBuf::from("/home/u/.local/share/uk.fizx.ntune"));
+        }
+    }
+
+    #[test]
+    fn dev_sibling_leaves_a_rootless_path_alone() {
+        use std::path::PathBuf;
+        assert_eq!(dev_sibling(PathBuf::from("/")), PathBuf::from("/"));
+    }
+
+    #[test]
+    fn the_bridge_dir_is_split_the_same_way() {
+        use std::path::PathBuf;
+        let out = dev_sibling(PathBuf::from("/home/u/.local/share/radio-scan"));
+        let expected = if cfg!(debug_assertions) {
+            // RadioBar reads the release path; a dev run must not overwrite it.
+            "/home/u/.local/share/radio-scan-dev"
+        } else {
+            "/home/u/.local/share/radio-scan"
+        };
+        assert_eq!(out, PathBuf::from(expected));
     }
 
     // --- <podcast:guid> extraction, against the shapes measured on live feeds ---

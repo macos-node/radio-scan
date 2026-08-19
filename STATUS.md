@@ -444,6 +444,22 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   plus the macOS-recorded state the app cannot exit (a deleted station's row is
   hidden, so no ✕ remains to re-issue from, while the publish guard blocks re-adding
   it to get a fresh event).
+- **Dev/release store isolation — DONE 2026-08-19.** `app_data_dir()` and the
+  now-playing bridge dir both gain a `-dev` sibling under `cfg(debug_assertions)`, so
+  `tauri dev` no longer reads or writes installed state. Until now only the *keyring*
+  was split (`ntune-dev`) while `app_data_dir()` was shared — meaning every `make dev`
+  run this project has ever done was writing the real `stations.json` /
+  `podcasts.json` / `settings.json`, with the same whole-file-rewrite and
+  serde-field-drop exposure as the two-instance hazard. The bridge is split for a
+  different reason: **RadioBar reads the release path**, so a dev run must not
+  overwrite what it displays; the tray consumer now calls the producer's resolver
+  (`nowplaying_dir`) instead of restating the path in a comment-synced copy.
+  Release paths are byte-identical, so **no user data moves**. Verified live: a
+  `make dev` run created `uk.fizx.ntune-dev/` (own seeded `stations.json` +
+  `settings.json`) and `radio-scan-dev/`, while the installed store kept its mtimes
+  and all 10 subs / 7 guids; dev and installed then ran **side by side**, and a
+  second *release* instance was still refused. 25 Rust tests (3 new, incl. that
+  release paths are untouched).
 - **`make install` now always runs `tauri build` (2026-08-19).** The binary used to
   be a *file* target, so anything that wrote `src-tauri/target/release/ntune` more
   recently than the sources made make skip the build entirely. A stray
@@ -475,14 +491,8 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   "Show ntune") brings the existing window forward, so double-clicking the launcher
   reads as "bring it to the front". Verified on Linux: a third launch exits 0
   immediately and the process count stays at one.
-  **Two consequences worth knowing.** (1) *`make dev` and the installed app now
-  exclude each other* — the plugin keys its lock on the bundle identifier, which is
-  the same in both profiles. That is arguably correct rather than a regression, since
-  (2) **debug and release also SHARE the data directory**: only the keyring is split
-  by `cfg(debug_assertions)` (`ntune-dev`), while `app_data_dir()` has no `-dev`
-  suffix, so a dev run already writes the installed stores. The suite convention says
-  debug builds should have their own DB/config — worth doing, and only then would
-  scoping the guard per-profile make sense.
+  **The guard is release-only**, because the follow-up below removed the reason to
+  guard debug.
 - **`show.v1` S3 — Podcasts-tab Follow UI, BUILT + preview-verified (2026-08-18).**
   Per-row **follow** control (publishes `show.v1`) → `following` chip once the event
   reads back off the relays; published state is never local state, so the chip

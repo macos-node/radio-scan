@@ -129,13 +129,12 @@ fn spawn_bridge_poller(app: AppHandle, np_item: MenuItem<Wry>, fav_item: MenuIte
     std::thread::spawn(move || {
         let mut last = String::new();
         loop {
-            // Same resolver as the producer: `local_data_dir()/radio-scan/…` (the OS
-            // base data dir, not the bundle-id dir) — no read until it's written.
-            let content = app
-                .path()
-                .local_data_dir()
+            // The producer's own resolver, shared rather than restated — it now
+            // carries the debug `-dev` split, and a second copy of the path would
+            // have quietly kept reading the release file from a dev build.
+            let content = crate::nowplaying_dir(&app)
                 .ok()
-                .map(|d| d.join("radio-scan").join("nowplaying.json"))
+                .map(|d| d.join("nowplaying.json"))
                 .and_then(|p| std::fs::read_to_string(p).ok())
                 .unwrap_or_default();
             if content != last {

@@ -36,6 +36,16 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   discarded — the export serializer-drift U4.5 exists to close, met early.
 
 ### Added
+- **Debug builds get their own store.** A `tauri dev` run now reads and writes
+  `<app_data_dir>-dev` (and `radio-scan-dev/` for the now-playing bridge) instead of
+  the installed app's data — the suite convention that already covered the keyring,
+  now covering the stores it mattered most for. Until this, `make dev` wrote your
+  real `stations.json` / `podcasts.json` / `settings.json`, which is not a read-only
+  visit: every store is a whole-file rewrite from an in-memory cache, so a dev build
+  with different structs could drop fields it predates. Release paths are unchanged,
+  so no user data moves. The bridge split matters separately: RadioBar reads the
+  release path, and a dev run must not overwrite what it shows. The tray consumer
+  now shares the producer's path resolver instead of restating it.
 - **One instance per user.** ntune now refuses to start a second copy of itself:
   launching again reveals the window you already have. Every durable store here is a
   whole-file rewrite from an in-memory cache (`stations.json`, `podcasts.json`,
