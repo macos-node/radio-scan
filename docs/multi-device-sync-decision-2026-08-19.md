@@ -58,15 +58,50 @@ URL-independence argument decision #10 made. Stations have no equivalent.
 **Proposed: derive `d` from the canonical URL, not from the name.**
 
 ```
-canonical(url) = lowercase host, scheme dropped, trailing slash dropped
-d              = airplay:station:<sha256(canonical)[:16]>
+canonical(url) = host[:port] + path + ?query      (see the vectors — this one-liner
+d              = airplay:station:<sha256(canonical)[:16]>      is NOT the spec)
                  airplay:show:<sha256(podcast:guid or canonical)[:16]>
 ```
 
+**Pinned, because a canonicalization disagreement is silent and permanent.** The
+review was right that a sentence cannot carry this: default ports, query strings,
+percent-encoding and path case were all undecided, and two devices differing on any
+of them mint two addresses for one stream — this decision's own bug, one layer down.
+The algorithm and **18 conformance vectors** are now at
+[`../schema/station-address.vectors.json`](../schema/station-address.vectors.json)
+with a `.sha256` sidecar, following ndisc's `master-key.vectors.json`. Every case the
+review named is decided there:
+
+| case | decision |
+|---|---|
+| scheme (`http`/`https`) | dropped — same mount, and ntune proxies `http` anyway |
+| host case | lowercased |
+| `:80` / `:443` | dropped; any other port kept (Icecast lives on 8000) |
+| trailing slash | dropped |
+| **path case** | **preserved** — Icecast mounts are case-sensitive |
+| **query string** | **kept** — some mounts select format by it |
+| percent-encoding | decoded, then re-encoded consistently |
+| no scheme given | assumed `http` |
+
+Both publishers must conformance-test against the vectors before shipping.
+
 Same stream ⇒ same address on every device ⇒ the event is *replaceable* rather than
-duplicated, permanently and without coordination. Measured against this machine's
-store: **10 station rows collapse to 9 distinct streams** (the http/https Drone Zone
-pair merges), and **10 podcast subs stay 10** with no collisions.
+duplicated, without coordination — **for as long as the URL holds**. Measured against
+this machine's store: **10 station rows collapse to 9 distinct streams** (the
+http/https Drone Zone pair merges), and **10 podcast subs stay 10** with no
+collisions. The macOS review measured a second store: no collapse there, but four
+duplicate pairs had been pruned by hand that same day, each sharing a
+`<podcast:guid>` and differing only by host — the prune this rule replaces.
+
+*Corrected after review:* an earlier draft said "permanently", which is false. A
+mount that moves host re-addresses, and `#r` discovery splits before-and-after; Acid
+Jazz is a bare IP literal (`79.111.14.76:8000`), so this is not hypothetical.
+**Stations have no publisher-stated identity to fall back on** — `icy-name` is
+harvested since U4.5 H2 but is a banner (SomaFM's is prose, Acid Jazz's stream states
+none), too weak to key on. So the station half inherits exactly the weakness
+`<podcast:guid>` solves for shows, and a moved station is a **known manual repair**.
+Name-derived slugs are still worse: they break on any rename, which happens more
+often than a mount moves.
 
 - *Why the scheme is dropped:* the same mount is served over both, and ntune already
   proxies `http` for playback. Treating them as different stations is a bug that
@@ -183,6 +218,7 @@ where the contract is written.
 ## Recommended order if accepted
 
 1. Canonical-URL addressing (contract change + both publishers) — do this first and
-   alone, while only 2 events exist.
+   alone, while only 2 events exist. **Gate:** both publishers pass
+   `schema/station-address.vectors.json` before either publishes a single event.
 2. Station ✕ / publish separation, mirroring the Podcasts tab.
 3. "Publish my list", once 1 and 2 make it safe to press twice.

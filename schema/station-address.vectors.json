@@ -1,0 +1,131 @@
+{
+  "$comment": "Conformance vectors for station/show ADDRESS canonicalization (open decision #11). An implementation is conformant iff `canonical` and `station` match for every vector. Two devices disagreeing here mint two addresses for one stream \u2014 the bug this decision exists to end, one layer down \u2014 so this is pinned before either publisher implements it. Mirrors ndisc/schema/master-key.vectors.json. PROPOSAL: not adopted, not frozen; no consumer may rely on it until decision #11 is accepted.",
+  "schemaVersion": "station-address.v1 (PROPOSAL, UNFROZEN)",
+  "algorithm": [
+    "trim; if there is no scheme, assume http",
+    "scheme: dropped entirely (not part of identity)",
+    "host: lowercased",
+    "port: dropped when it is the scheme default (80/http, 443/https); kept otherwise",
+    "path: percent-decoded then re-encoded consistently; CASE PRESERVED; one trailing slash dropped",
+    "query: kept verbatim when present (some mounts select format by it)",
+    "fragment: dropped",
+    "canonical = host[:port] + path + ('?' + query when present)",
+    "address = '<prefix>' + first 16 hex of SHA-256(utf8(canonical))",
+    "prefix = 'airplay:station:' for stations, 'airplay:show:' for shows",
+    "SHOWS PREFER podcast:guid: address = 'airplay:show:' + first 16 hex of SHA-256(utf8(guid)) when the feed states one; the URL path above is the fallback"
+  ],
+  "notes": [
+    "A URL-derived address is stable only while the URL is. A mount that moves host re-addresses, and cross-user #r discovery splits before-and-after; record that as a known manual repair (macOS review, caveat 1).",
+    "Stations have no publisher-stated identity to key on instead. icy-name is harvested (U4.5 H2) but is a banner \u2014 SomaFM's is prose, and Acid Jazz's stream states none \u2014 so it is too weak to serve as podcast:guid does for shows."
+  ],
+  "vectors": [
+    {
+      "case": "scheme is not identity",
+      "url": "https://ice1.somafm.com/dronezone-128-mp3",
+      "canonical": "ice1.somafm.com/dronezone-128-mp3",
+      "station": "airplay:station:da24be21dc42b8e2"
+    },
+    {
+      "case": "scheme is not identity",
+      "url": "http://ice1.somafm.com/dronezone-128-mp3",
+      "canonical": "ice1.somafm.com/dronezone-128-mp3",
+      "station": "airplay:station:da24be21dc42b8e2"
+    },
+    {
+      "case": "host case is not identity",
+      "url": "http://SomaFM.com/groovesalad",
+      "canonical": "somafm.com/groovesalad",
+      "station": "airplay:station:78ec984a57a7ad11"
+    },
+    {
+      "case": "host case is not identity",
+      "url": "http://somafm.com/groovesalad",
+      "canonical": "somafm.com/groovesalad",
+      "station": "airplay:station:78ec984a57a7ad11"
+    },
+    {
+      "case": "default ports are dropped",
+      "url": "http://example.com:80/mount",
+      "canonical": "example.com/mount",
+      "station": "airplay:station:8a9c71bd65d3e32e"
+    },
+    {
+      "case": "default ports are dropped",
+      "url": "https://example.com:443/mount",
+      "canonical": "example.com/mount",
+      "station": "airplay:station:8a9c71bd65d3e32e"
+    },
+    {
+      "case": "default ports are dropped",
+      "url": "http://example.com/mount",
+      "canonical": "example.com/mount",
+      "station": "airplay:station:8a9c71bd65d3e32e"
+    },
+    {
+      "case": "a non-default port IS identity",
+      "url": "http://79.111.14.76:8000/acidjazz",
+      "canonical": "79.111.14.76:8000/acidjazz",
+      "station": "airplay:station:762296657895e81f"
+    },
+    {
+      "case": "a non-default port IS identity",
+      "url": "79.111.14.76:8000/acidjazz",
+      "canonical": "79.111.14.76:8000/acidjazz",
+      "station": "airplay:station:762296657895e81f"
+    },
+    {
+      "case": "a trailing slash is dropped",
+      "url": "http://example.com/mount/",
+      "canonical": "example.com/mount",
+      "station": "airplay:station:8a9c71bd65d3e32e"
+    },
+    {
+      "case": "a trailing slash is dropped",
+      "url": "http://example.com/mount",
+      "canonical": "example.com/mount",
+      "station": "airplay:station:8a9c71bd65d3e32e"
+    },
+    {
+      "case": "path case IS identity",
+      "url": "http://example.com/Mount",
+      "canonical": "example.com/Mount",
+      "station": "airplay:station:69a9c7d53e318554"
+    },
+    {
+      "case": "path case IS identity",
+      "url": "http://example.com/mount",
+      "canonical": "example.com/mount",
+      "station": "airplay:station:8a9c71bd65d3e32e"
+    },
+    {
+      "case": "the query string IS identity",
+      "url": "http://example.com/m?fmt=aac",
+      "canonical": "example.com/m?fmt=aac",
+      "station": "airplay:station:0af853a9c8a99a5d"
+    },
+    {
+      "case": "the query string IS identity",
+      "url": "http://example.com/m",
+      "canonical": "example.com/m",
+      "station": "airplay:station:f6e4431d5ec1fd71"
+    },
+    {
+      "case": "percent-encoding is normalized",
+      "url": "http://example.com/a%2Db",
+      "canonical": "example.com/a-b",
+      "station": "airplay:station:4565d41e0cddbe4e"
+    },
+    {
+      "case": "percent-encoding is normalized",
+      "url": "http://example.com/a-b",
+      "canonical": "example.com/a-b",
+      "station": "airplay:station:4565d41e0cddbe4e"
+    },
+    {
+      "case": "a scheme-less URL is accepted as http",
+      "url": "79.111.14.76:8000/acidjazz",
+      "canonical": "79.111.14.76:8000/acidjazz",
+      "station": "airplay:station:762296657895e81f"
+    }
+  ]
+}
