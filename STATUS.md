@@ -444,6 +444,20 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   plus the macOS-recorded state the app cannot exit (a deleted station's row is
   hidden, so no ✕ remains to re-issue from, while the publish guard blocks re-adding
   it to get a fresh event).
+- **`make install` now always runs `tauri build` (2026-08-19).** The binary used to
+  be a *file* target, so anything that wrote `src-tauri/target/release/ntune` more
+  recently than the sources made make skip the build entirely. A stray
+  `cargo build --release` — which does **not** run Vite, so the frontend is never
+  embedded — therefore got copied straight to `~/.local/bin` and the installed app
+  failed on launch with **"Could not connect to localhost: Connection refused"**,
+  because it fell back to the dev server. (This is the trap the root CLAUDE.md warns
+  about: *release path is `tauri build`, never `cargo build --release`*. The Makefile
+  now enforces it rather than trusting it.) `build` is unconditional; cargo and Vite
+  do their own incremental work, so a no-op rebuild costs seconds.
+  **Diagnosing this class:** `strings` is a bad probe — Tauri compresses embedded
+  assets, and `devUrl` appears in the config even in a correct release build. The
+  reliable check is functional: `<local_data_dir>/radio-scan/nowplaying.json` is
+  rewritten seconds after launch **only if the React frontend actually boots**.
 - **Tooling note: capture `nak` with command substitution.** Its output is lost when
   `timeout` kills it mid-write to a redirect or `tee`; an empty capture read as
   "resolves 0 shows" during the 2026-08-19 session and was briefly mistaken for a

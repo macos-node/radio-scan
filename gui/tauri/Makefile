@@ -39,16 +39,21 @@ icons:
 	npm run tauri icon ./app-icon.png
 	rm -f app-icon.png
 
-build: $(TAURI_BIN)
-
-$(TAURI_BIN): $(shell find src src-tauri/src -type f) package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
+# ALWAYS delegate to `tauri build` — never treat the binary as an up-to-date file
+# target. It used to be one, and a stray `cargo build --release` (which does NOT run
+# Vite, so the frontend is never embedded) left a newer binary sitting there; make
+# then skipped this rule and `install` shipped an app that tried to load the dev
+# server and failed with "Could not connect to localhost" (2026-08-19). cargo and
+# Vite do their own incremental work, so re-running costs seconds when nothing
+# changed — cheaper than shipping a binary built the wrong way.
+build:
 	npm run tauri build -- --no-bundle
 
 check:
 	npm run build
 	cd src-tauri && cargo check
 
-install: $(TAURI_BIN)
+install: build
 	install -d $(BINDIR) $(APPDIR) $(ICONDIR)
 	install -m 0755 $(TAURI_BIN) $(BINDIR)/ntune
 	install -m 0644 icon.svg $(ICONDIR)/ntune.svg
