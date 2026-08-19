@@ -935,9 +935,11 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   everything from a public feed, so two hosts means two independently-built copies
   of the same rows, while the live logger needs uptime rather than a schedule (a
   VPS is the eventual answer there, not either desktop). The archives are copied,
-  not re-derived: **On The Wire starts 1984-10-14** (30,235 rows / 1,276 episodes)
-  and `--all` would only reconstruct what the Blogger feed still serves; duck is
-  9,214 rows / 698 episodes back to 2012. Staged with a checksum manifest in Proton
+  merged, not re-derived: the Blogger feed serves **1,666 episodes back to
+  1980-02-28** against the Mac's 1,257 back to 1984-10-14, so `--all` is the *more*
+  complete source (412 episodes never reached the Mac) while the Mac holds 3 posts
+  the feed no longer serves — copy then backfill yields the union. Duck is 9,214
+  rows / 698 episodes back to 2012. Staged with a checksum manifest in Proton
   (`ntune/radio-scan-logs/`, `~/Documents/ntune/radio-scan-logs/` on Linux).
   Procedure, verification counts and the one failure mode that matters — a dedupe
   key mismatch reading the whole archive as new — are in

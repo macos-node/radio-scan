@@ -17,15 +17,23 @@ machines produces two independently-built copies of the same rows — hence one
 owner. The live logger is the opposite problem (it needs uptime, not a schedule)
 and is a separate decision; a VPS is the eventual answer there, not either desktop.
 
-## Why the logs are copied rather than just backfilled
+## Why do both — copy AND backfill
 
-`--all` reconstructs only what a feed still serves. The On The Wire archive
-**starts in 1984** and exists because it was accumulated, not because the Blogger
-feed still carries it. Copying is what preserves it; the backfill afterwards is
-only for anything published since the Mac's last run.
+**Corrected 2026-08-19.** This doc first claimed `--all` could not reconstruct the
+old archive and that copying was what preserved it. That was wrong, and measured
+wrong: the Blogger feed serves **1,666 episode dates back to 1980-02-28**, while
+the macOS log holds **1,257 back to 1984-10-14**. The feed is the *more* complete
+source — 412 episodes it serves never reached the Mac.
 
-Both are safe to combine: `write_logs()` dedupes on the `episode` field, reading
-the existing JSONL first and skipping episodes already present.
+The copy still earns its place, for two smaller reasons:
+
+- **3 episodes exist only on the Mac** — posts the feed no longer serves. A pure
+  `--all` would lose them.
+- It is one file copy against ~70 paginated requests.
+
+So the union is the point, and the order in the procedure gives it: copy first,
+then `--all` on top. `write_logs()` dedupes on the `episode` field, reading the
+existing JSONL and skipping episodes already present, so combining them is safe.
 
 ## Source of truth for the transfer
 
@@ -93,19 +101,29 @@ python3 ~/radio-scan/episodic/duck_playlist.py --all --data-dir ~/radio-scan-dat
 **5. Check what it actually did.**
 
 ```bash
-wc -l ~/radio-scan-data/otw/otw_log.jsonl ~/radio-scan-data/duck/duck_log.jsonl
+python3 - <<'PY'
+import json, os, collections
+for src, f in [("otw", "otw_log.jsonl"), ("duck", "duck_log.jsonl")]:
+    path = os.path.expanduser(f"~/radio-scan-data/{src}/{f}")
+    rows = [json.loads(l) for l in open(path) if l.strip()]
+    pairs = collections.Counter((r["episode"], r["pos"]) for r in rows)
+    dupes = sum(v - 1 for v in pairs.values() if v > 1)
+    print(f"{src}: {len(rows):,} rows | {len({r['episode'] for r in rows})} episodes | "
+          f"{dupes} duplicate (episode,pos) rows")
+PY
 ```
 
-Expected: **30,235** and **9,214**, plus at most a handful of rows for episodes
-published since 2026-08-15.
+Expect **more** than the macOS baseline of 30,235 / 9,214 rows — the feed carries
+412 On The Wire episodes the Mac never logged, so a large jump after `--all` is the
+correct outcome, not a fault.
 
-> **The failure mode to watch for.** If a run appends *hundreds* of rows rather
-> than a handful, the dedupe key did not match: the key is the `episode` string, so
-> a parse producing even slightly different episode names reads the entire archive
-> as new. Stop, do not let the timers run, and diff the episode names:
-> `python3 -c "import json;print(sorted({json.loads(l)['episode'] for l in open('/home/USER/radio-scan-data/otw/otw_log.jsonl')})[-5:])"`
-> against the same on macOS. Recovering is easy (restore the file from Proton);
-> re-deriving 1,276 episode names is not.
+> **The failure mode to watch for is duplication, and row count does not show it.**
+> The tell is `duplicate (episode,pos) rows` above being non-zero: the dedupe key is
+> the `episode` string, so a parse yielding even slightly different episode names
+> re-appends episodes already present, and the same track position then appears
+> twice under two spellings. Zero duplicates means the union worked however much it
+> grew. If it is non-zero, stop before enabling the timers and restore the file from
+> Proton rather than trying to de-duplicate in place.
 
 **6. Only then, on macOS**, stop the duplicate jobs:
 
