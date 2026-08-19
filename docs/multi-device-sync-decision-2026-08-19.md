@@ -232,6 +232,53 @@ the `e` tag (its event id) alongside the `a` coordinate — which is why the 202
 `e`-tag fix had to come first; an `a`-only retraction would now compute the *new*
 address and miss the old event entirely, orphaning it permanently.
 
+## Raised from macOS — version skew is invisible (open sub-question)
+
+Step 1 shipped correctly; migrating the two live follows exposed something the
+decision does not cover. **A device running a build older than the contract keeps
+publishing the old format, and nothing anywhere says so.**
+
+What happened on 2026-08-19, in order:
+
+1. The installed macOS build (17:56, from `7e09e08`) predated step 1 by five hours.
+2. Toggling both follows off and on in it republished them as
+   `airplay:show:the-peter-mccormack-show` and
+   `…:bitcoin-and-bitcoin-economic-news` — name-derived, the format step 1 removed.
+3. Every signal said success: relays accepted the events, the UI showed `following`,
+   the retractions were clean. The only reason it was caught is that the derived
+   addresses had been computed independently beforehand and could be compared.
+4. Installing the new build made the app address by content, find nothing at those
+   addresses, and render the old events as **separate relay-only follows** — the
+   duplication of decision #11's opening paragraph, arriving through version skew
+   rather than through naming.
+
+This matters more as devices multiply, and it compounds: a stale publisher re-mints
+name-derived addresses for streams every current device addresses by content, so the
+duplicate set grows with each toggle rather than converging.
+
+**Two mechanisms, and one honest limitation.**
+
+- **A `d` format marker on the event** (e.g. `["dfmt", "station-address.v1"]`).
+  *Limitation worth stating plainly:* it cannot catch the build that caused tonight's
+  problem, because a build predating the marker cannot emit it. Its value is
+  prospective — once every publisher emits it, **absence becomes the signal**, and the
+  *next* format change is detectable instead of silent. If it is wanted, it is
+  cheapest now, while 2 events exist.
+- **Reader-side same-target detection**, which needs no contract change and works
+  today: two `show.v1` events sharing an `r` (or an `i`) are the same show at two
+  addresses. That is not a legitimate state — it is precisely what a stale publisher
+  produces. Surfacing it as one row flagged *needs migration*, rather than as two
+  follows, turns tonight's silent duplication into something visible and actionable,
+  and it would have caught this without anyone knowing the expected hashes.
+
+Suggest the reader-side check regardless, since it is small, contract-free and
+retroactive; the marker is a judgement call for whoever owns the contract. Both belong
+with step 2 rather than blocking it.
+
+*(A related hazard found while migrating — that a retraction re-derived its address
+instead of reading it off the event, making pre-migration follows unretractable — is
+fixed in `468aff7`, not left as a question.)*
+
 ## Recommended order if accepted
 
 1. Canonical-URL addressing (contract change + both publishers) — do this first and
