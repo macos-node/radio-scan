@@ -59,6 +59,7 @@ import {
 import { resumePosition, savePosition, type Playing } from "./lib/player";
 import { describeOutcome, publishSequentially } from "./lib/publishAll";
 import { OWNER_PUBKEY, parseStationsJson, toExportStation } from "./lib/station";
+import { canonicalUrl } from "./lib/address";
 import { useFollows } from "./hooks/useFollows";
 import { shortVersion } from "./lib/format";
 import { cn } from "./lib/cn";
@@ -148,21 +149,26 @@ export default function App() {
     // and the local copy wins the dedupe. Carry the relay twin's event id across
     // so an unfollow can still name the concrete event in an `e` tag; without
     // this, the common case would only ever get the `a` coordinate.
-    const relayByUrl = new Map<string, Station>();
-    for (const r of relayStations) relayByUrl.set(r.url, r);
-    const localUrls = new Set(localStations.map((s) => s.url));
+    // Keyed on the CANONICAL url, not the raw string. The address is canonical, so
+    // https://…/dronezone and http://…/dronezone are one stream and one published
+    // event; matching raw strings marked one row published and left its twin
+    // offering to publish forever, flipping which was which on every press.
+    const relayByTarget = new Map<string, Station>();
+    for (const r of relayStations) relayByTarget.set(canonicalUrl(r.url), r);
+    const localTargets = new Set(localStations.map((s) => canonicalUrl(s.url)));
 
     const seen = new Set<string>();
     const out: Station[] = [];
     for (const s of [...localStations, ...relayStations]) {
-      if (seen.has(s.url)) continue;
-      seen.add(s.url);
-      const twin = relayByUrl.get(s.url);
+      const target = canonicalUrl(s.url);
+      if (seen.has(target)) continue;
+      seen.add(target);
+      const twin = relayByTarget.get(target);
       // `eventId` and `d` come from the published event even when the local copy
       // wins the dedupe — without them a retraction cannot name what it deletes.
       const eventId = s.eventId ?? twin?.eventId;
       const d = s.d ?? twin?.d;
-      const relayOnly = !localUrls.has(s.url);
+      const relayOnly = !localTargets.has(target);
       out.push({
         ...s,
         ...(eventId ? { eventId } : {}),

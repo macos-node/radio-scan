@@ -370,6 +370,26 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   (deleted 12:41, re-published 12:45, resolves followed). Evidence:
   [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
   § S4.
+- **Linux has published its whole list; macOS handoff written (2026-08-20).**
+  `publish all` put **9 station.v1** on all three relays from 10 local rows — correct,
+  not a miss: `drone-zone` (https) and `dronezone` (http) are one SomaFM mount, so
+  they canonicalise to one address (`da24be21dc42b8e2`) and one event. Runbook for
+  the other machine: [`docs/sync-macos-handoff-2026-08-20.md`](docs/sync-macos-handoff-2026-08-20.md).
+- **Step 2's merge matched raw URLs — FIXED 2026-08-20, found by using it.** The app
+  showed `publish all (1)` that could never reach zero: the merge paired local rows to
+  published events by **raw URL string** while the address is **canonical**, so the
+  https Drone Zone row never matched the published event (whose `r` is the http one)
+  and looked permanently unpublished. Pressing publish would have republished at the
+  same address with the other URL, flipping which row appeared published, forever.
+  The merge now keys on the canonical URL — which also collapses the display to 9
+  rows. Required a **TS canonicaliser** (`lib/address.ts`), and therefore a **fourth**
+  implementation of the contract: it runs against every one of the 21 pinned vectors
+  (24 tests) exactly as the Rust one does, because a renderer that canonicalises
+  differently would decide two devices' rows are different things — this decision's
+  own bug, in the reader. 138 TS + 45 Rust green.
+  *The local store still holds both Drone Zone rows;* ✕ is device-local now, so
+  removing the redundant one is safe and touches nothing on the wire. Left to the
+  operator.
 - **Decision #11 step 3 BUILT (2026-08-19) — the decision is now complete.**
   `publish all (N)` on Stations, `follow all (N)` on Podcasts, shown only when signed
   in and only when this device holds something unshared. **The open sub-question is
