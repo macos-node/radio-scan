@@ -388,6 +388,19 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   in ntune (client-side filtering) but visible to any other client, and they clear
   only by re-following/re-unfollowing with the current build or by fixing NIP-09
   server-side (root is macOS-only).
+- **U4.5 H2 — macOS pass, VERIFIED against the wire (2026-08-19).** Three stations
+  probed and persisted, checked by reading each stream's ICY headers with `curl`
+  rather than by trusting the app: **SomaFM Indie Pop Rocks 5/5** (`icy-name`
+  "SomaFM presents: Indie Pop Rocks! [SomaFM]", `icy-genre` "Indie LoFi College",
+  `icy-br` 128, `icy-url` `http://somafm.com/recent?indie`, `Content-Type`
+  `audio/mpeg`), **Groove Salad 5/5** — homepage stored with its original
+  capitalisation (`http://SomaFM.com`) rather than normalised. **Acid Jazz is the
+  useful case:** that stream sends only `icy-br: 320` and `Content-Type: audio/aacp`,
+  no name/genre/url, and the slice is exactly `{bitrate, fmt}` — absent stays absent
+  on a station too. **The inverted rule holds:** both SomaFM rows keep the operator's
+  typed name rather than the `icy-name` banner, and Acid Jazz's stored `bitrate: 0`
+  was not overwritten by the probed 320 — the probe lands in the harvest slice, the
+  row stays the user's.
 - **U4.5 H1 + H5 — macOS pass, VERIFIED with two findings (2026-08-19).** A 25-sub
   profile, checked field-by-field against an **independent parse of the raw XML**
   (channel-level only, `<itunes:owner><itunes:email>` with a `<managingEditor>`
