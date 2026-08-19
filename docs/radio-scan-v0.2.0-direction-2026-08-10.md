@@ -219,6 +219,19 @@ of the work, not after:
   [`./show-v1-plumbing-buildmap-2026-08-18.md`](./show-v1-plumbing-buildmap-2026-08-18.md).
   Its **S0 is shared with U4.5**: `feed-rs` 2.4 exposes no extension map, so
   `<podcast:guid>` needs its own extractor before either slice can key on it.
+- **#11 (new, 2026-08-19) — multi-device sync: addressing, removal, totality.**
+  Raised by a station missing from one machine. The investigation found three causes
+  that outlive the symptom: nothing publishes items that are already local (10
+  stations here, 0 on the relays); `d` is derived from the *typed name*, so one
+  station acquires several addresses across devices — the four events retracted today
+  are that bug, not a naming experiment; and URL string equality is not stream
+  identity (`http`/`https` Drone Zone sits in the store twice).
+  *Lean: derive `d` from the canonical URL (hash), keep per-item events with removal
+  and publication as separate acts, add an explicit "publish my list".* Full argument,
+  measurements and the rejected NIP-51 alternative:
+  [`./multi-device-sync-decision-2026-08-19.md`](./multi-device-sync-decision-2026-08-19.md).
+  **Settle before building:** the `d` format is in both contracts, and re-addressing
+  later means re-publishing everything — right now that is 2 events.
 - **#7 — npub-audio scope.** Not triggered by persistence; leave at `1063`-first.
   Note it only so 0.2.0 doesn't accidentally widen the harvest schema for kind-1.
 

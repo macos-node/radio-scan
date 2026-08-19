@@ -370,6 +370,25 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   (deleted 12:41, re-published 12:45, resolves followed). Evidence:
   [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
   § S4.
+- **Multi-device sync — DECISION DRAFTED, nothing built (2026-08-19).** "Acid Jazz is
+  missing on Linux" turned out not to be a sync failure: it was never in this
+  machine's local store, arrived only via the relay overlay, and that copy had been
+  deleted on 08-06 — ntune had been filtering it client-side ever since, so today's
+  retraction merely made the wire agree. The investigation underneath is the value:
+  (1) **nothing publishes local items** — 10 stations here, 0 on the relays; (2) **`d`
+  is derived from the typed name**, so one station gets several addresses across
+  devices — `acid-jazz`/`acid-jazz-2`/`acid-j`/`aj` were that bug, not experiments;
+  (3) **URL equality ≠ stream identity** — `drone-zone` and `dronezone` are the same
+  SomaFM mount over https and http. Podcasts mostly escape this because
+  `mergeFollows` prefers `podcast:guid` (7/10 carry one) — decision #10's
+  URL-independence argument, which stations lack. *Proposal:* canonical-URL-hashed
+  `d`, per-item events with removal and publication kept separate, explicit "publish
+  my list"; NIP-51 sets rejected for now because last-writer-wins across devices turns
+  a duplication bug into an omission bug. Measured: canonical addressing collapses
+  10 station rows → 9 streams, leaves 10/10 podcasts. **Cheapest moment to change
+  `d`: 2 published events exist.** Doc:
+  [`docs/multi-device-sync-decision-2026-08-19.md`](docs/multi-device-sync-decision-2026-08-19.md),
+  open decision #11.
 - **Stale station tombstones CLEARED from the wire — 2026-08-19.** The five
   acid-jazz naming experiments (`abstract-hiphop`, `acid-jazz-2`, `acid-j`, `aj`,
   `acid-jazz`, published 08-05/08-06) had survived their `a`-only deletions on
