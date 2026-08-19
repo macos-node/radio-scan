@@ -339,6 +339,30 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   `a0f86545fcbd` a-duck-in-a-tree) and landed on **all three** relays; replaying
   `resolveStations` against live relay data now yields **0** relay stations, so the
   Stations tab is the 10 local rows only.
+- **`show.v1` S4 — FIRST LIVE PUBLISH VERIFIED (2026-08-19, Linux).** Followed
+  *No Agenda Show* from the installed build: event `ad61c99d639b…` is on **all three
+  relays**, and a `nak` read-back diffs **tag-for-tag identical** to
+  [`schema/fixtures/show-31242.guid.json`](schema/fixtures/show-31242.guid.json) —
+  `d`/`name`/`r`/`i`/`alt` all match. The `i` value equals the guid read off the feed
+  with `curl` on 2026-08-18 **before the extractor existed**, so the chain is proven
+  against an independently-known value: quick-xml → `Sub.guid` → NIP-73 tag → signed
+  event → relays. **Cross-user discovery measured, not assumed:** a `#i` filter with
+  *no author* returns the event on fizx.uk and nos.lol (and `#r` does too) — the
+  property that justified a separate kind instead of overloading `station.v1`.
+  *One difference:* the fixture carries `t: talk` and nothing emits `t` (no topic UI
+  in S3) — settle in S4 by adding a control or dropping it from the fixture.
+  **Still open:** in-app `following` render, a real unfollow (first live test of the
+  `a`+`e` deletion, and whether fizx.uk honours it now), macOS pass. Evidence:
+  [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
+  § S4.
+- **No single-instance guard (found 2026-08-19).** Two ntune processes were running
+  against one data dir — a `--tray` instance from before S0 plus a leftover test run.
+  Nothing prevents it (no `tauri-plugin-single-instance`), yet every durable store
+  assumes one writer, last-writer-wins. The risk is the **serde-drop bug from an old
+  process rather than old code**: the pre-S0 instance's `PodcastSub` has no `guid`
+  field, so any subscription write from it strips all 8 harvested guids. Nothing was
+  lost this time (store checked intact, both instances quit before testing), but the
+  class has now bitten twice and wants closing structurally.
 - **`show.v1` S3 — Podcasts-tab Follow UI, BUILT + preview-verified (2026-08-18).**
   Per-row **follow** control (publishes `show.v1`) → `following` chip once the event
   reads back off the relays; published state is never local state, so the chip

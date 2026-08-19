@@ -122,13 +122,77 @@ would be URL-only from day one.
   something different (feed *served from* an npub, not *follow published to* relays).
 - **Deliverable:** follows round-trip in the UI, on both tabs, by the same gestures.
 
-### S4 — Verification + docs
+### S4 — Verification + docs  *(in progress)*
 
 - Linux + macOS runtime pass; real events diffed against the fixtures; CHANGELOG,
   STATUS, and the direction doc's decision #10 updated from *settled* to *built*.
 - **Pace the relay probes.** macOS measured an unpaced 31-feed sweep drawing HTTP
   500s from fountain.fm and anchor.fm that read exactly like a cache bug and were
   only rate limiting. The same trap applies to any bulk publish test.
+
+#### ✅ First live publish — 2026-08-19, Linux
+
+The operator followed **No Agenda Show** from the installed build. Event
+`ad61c99d639b347e37f1e540ebcd55344f34ce304029d48127755a25d93347a6`, `created_at`
+2026-08-19 10:18, present and **identical on all three relays** (`relay.fizx.uk`,
+`nos.lol`, `relay.primal.net`).
+
+Read back with `nak` and diffed tag-by-tag against
+[`../schema/fixtures/show-31242.guid.json`](../schema/fixtures/show-31242.guid.json):
+
+| tag | live event | vs fixture |
+|-----|------------|------------|
+| `d` | `airplay:show:no-agenda-show` | identical |
+| `name` | `No Agenda Show` | identical |
+| `r` | `http://feed.nashownotes.com/rss.xml` | identical |
+| `i` | `podcast:guid:856cd618-7f34-57ea-9b84-3600f1f65e7f` | identical |
+| `alt` | `A podcast followed in radio-scan` | identical |
+| `t` | *(absent)* | fixture has `talk` — see below |
+
+**What this proves end to end.** The `i` value equals the guid read directly off
+nashownotes' feed with `curl` on 2026-08-18, *before the extractor existed*. So the
+whole chain is confirmed against an independently-known value: `quick-xml`
+extraction → `Podcast.guid` → `Sub.guid` in `podcasts.json` → NIP-73 tag on a
+signed event → three relays.
+
+**The discovery claim is measured, not asserted.** A `#i` filter with **no author**
+returns the event on both `relay.fizx.uk` and `nos.lol` — any client can ask "who
+follows this show?" by Podcasting-2.0 guid, across users, and the relay answers.
+`#r` resolves it too, the fallback for feeds that state no guid. This is the
+property that justified a separate kind instead of overloading `station.v1`, and it
+now holds on live relays rather than only in the contract.
+
+**The one difference is a real (small) open item.** The fixture carries `t: talk`;
+nothing publishes `t` tags because S3 ships no topic input. Decide in this phase:
+add a topic control, or drop `t` from the fixture. As it stands the fixture
+documents an optional capability the UI does not expose — harmless on the wire,
+misleading as documentation.
+
+#### Still open in S4
+
+- [ ] Confirm the row renders `following` in-app (the read-back path; stubs proved
+      the rendering, not the live subscription).
+- [ ] A real unfollow — the `a` + `e` deletion against a live event, and whether
+      `relay.fizx.uk` honours it now that an `e` tag is present. It ignored
+      `a`-only deletions on 2026-08-18, so this is the first genuine test of that fix.
+- [ ] macOS pass.
+- [ ] Settle the `t` question above.
+- [ ] Decide on a **single-instance guard** (see below) — arguably a prerequisite
+      for trusting any multi-run verification.
+
+#### Hazard found while verifying: no single-instance guard
+
+Two ntune processes were running against one data directory (a `--tray` instance
+from before S0, plus one left over from the guid test). Nothing prevents this — the
+project has no `tauri-plugin-single-instance` — and every durable store assumes a
+single writer with last-writer-wins on disk.
+
+The concrete risk is the serde-drop failure again, from an old *process* rather
+than old code: the pre-S0 instance's `PodcastSub` has no `guid` field, so any
+subscription write from it would silently strip all 8 harvested guids. Nothing was
+lost (the store was checked: 11 subs, 8 guids, 11 `latestAt` intact), and both
+instances were quit before testing. But the class of bug is now twice-seen and
+should be closed structurally rather than by remembering to quit stale apps.
 
 ---
 
