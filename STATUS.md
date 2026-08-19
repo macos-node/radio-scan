@@ -393,6 +393,27 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   serve **0** `show.v1` (the S4 event was published then unfollowed), so the in-app
   `following` render needs a fresh signed follow — the operator's call, not a code
   question.
+- **`show.v1` S1–S4 — macOS pass, VERIFIED with one bug (2026-08-19).** Followed
+  *The Peter McCormack Show* from the installed build: `de61654e9d48…` is on **all
+  three relays**, tags `d`/`name`/`r`/`alt`. **No `i` tag, correctly** — acast states
+  no `<podcast:guid>` (one of this profile's 13 blanks), so this is the **minimal
+  legal record**, structurally the Duck fixture. That makes it the complement of the
+  Linux S4 run, which published a show *with* a guid: **cross-user discovery is now
+  measured on both paths** — `#i` there, and here a `#r` filter with **no author**
+  returning the event on all three relays. Slug clean (no `-2`), no `kind:5` names it.
+  **BUG — a follow published mid-session does not mark its own row.** The chip stayed
+  `follow` after publishing and only flipped to `following` after a **restart**. The
+  pure layer is not at fault: replaying the live event and the real 25-sub store
+  through `parseShow` → `resolveShows` → `mergeFollows` yields 25 rows with exactly
+  one carrying a `show`, matched onto the **local** sub (not appended `relayOnly`).
+  So parse/resolve/merge are correct and the gap is in the **read-back**: `follow()`
+  deliberately keeps no local state — *"the live subscription reads the event straight
+  back"* — but the already-EOSE'd `useFollows` subscription (open ~9 min at publish
+  time) never surfaced it. **Suspect the same applies to stations**, since the comment
+  says "exactly as stations do" and the code path is shared; it is invisible there
+  because the local store already renders the row and only the *published* marker
+  lags. Fix candidates: refetch after `publishShow`/`publishStation` returns, or mark
+  optimistically from the returned event rather than waiting on a relay push.
 - **The duplicate-pair count, measured (macOS, 2026-08-19).** With guids now
   harvested, the 29-sub profile resolves to **exactly four duplicate groups**, 8 rows:
   Bitcoin And (podhome = soundcloud), Once Bitten! and TFTC (fountain.fm = anchor.fm),
