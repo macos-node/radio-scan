@@ -2234,6 +2234,138 @@ mod tests {
         assert_eq!(extras.owner_email.as_deref(), Some("a@b.com"));
     }
 
+    // --- the cache-version guard --------------------------------------------
+    // FEED_CACHE_VERSION exists so a parse change cannot land silently: bodies
+    // parsed by an older generation must be discarded, not revalidated to a 304 and
+    // reused forever. S0 wrote that rule down after the guid extractor was starved
+    // by it — and it was then stepped over three more times in two days, most
+    // recently by the owner-vs-editor precedence fix (2026-08-19), which shipped
+    // correct and unreachable: warm caches never re-parsed, and the startup healing
+    // pass re-asserted the pre-fix owner on every launch.
+    //
+    // Note what that means for the shape of this guard. The precedence fix renamed
+    // no field and added none — only the VALUE changed — so any check over struct
+    // fields or JSON keys alone would have passed. The first test therefore pins
+    // parse OUTPUT for a fixture that exercises each rule; the second pins the
+    // cached shape, which is what a serde drop would silently narrow.
+    //
+    // If either fails: that is a parse change. Bump FEED_CACHE_VERSION and
+    // PINNED_PARSE_VERSION together, and update the expectation in the same commit.
+
+    /// Parse output as of PINNED_PARSE_VERSION — regenerate deliberately, never
+    /// casually: every regeneration is a claim that warm caches may keep the old
+    /// parse until the version moves.
+    const PINNED_PARSE_OUTPUT: &str = concat!(
+        "ChannelExtras {\n",
+        "    guid: Some(\n",
+        "        \"43a4f801-04a3-5897-bc32-9f905e163a36\",\n",
+        "    ),\n",
+        "    funding: Some(\n",
+        "        Funding {\n",
+        "            url: \"https://example.com/support\",\n",
+        "            label: Some(\n",
+        "                \"Support the show\",\n",
+        "            ),\n",
+        "        },\n",
+        "    ),\n",
+        "    value_address: Some(\n",
+        "        ValueAddress {\n",
+        "            address: \"host@example.com\",\n",
+        "            name: Some(\n",
+        "                \"Host\",\n",
+        "            ),\n",
+        "            split: Some(\n",
+        "                90,\n",
+        "            ),\n",
+        "        },\n",
+        "    ),\n",
+        "    owner_email: Some(\n",
+        "        \"owner@example.com\",\n",
+        "    ),\n",
+        "    managing_editor: Some(\n",
+        "        \"editor@example.com\",\n",
+        "    ),\n",
+        "}",
+    );
+
+    /// The parse generation the expectations below were taken under.
+    const PINNED_PARSE_VERSION: u32 = 5;
+
+    /// One channel exercising every rule the scan encodes: the Podcasting-2.0 guid;
+    /// `<managingEditor>` stated BEFORE `<itunes:owner>` (document order is exactly
+    /// what the precedence fix changed); funding with a label; and a value block
+    /// whose highest split is a keysend `type="node"` recipient that must be passed
+    /// over for the highest-split lnaddress.
+    const SNAPSHOT_CHANNEL: &str = concat!(
+        "<podcast:guid>43a4f801-04a3-5897-bc32-9f905e163a36</podcast:guid>",
+        "<managingEditor>editor@example.com (The Editor)</managingEditor>",
+        "<itunes:owner><itunes:name>The Owner</itunes:name>",
+        "<itunes:email>owner@example.com</itunes:email></itunes:owner>",
+        "<podcast:funding url=\"https://example.com/support\">Support the show</podcast:funding>",
+        "<podcast:value type=\"lightning\" method=\"keysend\">",
+        "<podcast:valueRecipient name=\"Node\" type=\"node\" split=\"95\" address=\"03deadbeef\"/>",
+        "<podcast:valueRecipient name=\"Host\" type=\"lnaddress\" split=\"90\" address=\"host@example.com\"/>",
+        "<podcast:valueRecipient name=\"Platform\" type=\"lnaddress\" split=\"7\" address=\"fees@example.com\"/>",
+        "</podcast:value>",
+    );
+
+    #[test]
+    fn channel_parse_output_is_pinned_to_the_cache_version() {
+        let xml = feed(CANON, SNAPSHOT_CHANNEL);
+        let got = format!("{:#?}", extract_channel_extras(xml.as_bytes()));
+        assert_eq!(
+            got, PINNED_PARSE_OUTPUT,
+            "the channel scan output moved. If intended, bump FEED_CACHE_VERSION and \
+             PINNED_PARSE_VERSION together and re-take this snapshot in the same \
+             commit — otherwise warm caches keep the old parse and the change \
+             reaches nobody"
+        );
+    }
+
+    #[test]
+    fn cached_podcast_shape_is_pinned_to_the_cache_version() {
+        // The keys a cache entry carries. serde drops what a struct predates, so a
+        // field added here without a bump reads as absent from every stored body.
+        let podcast = Podcast {
+            title: "T".into(),
+            description: Some("d".into()),
+            image: Some("i".into()),
+            author: Some("a".into()),
+            owner_email: Some("e".into()),
+            website: Some("w".into()),
+            categories: vec!["c".into()],
+            language: Some("l".into()),
+            copyright: Some("r".into()),
+            guid: Some("g".into()),
+            funding: Some(Funding { url: "u".into(), label: None }),
+            value_address: Some(ValueAddress::default()),
+            episodes: vec![],
+        };
+        let json = serde_json::to_value(&podcast).expect("Podcast serializes");
+        let mut keys: Vec<&str> = json.as_object().unwrap().keys().map(|k| k.as_str()).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "author", "categories", "copyright", "description", "episodes",
+                "funding", "guid", "image", "language", "ownerEmail", "title",
+                "valueAddress", "website",
+            ],
+            "the cached Podcast shape changed. Bump FEED_CACHE_VERSION and \
+             PINNED_PARSE_VERSION together, or stored bodies are read through the \
+             new struct and silently lose the difference"
+        );
+    }
+
+    #[test]
+    fn pinned_parse_version_matches_the_cache_version() {
+        assert_eq!(
+            PINNED_PARSE_VERSION, FEED_CACHE_VERSION,
+            "FEED_CACHE_VERSION moved without the pinned expectations being re-taken \
+             (or vice versa) — they are meant to move in the same commit"
+        );
+    }
+
     const ADDR: &str = "31241:916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d:airplay:station:acid-jazz";
     const EV: &str = "b6835db6fa5300000000000000000000000000000000000000000000000000aa";
 

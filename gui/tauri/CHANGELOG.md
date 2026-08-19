@@ -202,6 +202,17 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   feed plainly states. An episode's `<guid>` is never mistaken for the show's.
 
 ### Fixed
+- **The cache-version rule is now enforced by the suite, not by memory.** Three tests
+  pin the parse to `FEED_CACHE_VERSION`: one snapshots the channel scan's **output**
+  for a fixture exercising every rule it encodes (guid, `<managingEditor>` stated
+  before `<itunes:owner>`, funding with a label, and a value block whose highest
+  split is a keysend `type="node"` recipient that must be passed over); one pins the
+  serialized `Podcast` key set, which is what a serde drop silently narrows; and one
+  asserts the two constants moved together. The snapshot is the important half —
+  the owner-precedence change renamed no field and added none, so anything checking
+  struct shape alone would have passed it. Verified by mutation: reverting that
+  precedence fails the snapshot test. The rule has fired four times in two days,
+  three of them after S0 wrote it down; it should not need writing down again.
 - **The owner/editor precedence fix now reaches existing installs.** `70a8c25`
   changed which contact a feed's channel resolves to, but left `FEED_CACHE_VERSION`
   at 4 — so every cached body still counted as current, the parse never re-ran, and
