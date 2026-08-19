@@ -388,6 +388,35 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   in ntune (client-side filtering) but visible to any other client, and they clear
   only by re-following/re-unfollowing with the current build or by fixing NIP-09
   server-side (root is macOS-only).
+- **The 2026-08-19 fix batch — macOS pass, VERIFIED (2026-08-19).** All of
+  `70a8c25`, `77bd4a4` and `b34a842` exercised on the 25-sub profile:
+  - **Harvest lag fix.** Stripped `ownerEmail`/`funding`/`valueAddress` from **18 of
+    25** subs, relaunched, never opened the Podcasts tab — the startup pass restored
+    **15/9/5 within ~5 s**.
+  - **Owner-precedence fix: correct, but was unreachable.** It resolves
+    `<itunes:owner>` over `<managingEditor>` on a genuine re-parse — except
+    `FEED_CACHE_VERSION` stayed at 4, so no cached feed re-parses, and the new
+    healing pass **re-asserted the stale `contact@taz0.org` on every launch**.
+    Isolated rather than inferred: strip-and-relaunch restored the old value from
+    cache; deleting that one cache entry and refetching produced
+    `bitstream@taz0.org`. Bumped to 5 in `72f616d`.
+  - **`following` is a toggle now (`77bd4a4`).** Toggling TFTC off published
+    `cd0fe5abfb47` with **both** targets (`a` coordinate + `e`
+    `66c9b9d55518…`), live `show.v1` went 3 → 2 on all three relays, and **TFTC
+    stayed subscribed** with its guid, `latestAt` and harvest intact — the S4
+    affordance gap, closed and measured.
+  - **First macOS follow carrying an `i` tag.** TFTC published
+    `i=podcast:guid:e22a2294-…`, matching both the harvested `Sub.guid` and the value
+    read off the raw feed with `curl` before the extractor existed — so
+    feed → quick-xml → store → NIP-73 tag → relay is now closed on this platform too
+    (macOS had only ever published the guid-less path).
+  - **Enrich editor (`b34a842`).** A saved value lands as
+    `{"author": "…", "editedAt": …}` with no empty strings, and **survives a relaunch**
+    — the startup fold rewrites `harvest` wholesale without touching `enrich`. Both
+    halves of the rule checked against the real store via `podcastIdentity()`:
+    dormant where the feed states the field (`fromUser: []`), surfaced and attributed
+    where it does not (`fromUser: ["copyright"]`), and dormant again if the feed later
+    starts stating it.
 - **U4.5 H3 — macOS pass: podcasts exact, stations lag the store (2026-08-19).**
   Exported both lists from the installed build and diffed them against the store.
   **Podcasts: 25/25 subs with harvest slices byte-identical**, 12 guids and every
