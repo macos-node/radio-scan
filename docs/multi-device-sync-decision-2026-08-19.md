@@ -1,6 +1,6 @@
 # Multi-device sync for stations & podcasts — decision needed
 
-> **Status: ACCEPTED 2026-08-19. Steps 1–2 built; step 3 outstanding.** This settles *how* a user's stations
+> **Status: ACCEPTED 2026-08-19. Steps 1–3 built — the decision is complete.** This settles *how* a user's stations
 > and shows reach every one of their devices intact, before any code depends on the
 > answer. It touches the **`d` tag format** in
 > [`../schema/station.v1.json`](../schema/station.v1.json) and
@@ -149,9 +149,18 @@ local item not yet on the relays — no automatic publishing on import, for the 
 already recorded in the `show.v1` build map: an OPML import of 31 feeds would fire 31
 events at hosts already observed rate-limiting a read sweep.
 
-Open sub-question: whether a device should ever publish items it *received* from the
-relays (re-asserting another device's entry). Leaning no — a device publishes only
-what a person did on it — but this needs settling before the button exists.
+**Sub-question settled 2026-08-19 — no.** A device publishes only what a person did
+on it. Re-asserting an entry that arrived from the relays would restamp an event
+nobody touched here, and would race a machine that had just unpublished it,
+resurrecting something someone else chose to remove. This needs no rule in the code:
+a received row is `relayOnly`, so "local and not yet published" already excludes it.
+
+**Built as `publish all (N)` / `follow all (N)`**, shown only when signed in and only
+when this device holds something unshared. Both run through `publishSequentially`,
+which paces the run and never lets one failure strand the rest — macOS measured hosts
+rate-limiting an unpaced 31-feed *read* sweep, and this writes to three relays per
+item, so a burst is the shape most likely to be refused. Progress reads
+`publishing 3/9…`, the result `published 7, 2 failed` rather than silence.
 
 ---
 

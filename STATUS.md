@@ -370,6 +370,20 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   (deleted 12:41, re-published 12:45, resolves followed). Evidence:
   [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
   § S4.
+- **Decision #11 step 3 BUILT (2026-08-19) — the decision is now complete.**
+  `publish all (N)` on Stations, `follow all (N)` on Podcasts, shown only when signed
+  in and only when this device holds something unshared. **The open sub-question is
+  settled: a device never re-publishes an item it received from the relays** — that
+  would restamp an event nobody touched here and could race a machine that just
+  unpublished it, resurrecting someone else's removal. No rule needed in code: a
+  received row is `relayOnly`, so "local and not yet published" excludes it by
+  construction. `lib/publishAll.ts` paces the run (sequential, 400 ms gap, none
+  trailing) and **never aborts on one failure** — one unreachable relay must not
+  strand the rest — reporting `publishing 3/9…` then `published 7, 2 failed`. Pacing
+  is evidence-led: macOS measured hosts rate-limiting an unpaced 31-feed *read* sweep,
+  and this writes to three relays per item. 7 tests, incl. two pinning properties
+  rather than output (publishes never overlap; the pause falls between items, not
+  after the last). 114 TS + 45 Rust green.
 - **Decision #11 step 2 BUILT (2026-08-19) — both halves.**
   **(a) Station ✕ / publish split.** Stations were the last place local housekeeping
   and a public act shared one control. `publish`/`published` is now a toggle

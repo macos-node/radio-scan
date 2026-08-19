@@ -81,6 +81,13 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   to stay invisible after its cache-version bump. Cached bodies now arrive marked
   stale-or-not, decided where the version constant lives, so the renderer cannot get
   it wrong: paint anything, store only what this build actually parsed.
+- **Share a whole list at once.** Stations gains **publish all** and Podcasts **follow
+  all**, appearing only when you are signed in and only when something on this device
+  has not been shared yet. They send one item at a time with a pause between, so a
+  long list does not arrive as a burst that relays refuse, and one failure never stops
+  the rest — you get `published 7, 2 failed` rather than silence. Neither touches
+  anything already published, and neither re-publishes a station or show that came
+  from another device: this machine shares what you did here, nothing else.
 - **Stations: sharing and keeping are separate acts now.** The ✕ used to remove a
   station *and* retract it from your relays, so you could not tidy one device's list
   without changing every device's. **`publish` is a toggle** — click it to share a
