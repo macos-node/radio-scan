@@ -588,6 +588,32 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   empty — appeared immediately. 104 TS + 35 Rust green. **The `fill in` affordance
   deliberately appears even when a show states nothing** — that is exactly the show
   worth annotating, and the identity row used to render nothing at all in that case.
+- **Episodic logging moved to Linux — DONE 2026-08-19.** Ran the
+  [handoff runbook](docs/episodic-linux-handoff-2026-08-19.md): 8/8 checksums OK;
+  archive imported and re-verified (**otw 30,235 rows / 1,276 episodes,
+  1984-10-14 → 2026-08-15**; **duck 9,214 / 698, 2012-07-14 → 2026-08-15**); both
+  `--all` backfills added **0 rows**, so the `episode` dedupe key matched exactly and
+  the doc's expensive failure mode did not occur. Timers live at `~/.config/systemd/
+  user/` (otw Mon 09:00, duck Wed 09:00, `Persistent=true`), `Linger=yes` already set
+  so they run logged out. **Closes `Needs-verify: linux` on `0af91ce`:** both services
+  were fired for real — `Result=success`, exit 0, otw parsed a live episode's 23
+  tracks and correctly appended nothing. *Deviation:* I copied the archive **before**
+  installing the timers, expecting duck's already-past `Wed 09:00` + `Persistent=true`
+  to fire on enable and race the copy. It does not — a first-ever enable has no
+  recorded last-run to replay — so the doc's order was fine and mine was equivalent.
+  **Remaining (macOS):** `launchctl unload -w` the two episodic plists; until then
+  both machines log the same shows independently.
+- **The startup healing pass was re-asserting stale parses — FIXED 2026-08-19.**
+  Found while verifying the v5 bump on Linux: the re-fetch is tab-driven, so a launch
+  that never opens the Podcasts tab leaves the cache at the old version — and my
+  sweep folded those **older-parser bodies** into the store on every launch, exactly
+  the "makes it worse rather than better" `72f616d` warned about. The version bump
+  fixed *reachability*; this was a second, independent way for a parser fix to stay
+  invisible. `cached_podcasts` now returns each body marked `stale` (computed where
+  `FEED_CACHE_VERSION` lives, so the renderer never needs the constant); both the
+  sweep and the tab's disk-prime **paint** a stale body but never **store** it.
+  Proven by planting a sentinel value in the store and relaunching against the v4
+  cache: it survived, where before it would have been overwritten. 39 Rust + 104 TS.
 - **macOS pass on U4.5 found three defects — all fixed + Linux-verified
   (2026-08-19).** The pass checked stored fields against an independent parse of the
   raw XML rather than against the app's own extractor, which is why it found things a

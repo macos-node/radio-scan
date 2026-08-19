@@ -251,6 +251,9 @@ export interface CachedFeed {
   etag?: string;
   lastModified?: string;
   podcast: Podcast;
+  /** Parsed by an older build. Paint it — it is the last thing we knew — but never
+   *  fold it into the durable store, or a superseded parse gets re-asserted. */
+  stale: boolean;
 }
 
 /** Cached bodies for the given feed URLs — a local disk read, so the Podcasts

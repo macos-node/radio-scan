@@ -1416,12 +1416,30 @@ fn write_cached_feed(app: &tauri::AppHandle, entry: &CachedFeed) {
     }
 }
 
+/// A cached body on its way to the renderer, carrying whether this build can still
+/// read it. `stale` is computed here rather than shipping the raw version number,
+/// so the renderer never has to know what the current parser generation is.
+#[derive(Serialize)]
+struct CachedFeedOut {
+    #[serde(flatten)]
+    feed: CachedFeed,
+    /// Parsed by an OLDER extractor. Still worth painting — it is the last thing we
+    /// knew — but it must NOT be folded into the durable store, or the startup
+    /// healing pass re-asserts a parse this build has already superseded. That is
+    /// how the owner-precedence fix stayed invisible even after its version bump.
+    stale: bool,
+}
+
 /// Cached feeds for the given subscriptions, in whatever order they are found.
 /// Missing or unreadable entries are simply absent — the caller refetches.
 #[tauri::command]
-fn cached_podcasts(app: tauri::AppHandle, urls: Vec<String>) -> Vec<CachedFeed> {
+fn cached_podcasts(app: tauri::AppHandle, urls: Vec<String>) -> Vec<CachedFeedOut> {
     urls.iter()
         .filter_map(|u| read_cached_feed(&app, u))
+        .map(|feed| CachedFeedOut {
+            stale: feed.v != FEED_CACHE_VERSION,
+            feed,
+        })
         .collect()
 }
 
@@ -1819,6 +1837,24 @@ mod tests {
         }
     }
 
+    fn sample_podcast() -> Podcast {
+        Podcast {
+            guid: None,
+            funding: None,
+            value_address: None,
+            title: "T".into(),
+            description: None,
+            image: None,
+            author: None,
+            owner_email: None,
+            website: None,
+            categories: Vec::new(),
+            language: None,
+            copyright: None,
+            episodes: Vec::new(),
+        }
+    }
+
     // --- dev/release store isolation ---------------------------------------
 
     #[test]
@@ -1934,6 +1970,43 @@ mod tests {
         assert_eq!(extract_channel_extras(b"<rss><channel><title>oops").guid, None);
         assert_eq!(extract_channel_extras(b"").guid, None);
         assert_eq!(extract_channel_extras(&[0xff, 0xfe, 0x00]).guid, None);
+    }
+
+    #[test]
+    fn a_body_from_an_older_parser_is_marked_stale() {
+        // The renderer decides what to paint; it must not have to know the current
+        // parser generation to decide what is safe to STORE. Marking it here is
+        // what stops the startup healing pass re-asserting a superseded parse.
+        let current = serde_json::to_value(CachedFeedOut {
+            feed: CachedFeed {
+                url: "u".into(),
+                v: FEED_CACHE_VERSION,
+                fetched_at: 1,
+                etag: None,
+                last_modified: None,
+                podcast: sample_podcast(),
+            },
+            stale: false,
+        })
+        .unwrap();
+        assert_eq!(current["stale"], serde_json::json!(false));
+        // …and the flatten keeps the body reachable at the top level, where the
+        // renderer expects it.
+        assert_eq!(current["url"], serde_json::json!("u"));
+        assert!(current.get("podcast").is_some());
+
+        let older = CachedFeed {
+            url: "u".into(),
+            v: FEED_CACHE_VERSION - 1,
+            fetched_at: 1,
+            etag: None,
+            last_modified: None,
+            podcast: sample_podcast(),
+        };
+        assert!(
+            older.v != FEED_CACHE_VERSION,
+            "a body one generation back must not count as current"
+        );
     }
 
     #[test]

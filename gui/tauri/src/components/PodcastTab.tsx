@@ -441,10 +441,12 @@ export function PodcastTab({
   // lives in lib/podcasts.ts and does not care whether this component is mounted —
   // it used to be an effect here, which lost every fetch that resolved after the
   // tab was closed (macOS 2026-08-19).
-  const putCache = (url: string, p: Podcast) => {
+  const putCache = (url: string, p: Podcast, absorb = true) => {
     podCache[url] = p;
     setCache((c) => ({ ...c, [url]: p }));
-    absorbPodcast(url, p);
+    // `absorb` is false for a body primed from a STALE cache entry: showing it is
+    // right (it is the last thing we knew), writing it to the store is not.
+    if (absorb) absorbPodcast(url, p);
   };
 
   // Local subscriptions merged with the follows published to the relays. A show
@@ -472,7 +474,7 @@ export function PodcastTab({
         try {
           const hits = await cachedPodcasts(cold);
           if (cancelled) return;
-          for (const h of hits) putCache(h.url, h.podcast);
+          for (const h of hits) putCache(h.url, h.podcast, !h.stale);
         } catch (e) {
           console.error("cached_podcasts failed", e);
         }

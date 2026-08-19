@@ -73,6 +73,14 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   address a reader could use. Measured on a 10-feed profile: funding on 5, a
   lightning address on 3, each the highest-split recipient — platform cuts of 2% and
   7% correctly passed over.
+- **A stale cached feed can no longer be re-asserted into the store.** When the
+  parser is upgraded, bodies cached by the previous build are still worth showing —
+  they are the last thing the app knew — but folding them into the durable store
+  writes back a parse that has already been superseded. The startup healing pass and
+  the tab's disk-prime both did exactly that, which is a second way for a parser fix
+  to stay invisible after its cache-version bump. Cached bodies now arrive marked
+  stale-or-not, decided where the version constant lives, so the renderer cannot get
+  it wrong: paint anything, store only what this build actually parsed.
 - **Unsubscribing and unfollowing are separate acts now.** The ✕ on a published
   podcast used to do both at once, so you could not stop publishing a show without
   also dropping it from your list, or tidy your list without announcing it to your

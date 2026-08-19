@@ -189,7 +189,12 @@ export default function App() {
         const urls = loadSubs().map((s) => s.url);
         if (urls.length === 0) return;
         const cached = await cachedPodcasts(urls);
-        const healed = cached.filter((c) => absorbPodcast(c.url, c.podcast)).length;
+        // Only bodies this build can still read. A stale one was parsed by an older
+        // extractor, so folding it in would re-assert a superseded parse — the exact
+        // way the owner-precedence fix stayed invisible. Those refresh on next fetch.
+        const healed = cached
+          .filter((c) => !c.stale)
+          .filter((c) => absorbPodcast(c.url, c.podcast)).length;
         if (healed > 0) {
           console.info(`harvest: folded ${healed} cached feed(s) into the store`);
         }
