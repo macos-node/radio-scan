@@ -355,10 +355,19 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   property that justified a separate kind instead of overloading `station.v1`.
   *One difference:* the fixture carries `t: talk` and nothing emits `t` (no topic UI
   in S3) — settle in S4 by adding a control or dropping it from the fixture.
-  **Still open:** in-app `following` render, macOS pass, and the affordance gap that
-  using it exposed — ✕ unsubscribes *and* unfollows in one gesture, with no way to
-  retract a follow while keeping the local subscription (the `following` chip is a
-  chip, not a toggle). Evidence:
+  **S4 is now CLOSED — verified on both platforms (2026-08-19).** macOS published a
+  guid-less show (acast) and found the one bug this slice shipped: a follow published
+  mid-session did not mark its own row, because `follow()` keeps no local state and a
+  subscription idle since EOSE never delivered the event; fixed with `useFollows`
+  `refresh()` (a one-shot `querySync` folded into the same map — optimistic marking
+  was rejected, since the chip must not assert a publish the relays might refuse),
+  and **stations shared the defect**. Linux then confirmed the fix: *Bitcoin And*
+  (`213b1f152f9e`, `i: podcast:guid:43a4f801-…`) published to all three relays and
+  **the chip flipped with no restart**. **Cross-machine sync observed:** the resolver
+  over live data returns 2 follows — the Linux one plus macOS's McCormack follow,
+  which *merges onto the local sub* rather than showing as a relay row. Both
+  discovery paths are measured (`#i` Linux, `#r` macOS), and NIP-09 rule 1 held live
+  (deleted 12:41, re-published 12:45, resolves followed). Evidence:
   [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
   § S4.
 - **NIP-09: the `e` tag is what makes deletion work on `relay.fizx.uk` — MEASURED
@@ -427,6 +436,18 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   library's duplication and nothing else. Until a dedupe slice lands the rows stay
   visible — `mergeFollows` maps `subs` 1:1 — so the interim fix is removing one of each
   pair by hand.
+- **`show.v1` follow-ups (open, none blocking).** (1) The fixture carries `t: talk`
+  but nothing emits `t` — no topic UI; add a control or drop it from the fixture.
+  (2) **✕ unsubscribes AND unfollows in one gesture** (hit on both platforms): local
+  housekeeping and a public act share a control, and the `following` chip is not a
+  toggle — likely fix is making it one. (3) The stale tombstones on `relay.fizx.uk`
+  plus the macOS-recorded state the app cannot exit (a deleted station's row is
+  hidden, so no ✕ remains to re-issue from, while the publish guard blocks re-adding
+  it to get a fresh event).
+- **Tooling note: capture `nak` with command substitution.** Its output is lost when
+  `timeout` kills it mid-write to a redirect or `tee`; an empty capture read as
+  "resolves 0 shows" during the 2026-08-19 session and was briefly mistaken for a
+  result. `S=$(timeout 25 nak req …)` is reliable.
 - **No single-instance guard (found 2026-08-19).** Two ntune processes were running
   against one data dir — a `--tray` instance from before S0 plus a leftover test run.
   Nothing prevents it (no `tauri-plugin-single-instance`), yet every durable store

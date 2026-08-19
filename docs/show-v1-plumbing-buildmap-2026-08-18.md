@@ -208,12 +208,67 @@ addressable-replaceable count collapsing duplicate `d` values.)
    with the current build, or by fixing NIP-09 support server-side (root there is
    macOS-only).
 
-#### Still open in S4
+#### ✅ macOS pass + the read-back bug it exposed — 2026-08-19
 
-- [ ] Confirm the row renders `following` in-app (the read-back path; stubs proved
-      the rendering, not the live subscription — and the follow/unfollow round trip
-      above was verified from the relay side, not the UI side).
-- [ ] macOS pass.
+macOS followed *The Peter McCormack Show* (`de61654e9d48…`, all three relays) and
+found what neither Linux run could: **a follow published mid-session did not mark
+its own row** — the chip stayed `follow` until restart. The pure layer was cleared
+first by replaying the live event and a real 25-sub store through
+`parseShow → resolveShows → mergeFollows`; the gap was S3's design choice that
+`follow()` keeps no local state and waits for the open subscription to hand the
+event back. A subscription idle since EOSE does not always deliver.
+
+Fixed there (`8330464`): `useFollows` exposes `refresh()` — a one-shot `querySync`
+folded into the same event map — called after every publish and unfollow path.
+Marking the row optimistically from the click was explicitly rejected as the smaller
+and wrong diff: the chip would then assert a publish the relays might have refused.
+**Stations shared the defect** through the same path, where it would only ever have
+looked like a lagging marker, since the local store already renders the row. The
+key/fold step was extracted to `streamKey` + `ingestEvent` so the live stream and
+the refetch fold identically.
+
+That pass also verified the guid-less path: acast publishes no `<podcast:guid>`, so
+its event is the minimal legal record and cross-user discovery there works by `#r`.
+**Both discovery paths are now measured** — `#i` on Linux, `#r` on macOS.
+
+#### ✅ Linux confirmation of the fix + cross-machine sync — 2026-08-19
+
+Followed *Bitcoin And* from the installed Linux build: `213b1f152f9e`, 12:57:47, all
+three relays, carrying `i: podcast:guid:43a4f801-…`. **The chip flipped without a
+restart**, closing `Needs-verify: linux`. The guid matches the one S0 extracted into
+`podcasts.json`, and podhome embeds the same value in its feed path — corroborated
+twice. Slug generated clean, no `-2` needed.
+
+**Cross-machine sync observed, not argued.** Replaying the resolver over live relay
+data returns **2** followed shows: this one, and macOS's McCormack follow — which
+**merges onto the local sub** rather than appearing as a `relay` row. A follow
+published on one machine, correct on another, is the whole point of decision #10.
+
+The same data shows NIP-09 rule 1 holding live: `the-peter-mccormack-show` was
+deleted at 12:41 and re-published at 12:45, and resolves as **followed**.
+
+> **Tooling note for whoever repeats this.** `nak`'s output is lost when `timeout`
+> kills it mid-write to a redirect or `tee` — capture with command substitution
+> (`S=$(timeout 25 nak req …)`) instead. An empty capture read as "resolves 0
+> shows" during this session and was briefly mistaken for a result.
+
+#### S4 — closed
+
+Every phase of this slice is built and verified on both platforms. Remaining items
+are **follow-ups, not gaps in the slice**:
+
+- [ ] `t: talk` in `show-31242.guid.json` — nothing emits `t` tags (no topic UI).
+      Add a control or drop it from the fixture; as it stands the fixture documents
+      a capability the app does not expose.
+- [ ] **Unfollow and unsubscribe are one gesture** — hit on both platforms now. The
+      ✕ on a published row does both and the `following` chip is not a toggle, so a
+      follow cannot be retracted while keeping the subscription. Local housekeeping
+      and a public act should not share a control.
+- [ ] **Single-instance guard** — no `tauri-plugin-single-instance`, yet every
+      durable store assumes one writer (see the hazard below).
+- [ ] 5 stale station tombstones on `relay.fizx.uk`, and the state the app cannot
+      exit that the macOS session recorded (a deleted station's row is hidden, so no
+      ✕ remains to re-issue from, while the publish guard blocks re-adding it).
 - [ ] Settle the `t` question above.
 - [ ] Decide on a **single-instance guard** (see below) — arguably a prerequisite
       for trusting any multi-run verification.
