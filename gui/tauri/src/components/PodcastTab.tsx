@@ -58,6 +58,7 @@ import { MediaGlyph } from "./MediaGlyph";
 import { Modal } from "./Modal";
 import { EnrichDialog } from "./EnrichDialog";
 import { cn } from "../lib/cn";
+import { describeOutcome, publishSequentially } from "../lib/publishAll";
 
 type View = "list" | "cards";
 
@@ -358,6 +359,9 @@ export function PodcastTab({
   // and undone by clicking again); UNfollowing publishes a deletion to every relay,
   // so it asks first — the same line the app draws between adding and removing.
   const [confirmUnfollow, setConfirmUnfollow] = useState<string | null>(null);
+  // Following the whole list at once — a bulk public act, so it asks.
+  const [confirmFollowAll, setConfirmFollowAll] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
 
   // Re-sync when a restore (the app-level Backup dialog) writes subs from
   // outside this tab — same-document localStorage writes don't fire `storage`.
@@ -583,6 +587,32 @@ export function PodcastTab({
     }
   };
 
+  /** Subscriptions this device holds that are not yet published. Relay-only rows
+   *  are excluded by construction: they have no local copy, and a device publishes
+   *  only what a person did on it (decision #11, step 3). */
+  const unpublishedRows = rows.filter((r) => !r.show && !r.relayOnly);
+
+  const followAll = async () => {
+    setConfirmFollowAll(false);
+    const items = unpublishedRows;
+    if (items.length === 0) return;
+    setError(null);
+    const outcome = await publishSequentially(
+      items,
+      (r) => publishShow(r.title, r.url, { guid: r.guid }),
+      {
+        onProgress: (done, total) =>
+          setBulkMsg(done < total ? `following ${done + 1}/${total}…` : null),
+      },
+    );
+    for (const f of outcome.failed) {
+      console.error("publish_show failed", f.item.url, f.error);
+    }
+    setBulkMsg(describeOutcome(outcome));
+    setTimeout(() => setBulkMsg((m) => (m === describeOutcome(outcome) ? null : m)), 4000);
+    onPublished?.();
+  };
+
   const unfollow = async (row: FollowRow) => {
     if (!row.show) return;
     setConfirmUnfollow(null);
@@ -675,6 +705,19 @@ export function PodcastTab({
               {rows.some((r) => r.show) &&
                 ` · ${rows.filter((r) => r.show).length} published`}
             </span>
+            {bulkMsg && (
+              <span className="font-mono text-[10px] text-accent">{bulkMsg}</span>
+            )}
+            {signedIn && unpublishedRows.length > 0 && !bulkMsg && (
+              <button
+                type="button"
+                onClick={() => setConfirmFollowAll(true)}
+                title={`Publish ${unpublishedRows.length} subscription(s) this device holds but has not shared`}
+                className="rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-nostr"
+              >
+                follow all ({unpublishedRows.length})
+              </button>
+            )}
             <div className="ml-auto flex items-center gap-0.5">
               {SORTS.map((o) => (
                 <button
@@ -1015,6 +1058,41 @@ export function PodcastTab({
           }}
           onClose={() => setEditing(null)}
         />
+      )}
+
+      {confirmFollowAll && (
+        <Modal title="Follow all?" onClose={() => setConfirmFollowAll(false)}>
+          <p className="text-sm text-fg">
+            Publish{" "}
+            <span className="font-medium">
+              {unpublishedRows.length} subscription
+              {unpublishedRows.length === 1 ? "" : "s"}
+            </span>{" "}
+            as follows?
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            Only the shows this device is subscribed to and has not published yet.
+            Anything already published is left alone, and shows that came from another
+            device are never re-published from here. They go out one at a time, so a
+            long list takes a moment.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmFollowAll(false)}
+              className="rounded-sm border border-surface px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void followAll()}
+              className="rounded-sm bg-accent px-3 py-1.5 text-xs font-medium text-bg transition-opacity hover:opacity-90"
+            >
+              Follow all
+            </button>
+          </div>
+        </Modal>
       )}
 
       {unfollowRow?.show && (

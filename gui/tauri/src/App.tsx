@@ -19,6 +19,7 @@ import { IdentityDialog } from "./components/IdentityDialog";
 import { AddStationDialog } from "./components/AddStationDialog";
 import { FavoritesDialog } from "./components/FavoritesDialog";
 import { BackupDialog } from "./components/BackupDialog";
+import { Modal } from "./components/Modal";
 import {
   addFavorite,
   exportJson,
@@ -56,6 +57,7 @@ import {
   VOLUME_KEY,
 } from "./lib/settings";
 import { resumePosition, savePosition, type Playing } from "./lib/player";
+import { describeOutcome, publishSequentially } from "./lib/publishAll";
 import { OWNER_PUBKEY, parseStationsJson, toExportStation } from "./lib/station";
 import { useFollows } from "./hooks/useFollows";
 import { shortVersion } from "./lib/format";
@@ -109,6 +111,8 @@ export default function App() {
   const [localStations, setLocalStations] = useState<Station[]>([]);
   // Transient status shown by the stations header (import result / error).
   const [stationMsg, setStationMsg] = useState<string | null>(null);
+  // Publishing the whole list is a bulk public act, so it asks first.
+  const [confirmPublishAll, setConfirmPublishAll] = useState(false);
   const [tab, setTab] = useState<Tab>("stations");
   // Unified "what's playing" — a live station or a seekable episode (U4).
   const [current, setCurrent] = useState<Playing | null>(null);
@@ -320,6 +324,44 @@ export default function App() {
     setStationMsg(m);
     setTimeout(() => setStationMsg((cur) => (cur === m ? null : cur)), 3500);
   }, []);
+
+  /** Stations this device holds that are not yet on the relays. Rows that arrived
+   *  FROM the relays are excluded by construction — `relayOnly` means there is no
+   *  local copy, and a device publishes only what a person did on it. */
+  const unpublishedStations = useMemo(
+    () => stations.filter((s) => !s.d && !s.relayOnly),
+    [stations],
+  );
+
+  /** Publish the whole local list, paced (see lib/publishAll). */
+  const publishAllStations = useCallback(async () => {
+    setConfirmPublishAll(false);
+    const items = unpublishedStations;
+    if (items.length === 0) return;
+    const outcome = await publishSequentially(
+      items,
+      (s) =>
+        publishStation({
+          slug: s.slug,
+          name: s.name,
+          url: s.url,
+          fmt: s.fmt,
+          bitrate: s.bitrate,
+          tags: s.tags,
+          description: s.description ?? "",
+        }),
+      {
+        onProgress: (done, total) =>
+          setStationMsg(done < total ? `publishing ${done + 1}/${total}…` : null),
+      },
+    );
+    for (const f of outcome.failed) {
+      console.error("publish_station failed", f.item.slug, f.error);
+    }
+    flashStationMsg(describeOutcome(outcome));
+    refreshFollows();
+  }, [unpublishedStations, flashStationMsg, refreshFollows]);
+
 
   // Import stations from a JSON file (native Open dialog) and merge into the
   // local store. Accepts our own export shape or a minimal [{name,url}] — a
@@ -698,6 +740,41 @@ export default function App() {
           ))}
         </div>
 
+        {confirmPublishAll && (
+          <Modal title="Publish your stations?" onClose={() => setConfirmPublishAll(false)}>
+            <p className="text-sm text-fg">
+              Publish{" "}
+              <span className="font-medium">
+                {unpublishedStations.length} station
+                {unpublishedStations.length === 1 ? "" : "s"}
+              </span>{" "}
+              to your relays?
+            </p>
+            <p className="mt-2 text-xs text-muted">
+              Only stations this device holds and has not shared yet. Anything already
+              published is left alone, and stations that came from another device are
+              never re-published from here. They go out one at a time, so a long list
+              takes a moment.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmPublishAll(false)}
+                className="rounded-sm border border-surface px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void publishAllStations()}
+                className="rounded-sm bg-accent px-3 py-1.5 text-xs font-medium text-bg transition-opacity hover:opacity-90"
+              >
+                Publish
+              </button>
+            </div>
+          </Modal>
+        )}
+
         <div className="min-h-0 flex-1 overflow-y-auto">
           {/* Version skew affects both lists, so it is stated above them rather than
               inside either tab. */}
@@ -721,11 +798,21 @@ export default function App() {
                 {stationMsg && (
                   <span className="font-mono text-[10px] text-accent">{stationMsg}</span>
                 )}
+                {identity && unpublishedStations.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmPublishAll(true)}
+                    title={`Publish ${unpublishedStations.length} station(s) this device holds but has not shared`}
+                    className="ml-auto flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-nostr"
+                  >
+                    publish all ({unpublishedStations.length})
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={importStations}
                   title="Import stations from JSON"
-                  className="ml-auto flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+                  className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
                 >
                   <Upload size={12} />
                   Import
