@@ -34,6 +34,32 @@ export interface Harvest {
   fetchedAt: number;
 }
 
+/** User-authored gap-fill for the same fields the feed states (U4.5 H4).
+ *
+ *  Two rules, both from the direction doc, and both load-bearing:
+ *  - **The feed always wins.** Enrichment fills only what the feed leaves empty,
+ *    so a show that starts publishing its own author does not have to fight a
+ *    stale hand-typed one.
+ *  - **Enrichment is never overwritten.** A re-fetch replaces the whole harvest
+ *    slice without a thought, precisely because nothing the user wrote lives in
+ *    it. If the feed later starts stating a field, the user's value stays
+ *    **dormant but stored** — hidden, not deleted — so it returns if the feed
+ *    stops again.
+ *
+ *  No editing UI yet: this fixes the shape and the merge now, so the editor is a
+ *  later phase rather than a migration. */
+export interface Enrich {
+  author?: string;
+  ownerEmail?: string;
+  website?: string;
+  categories?: string[];
+  language?: string;
+  copyright?: string;
+  description?: string;
+  /** Unix seconds of the user's last edit. */
+  editedAt: number;
+}
+
 export interface Sub {
   url: string;
   title: string;
@@ -49,6 +75,8 @@ export interface Sub {
    *  exported and carried between machines; the cache is a cache, and is excluded
    *  from backups by design. */
   harvest?: Harvest;
+  /** User-authored gap-fill. Never touched by a fetch — see Enrich. */
+  enrich?: Enrich;
   /** Harvested: unix seconds of the newest episode seen in this feed. Persisted
    *  so "recently updated" ordering is already right on the first paint, before
    *  the feeds re-fetch. Harvest, not user data — every fetch overwrites it
@@ -141,7 +169,13 @@ export function detectNpub(url: string): string | undefined {
 function mkSub(
   url: string,
   title: string,
-  extra?: { npub?: string; latestAt?: number; guid?: string; harvest?: Harvest },
+  extra?: {
+    npub?: string;
+    latestAt?: number;
+    guid?: string;
+    harvest?: Harvest;
+    enrich?: Enrich;
+  },
 ): Sub {
   const npub = detectNpub(url) ?? extra?.npub;
   const sub: Sub = { url, title };
@@ -150,6 +184,7 @@ function mkSub(
     sub.latestAt = extra.latestAt;
   if (extra?.guid) sub.guid = extra.guid;
   if (extra?.harvest) sub.harvest = extra.harvest;
+  if (extra?.enrich) sub.enrich = extra.enrich;
   return sub;
 }
 
@@ -182,6 +217,7 @@ export function parseSubsJson(data: unknown): Sub[] {
         latestAt: typeof r.latestAt === "number" ? r.latestAt : undefined,
         guid: typeof r.guid === "string" ? r.guid : undefined,
         harvest: parseHarvest(r.harvest),
+        enrich: parseEnrich(r.enrich),
       });
     })
     .filter((s) => s.url);
@@ -239,6 +275,93 @@ export function harvestOf(
   return h;
 }
 
+/** Read a user-authored slice out of imported JSON. Structurally the harvest
+ *  parser minus the fetch timestamp — kept separate because the two slices must
+ *  never be merged into one on the way in, which is the whole point of storing
+ *  them apart. */
+export function parseEnrich(raw: unknown): Enrich | undefined {
+  const h = parseHarvest(raw);
+  if (!h) return undefined;
+  const { fetchedAt: _drop, image: _noImage, ...rest } = h;
+  const editedAt =
+    raw && typeof raw === "object" && typeof (raw as Record<string, unknown>).editedAt === "number"
+      ? ((raw as Record<string, unknown>).editedAt as number)
+      : 0;
+  return Object.keys(rest).length > 0 ? { ...rest, editedAt } : undefined;
+}
+
+/** A just-fetched feed as a harvest-shaped value. The Rust model uses `null` for
+ *  "not stated" while the stored slice omits the key; this is the one place that
+ *  difference is translated, so callers never trip over it. */
+export function liveHarvest(pod: {
+  author: string | null;
+  ownerEmail: string | null;
+  website: string | null;
+  categories: string[];
+  language: string | null;
+  copyright: string | null;
+  description: string | null;
+}): Partial<Harvest> {
+  const h: Partial<Harvest> = {};
+  if (pod.author) h.author = pod.author;
+  if (pod.ownerEmail) h.ownerEmail = pod.ownerEmail;
+  if (pod.website) h.website = pod.website;
+  if (pod.language) h.language = pod.language;
+  if (pod.copyright) h.copyright = pod.copyright;
+  if (pod.description) h.description = pod.description;
+  if (pod.categories.length > 0) h.categories = pod.categories;
+  return h;
+}
+
+/** What to SHOW for a show: the feed's word where it has one, the user's where it
+ *  does not. `live` is a just-fetched feed, which outranks the stored harvest.
+ *
+ *  A user value that the feed has since started stating is not returned — and not
+ *  deleted either. It sits dormant in the store, ready if the feed stops. */
+export function podcastIdentity(
+  sub: Sub,
+  live?: Partial<Harvest>,
+): {
+  author?: string;
+  ownerEmail?: string;
+  website?: string;
+  categories?: string[];
+  language?: string;
+  copyright?: string;
+  description?: string;
+  /** Fields showing a user-authored value, so a UI can mark them as such. */
+  fromUser: string[];
+} {
+  const fromFeed: Partial<Harvest> = { ...(sub.harvest ?? {}), ...(live ?? {}) };
+  const user = sub.enrich;
+  const out: Record<string, unknown> = {};
+  const fromUser: string[] = [];
+  const keys = [
+    "author",
+    "ownerEmail",
+    "website",
+    "categories",
+    "language",
+    "copyright",
+    "description",
+  ] as const;
+  for (const k of keys) {
+    const feedValue = fromFeed[k];
+    const stated =
+      feedValue != null && (!Array.isArray(feedValue) || feedValue.length > 0);
+    if (stated) {
+      out[k] = feedValue;
+      continue;
+    }
+    const userValue = user?.[k];
+    if (userValue != null && (!Array.isArray(userValue) || userValue.length > 0)) {
+      out[k] = userValue;
+      fromUser.push(k);
+    }
+  }
+  return { ...out, fromUser };
+}
+
 /** Serialize subs as OPML 1.1 — portable to any feed reader / podcast app. */
 export function buildOpml(subs: Sub[], title = "ntune podcasts"): string {
   const esc = (s: string) =>
@@ -285,12 +408,19 @@ export function mergeSubs(existing: Sub[], incoming: Sub[]): Sub[] {
       const latestAt = s.latestAt ?? prev.latestAt;
       const guid = s.guid ?? prev.guid;
       const harvest = s.harvest ?? prev.harvest;
-      if (latestAt === s.latestAt && guid === s.guid && harvest === s.harvest)
+      const enrich = s.enrich ?? prev.enrich;
+      if (
+        latestAt === s.latestAt &&
+        guid === s.guid &&
+        harvest === s.harvest &&
+        enrich === s.enrich
+      )
         return s;
       const merged: Sub = { ...s };
       if (latestAt != null) merged.latestAt = latestAt;
       if (guid) merged.guid = guid;
       if (harvest) merged.harvest = harvest;
+      if (enrich) merged.enrich = enrich;
       return merged;
     }),
     ...existing.filter((s) => !urls.has(s.url)),

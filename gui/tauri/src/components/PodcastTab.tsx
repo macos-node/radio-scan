@@ -34,6 +34,8 @@ import {
 import {
   harvestOf,
   isPodcastSort,
+  liveHarvest,
+  podcastIdentity,
   latestEpisodeAt,
   loadSubs,
   mergeSubs,
@@ -165,13 +167,24 @@ function EpisodeList({
  *  can't drift — `indent` aligns it under a list row; unindented it sits in the
  *  card-detail header band. Website/email are static chips for now (no link-out
  *  yet). Renders nothing when the feed carries none of these fields. */
-function IdentityRow({ pod, indent = false }: { pod: Podcast; indent?: boolean }) {
-  if (
-    !pod.author &&
-    pod.categories.length === 0 &&
-    !pod.website &&
-    !pod.ownerEmail
-  )
+function IdentityRow({
+  row,
+  pod,
+  indent = false,
+}: {
+  /** The stored subscription — the source of truth when nothing is fetched. */
+  row: Sub;
+  /** This session's fetched feed, when there is one. Outranks the stored slice. */
+  pod?: Podcast;
+  indent?: boolean;
+}) {
+  // Read through the merge, not off the fetched feed: the stored harvest is what
+  // makes identity survive a restart (U4.5's "no re-fetch needed to re-render"),
+  // and the feed-cache cannot stand in for it — it is pruned on unsubscribe and
+  // invalidated whenever the parser changes. `fromUser` marks values the user
+  // supplied where the feed said nothing.
+  const id = podcastIdentity(row, pod ? liveHarvest(pod) : undefined);
+  if (!id.author && !id.categories?.length && !id.website && !id.ownerEmail)
     return null;
   // Every chip caps at the row width and truncates with an ellipsis; the full
   // value is on the title tooltip (hover) until fields get real link-outs — so no
@@ -185,27 +198,29 @@ function IdentityRow({ pod, indent = false }: { pod: Podcast; indent?: boolean }
         indent ? "px-9 pb-1.5 pt-0.5" : "border-b border-surface px-3 py-2",
       )}
     >
-      {pod.author && (
+      {id.author && (
         <span
           className="max-w-full truncate text-xs text-muted"
-          title={pod.author}
+          title={
+            id.fromUser.includes("author") ? `${id.author} (your note)` : id.author
+          }
         >
-          {pod.author}
+          {id.author}
         </span>
       )}
-      {pod.categories.map((c) => (
+      {(id.categories ?? []).map((c) => (
         <span key={c} className={chip} title={c}>
           {c}
         </span>
       ))}
-      {pod.website && (
-        <span className={chip} title={pod.website}>
-          {pod.website.replace(/^https?:\/\//, "").replace(/\/+$/, "")}
+      {id.website && (
+        <span className={chip} title={id.website}>
+          {id.website.replace(/^https?:\/\//, "").replace(/\/+$/, "")}
         </span>
       )}
-      {pod.ownerEmail && (
-        <span className={chip} title={pod.ownerEmail}>
-          {pod.ownerEmail}
+      {id.ownerEmail && (
+        <span className={chip} title={id.ownerEmail}>
+          {id.ownerEmail}
         </span>
       )}
     </div>
@@ -753,25 +768,30 @@ export function PodcastTab({
                         {loadingUrl === s.url && (
                           <Loader2 size={12} className="animate-spin text-muted" />
                         )}
-                        {/* Harvested language + copyright — the row has the width
-                            for it; populates once the feed is fetched (on expand). */}
-                        {pod && (pod.language || pod.copyright) && (
-                          <span className="flex shrink-0 items-center gap-2 pl-2 text-[10px] text-muted/60">
-                            {pod.copyright && (
-                              <span
-                                className="max-w-[16rem] truncate text-muted/85"
-                                title={pod.copyright}
-                              >
-                                {pod.copyright}
-                              </span>
-                            )}
-                            {pod.language && (
-                              <span className="font-mono uppercase text-fg/80">
-                                {pod.language}
-                              </span>
-                            )}
-                          </span>
-                        )}
+                        {/* Harvested language + copyright, read through the merge:
+                            the STORED slice answers before anything is fetched, so
+                            these survive a restart instead of waiting on a refetch. */}
+                        {(() => {
+                          const id = podcastIdentity(s, pod ? liveHarvest(pod) : undefined);
+                          if (!id.language && !id.copyright) return null;
+                          return (
+                            <span className="flex shrink-0 items-center gap-2 pl-2 text-[10px] text-muted/60">
+                              {id.copyright && (
+                                <span
+                                  className="max-w-[16rem] truncate text-muted/85"
+                                  title={id.copyright}
+                                >
+                                  {id.copyright}
+                                </span>
+                              )}
+                              {id.language && (
+                                <span className="font-mono uppercase text-fg/80">
+                                  {id.language}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </button>
                       {/* Sibling of the row button, never a child: a <button>
                           inside a <button> is invalid HTML and React refuses to
@@ -813,17 +833,29 @@ export function PodcastTab({
                       </button>
                     </div>
 
-                    {open && pod && (
+                    {open && (
                       <>
-                        <IdentityRow pod={pod} indent />
-                        <EpisodeList
-                          pod={pod}
-                          podcastTitle={s.title}
-                          currentKey={currentKey}
-                          playing={playing}
-                          onPlayEpisode={onPlayEpisode}
-                          indent
-                        />
+                        {/* Identity comes from the STORE, so expanding a row says
+                            something even with no feed fetched — after a restore, or
+                            offline. Gating this on `pod` made the persisted slice
+                            invisible exactly when it is the only thing left. */}
+                        <IdentityRow row={s} pod={pod} indent />
+                        {pod ? (
+                          <EpisodeList
+                            pod={pod}
+                            podcastTitle={s.title}
+                            currentKey={currentKey}
+                            playing={playing}
+                            onPlayEpisode={onPlayEpisode}
+                            indent
+                          />
+                        ) : (
+                          <p className="px-9 py-2 text-xs text-muted">
+                            {loadingUrl === s.url
+                              ? "Fetching episodes…"
+                              : "No episodes cached — they load when the feed is fetched."}
+                          </p>
+                        )}
                       </>
                     )}
                   </li>
@@ -873,19 +905,26 @@ export function PodcastTab({
                         {/* Harvested language + copyright, each centered on its
                             own line — populates once the feed is fetched (on
                             expand); copyright truncated, full value on hover. */}
-                        {pod?.language && (
-                          <span className="font-mono text-[10px] uppercase text-fg/80">
-                            {pod.language}
-                          </span>
-                        )}
-                        {pod?.copyright && (
-                          <span
-                            className="line-clamp-1 max-w-full text-[9px] leading-tight text-muted/85"
-                            title={pod.copyright}
-                          >
-                            {pod.copyright}
-                          </span>
-                        )}
+                        {(() => {
+                          const id = podcastIdentity(s, pod ? liveHarvest(pod) : undefined);
+                          return (
+                            <>
+                              {id.language && (
+                                <span className="font-mono text-[10px] uppercase text-fg/80">
+                                  {id.language}
+                                </span>
+                              )}
+                              {id.copyright && (
+                                <span
+                                  className="line-clamp-1 max-w-full text-[9px] leading-tight text-muted/85"
+                                  title={id.copyright}
+                                >
+                                  {id.copyright}
+                                </span>
+                              )}
+                            </>
+                          );
+                        })()}
                       </button>
                       {/* Outside the card button — nested buttons are invalid. */}
                       <div className="absolute left-1 top-1">
@@ -913,7 +952,7 @@ export function PodcastTab({
               </div>
 
               {/* Detail panel for the selected card */}
-              {expandedSub && cache[expandedSub.url] && (
+              {expandedSub && (
                 <div className="mt-3 rounded-sm border border-surface">
                   <div className="flex items-center gap-2 border-b border-surface px-3 py-2">
                     <MediaGlyph iconKey={podcastIconKey(expandedSub.title)} size={22} />
@@ -934,14 +973,22 @@ export function PodcastTab({
                       )}
                     </button>
                   </div>
-                  <IdentityRow pod={cache[expandedSub.url]} />
-                  <EpisodeList
-                    pod={cache[expandedSub.url]}
-                    podcastTitle={expandedSub.title}
-                    currentKey={currentKey}
-                    playing={playing}
-                    onPlayEpisode={onPlayEpisode}
-                  />
+                  <IdentityRow row={expandedSub} pod={cache[expandedSub.url]} />
+                  {cache[expandedSub.url] ? (
+                    <EpisodeList
+                      pod={cache[expandedSub.url]}
+                      podcastTitle={expandedSub.title}
+                      currentKey={currentKey}
+                      playing={playing}
+                      onPlayEpisode={onPlayEpisode}
+                    />
+                  ) : (
+                    <p className="px-3 py-2 text-xs text-muted">
+                      {loadingUrl === expandedSub.url
+                        ? "Fetching episodes…"
+                        : "No episodes cached — they load when the feed is fetched."}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

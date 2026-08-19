@@ -348,6 +348,16 @@ struct PodcastSub {
     /// so this one can be overwritten without thought.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     harvest: Option<PodcastHarvest>,
+    /// User-authored gap-fill (U4.5 H4). Stored beside the harvest, never merged
+    /// into it: a fetch replaces `harvest` wholesale and must never be able to
+    /// touch this. Kept even when the feed later states the same field — the value
+    /// goes dormant, not away, so it returns if the feed stops.
+    ///
+    /// Passed through opaquely here; the renderer owns the merge, exactly as it
+    /// owns the subscription list itself. This struct exists so serde does not drop
+    /// the field on the way in — the failure that cost the guid stamps once already.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    enrich: Option<serde_json::Value>,
     /// Harvested: the feed's `<podcast:guid>`, when it carries one. The show's
     /// URL-independent identity — show.v1's NIP-73 `i` tag and U4.5's podcast key.
     #[serde(default, skip_serializing_if = "Option::is_none")]

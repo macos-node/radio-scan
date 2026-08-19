@@ -444,6 +444,24 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   plus the macOS-recorded state the app cannot exit (a deleted station's row is
   hidden, so no ✕ remains to re-issue from, while the publish guard blocks re-adding
   it to get a fresh event).
+- **U4.5 H4 — the enrich slice (2026-08-19, Linux-verified).** `Sub.enrich` sits
+  beside `Sub.harvest` and is passed through Rust opaquely (a typed struct only so
+  serde cannot drop it — the failure that cost the guid stamps once). Rules, both
+  from the direction doc and both tested: **feed always wins** (user values show only
+  where the feed is silent) and **enrich is never overwritten** (a fetch replaces
+  harvest wholesale; a user value the feed later states goes **dormant, not deleted**
+  — hidden while carried, back if the feed stops). `podcastIdentity()` is the pure
+  merge and reports `fromUser`, so the UI can mark hand-typed values (tooltip: "…
+  (your note)"). **No editor yet** — this fixes the shape and merge so the editor is
+  a screen, not a migration. Stations need no such slice: their `name`/`description`/
+  `tags` are already first-class user fields and already win.
+  **Gap found in H1's own DoD claim while verifying:** expanding a row was gated on a
+  *fetched* feed, so the persisted identity was invisible precisely when it was all
+  that remained (offline, or post-restore). Identity now renders from the store; only
+  the episode list waits, and says so. Proven with the feed-cache stashed and no
+  network: a stored sub rendered author/category/website/email from `podcasts.json`
+  alone, a feed-silent sub rendered its `enrich` values marked as the user's, and a
+  dormant enrich value (feed states one too) correctly did **not** show.
 - **U4.5 H3 — export == persisted state (2026-08-19, Linux-verified). THE MINOR'S
   DEFINITION OF DONE.** The station export hand-listed fields, so H2's `harvest`
   would have been dropped on write and unreadable on read — the drift this minor

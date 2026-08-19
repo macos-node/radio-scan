@@ -47,6 +47,20 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   fields stay absent rather than becoming empty strings, so "not stated" and "stated
   as blank" remain distinguishable. Verified on a 10-feed profile: all 10 carry 6–7
   fields.
+- **A show's identity can be filled in by hand (U4.5 H4, data model).** Each
+  subscription gains an `enrich` slice beside its harvest, with two rules: **the feed
+  always wins**, so hand-typed values show only where the feed says nothing; and
+  **enrichment is never overwritten**, because a fetch replaces the harvest slice
+  wholesale and nothing the user wrote lives in it. If a show later starts stating a
+  field you filled in, your value goes **dormant rather than away** — hidden while
+  the feed carries it, back if the feed stops. Values shown from your own slice say
+  so on hover. There is no editor yet; this fixes the shape and the merge so the
+  editor is a later screen rather than a migration.
+- **Identity no longer waits on a fetch.** Expanding a podcast used to render
+  nothing at all unless its feed had been fetched this session, which hid the stored
+  identity exactly when it was the only thing left — offline, or straight after a
+  restore. Identity now renders from the store, and only the episode list waits,
+  saying so plainly.
 - **Export is now exactly what is stored (U4.5 H3).** Backing up a station used to
   hand-list its fields, so the newly persisted `harvest` slice would have been
   dropped on the way out and unreadable on the way back — the serializer drift this

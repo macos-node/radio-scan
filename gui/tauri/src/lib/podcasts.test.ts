@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   harvestOf,
+  parseEnrich,
   parseSubsJson,
+  podcastIdentity,
   latestEpisodeAt,
   mergeSubs,
   parseHarvest,
   sortSubs,
+  type Enrich,
+  type Harvest,
   type Sub,
 } from "./podcasts";
 
@@ -288,5 +292,80 @@ describe("export == persisted state — podcasts (U4.5 H3)", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0].harvest?.ownerEmail).toBe("david.bennett.c@gmail.com");
     expect(merged[0].guid).toBe(full.guid);
+  });
+});
+
+describe("podcastIdentity — feed wins, the user fills gaps (U4.5 H4)", () => {
+  const sub = (harvest?: Partial<Harvest>, enrich?: Partial<Enrich>): Sub => ({
+    url: "u",
+    title: "T",
+    ...(harvest ? { harvest: { fetchedAt: 1, ...harvest } as Harvest } : {}),
+    ...(enrich ? { enrich: { editedAt: 1, ...enrich } as Enrich } : {}),
+  });
+
+  it("shows the feed's value when it states one", () => {
+    const id = podcastIdentity(sub({ author: "Feed Author" }, { author: "My Note" }));
+    expect(id.author).toBe("Feed Author");
+    expect(id.fromUser).toEqual([]);
+  });
+
+  it("shows the user's value only where the feed is silent", () => {
+    const id = podcastIdentity(sub({ author: "Feed Author" }, { website: "https://mine" }));
+    expect(id.author).toBe("Feed Author");
+    expect(id.website).toBe("https://mine");
+    expect(id.fromUser).toEqual(["website"]);
+  });
+
+  it("a just-fetched feed outranks the stored harvest", () => {
+    const id = podcastIdentity(sub({ author: "Stored" }), { author: "Fresh" });
+    expect(id.author).toBe("Fresh");
+  });
+
+  it("an empty feed array does not count as stated", () => {
+    const id = podcastIdentity(sub({ categories: [] }, { categories: ["Mine"] }));
+    expect(id.categories).toEqual(["Mine"]);
+    expect(id.fromUser).toEqual(["categories"]);
+  });
+
+  it("a user value the feed now states goes DORMANT, not deleted", () => {
+    // The doc's rule: hidden while the feed carries it, and still there if the
+    // feed stops. Losing it would punish the user for the publisher's edit.
+    const s = sub({ author: "Feed Author" }, { author: "My Note" });
+    expect(podcastIdentity(s).author).toBe("Feed Author");
+    expect(s.enrich?.author).toBe("My Note"); // still stored
+
+    const feedWentQuiet = { ...s, harvest: { fetchedAt: 2 } as Harvest };
+    expect(podcastIdentity(feedWentQuiet).author).toBe("My Note");
+  });
+
+  it("says nothing when neither slice does", () => {
+    expect(podcastIdentity(sub())).toEqual({ fromUser: [] });
+  });
+});
+
+describe("enrich survives what harvest does not", () => {
+  const withBoth: Sub = {
+    url: "u",
+    title: "T",
+    harvest: { author: "Feed", fetchedAt: 10 },
+    enrich: { website: "https://mine", editedAt: 5 },
+  };
+
+  it("round-trips through export and import", () => {
+    const back = parseSubsJson(JSON.parse(JSON.stringify([withBoth])));
+    expect(back[0]).toEqual(withBoth);
+  });
+
+  it("an import that lacks both slices keeps the stored ones", () => {
+    const merged = mergeSubs([withBoth], [{ url: "u", title: "T" }]);
+    expect(merged[0].enrich).toEqual(withBoth.enrich);
+    expect(merged[0].harvest).toEqual(withBoth.harvest);
+  });
+
+  it("parseEnrich ignores the harvest-only fields", () => {
+    // image and fetchedAt belong to the feed's slice; a user slice claiming them
+    // would blur the boundary the two-slice design exists to keep.
+    const e = parseEnrich({ author: "A", image: "https://x/y.jpg", fetchedAt: 9, editedAt: 3 });
+    expect(e).toEqual({ author: "A", editedAt: 3 });
   });
 });
