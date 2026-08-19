@@ -129,6 +129,57 @@ what a person did on it — but this needs settling before the button exists.
 - **The live logger.** Acid Jazz's 24/7 ICY logging stays on macOS and is a
   scheduling question, not a sync one — see the episodic handoff note.
 
+## Review from macOS (2026-08-19) — second dataset, two caveats
+
+Reviewed against this machine's store, which is differently shaped from the one the
+draft measured (6 stations, 25 subscriptions vs 10 and 10). **The proposal holds; two
+things want stating before it is accepted.**
+
+Measured here under the proposed keying:
+
+```
+stations: 6 rows -> 6 distinct   (4 https, 2 http, no scheme-pair duplicates)
+podcasts: 25 subs -> 25 distinct (guid-or-canonical, no collisions)
+```
+
+No collapse on this profile — but it is confirming evidence rather than a null
+result. This store held **four duplicate pairs** on 2026-08-19 (Bitcoin And
+podhome=soundcloud, Once Bitten! and TFTC fountain=anchor, Closed Network
+yellowball=anchor), each pair sharing a `<podcast:guid>` and differing only by host.
+They were pruned by hand. Under this proposal they would have collapsed on their own,
+which is the case for it: the manual prune is what the rule replaces.
+
+**Caveat 1 — a URL-derived address is only as stable as the URL, and one of these is
+a bare IP.** Acid Jazz is `http://79.111.14.76:8000/acidjazz`, an IP literal. If that
+mount moves host the hash changes: the address orphans, and cross-user `#r` discovery
+splits into before-and-after. This is the same instability decision #10 identified
+for feed URLs — podbean serving one byte-identical document from two hostnames — and
+the podcast side answers it with `<podcast:guid>`, a publisher-stated identity
+independent of location. **Stations have no equivalent**, so the station half of this
+proposal inherits the weakness the podcast half solved. Not a reason to reject
+(name-derived slugs fail the moment anyone renames, which is more common), but
+"permanently and without coordination" overstates it. Suggest the draft say instead:
+stable while the mount's URL is stable, and record re-addressing a moved station as a
+known manual repair. `icy-name` is harvested as of U4.5 H2 and is the only
+publisher-stated identity stations have — too weak to key on (SomaFM's is a banner,
+and Acid Jazz's stream states none at all), but worth noting as the reason no better
+key exists.
+
+**Caveat 2 — canonicalization is contract, so it needs vectors, not a sentence.**
+"Lowercase host, scheme dropped, trailing slash dropped" leaves open: default ports
+(`:80`/`:443` present or absent), query strings (some Icecast mounts carry them),
+`;stream.nsv`-style suffixes, percent-encoding, and path case — which must stay
+case-sensitive while the host is lowercased. Two devices disagreeing on any of these
+produce two addresses for one stream, which is the exact bug this decision exists to
+end, reintroduced one layer down. The suite already has the pattern for this: ndisc's
+`master-key` normalization ships `schema/master-key.vectors.json` with a `.sha256`
+sidecar, and every consumer conformance-tests against it. Suggest the same here —
+pin the algorithm with vectors covering the cases above, before either publisher
+implements it, since a canonicalization disagreement is silent and permanent.
+
+Neither caveat changes the recommended order below; both belong in step 1, which is
+where the contract is written.
+
 ## Recommended order if accepted
 
 1. Canonical-URL addressing (contract change + both publishers) — do this first and
