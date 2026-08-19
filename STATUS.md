@@ -351,10 +351,27 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   property that justified a separate kind instead of overloading `station.v1`.
   *One difference:* the fixture carries `t: talk` and nothing emits `t` (no topic UI
   in S3) — settle in S4 by adding a control or dropping it from the fixture.
-  **Still open:** in-app `following` render, a real unfollow (first live test of the
-  `a`+`e` deletion, and whether fizx.uk honours it now), macOS pass. Evidence:
+  **Still open:** in-app `following` render, macOS pass, and the affordance gap that
+  using it exposed — ✕ unsubscribes *and* unfollows in one gesture, with no way to
+  retract a follow while keeping the local subscription (the `following` chip is a
+  chip, not a toggle). Evidence:
   [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
   § S4.
+- **NIP-09: the `e` tag is what makes deletion work on `relay.fizx.uk` — MEASURED
+  2026-08-19.** The unfollow of the show above published `b85b4216a2a2` with **both**
+  targets (`a` coordinate + `e` id `ad61c99d…`) to all three relays, and **fizx.uk
+  dropped the event**: 0 `show.v1` served, `#i` discovery returns nothing. The same
+  session is its own control group — the 7 stations deleted with `a`-only tags on
+  08-06/08-18 are **still served** by that relay (5 after replaceable-dedupe), while
+  nos.lol has 0 of both. Same relay, same author, same day, one variable. This turns
+  the 2026-08-18 *inference* into a measurement and validates `24c874d` on live
+  infrastructure. **Two consequences:** (1) tagging both targets is **required in
+  practice** for the suite's own hub — any future retractable kind should do it from
+  day one, and that belongs in the schema conventions, not just in the two unfollow
+  commands; (2) those **5 station tombstones are still live on the hub** — invisible
+  in ntune (client-side filtering) but visible to any other client, and they clear
+  only by re-following/re-unfollowing with the current build or by fixing NIP-09
+  server-side (root is macOS-only).
 - **No single-instance guard (found 2026-08-19).** Two ntune processes were running
   against one data dir — a `--tray` instance from before S0 plus a leftover test run.
   Nothing prevents it (no `tauri-plugin-single-instance`), yet every durable store

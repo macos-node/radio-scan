@@ -168,17 +168,61 @@ add a topic control, or drop `t` from the fixture. As it stands the fixture
 documents an optional capability the UI does not expose — harmless on the wire,
 misleading as documentation.
 
+#### ✅ First live unfollow — 2026-08-19, Linux · *and the `e`-tag fix confirmed*
+
+The operator unfollowed the show minutes after publishing it. Deletion
+`b85b4216a2a2`, on all three relays, carrying **both** NIP-09 targets:
+
+```
+a: 31242:916c25cf…:airplay:show:no-agenda-show
+e: ad61c99d639b347e37f1e540ebcd55344f34ce304029d48127755a25d93347a6
+```
+
+All three relays then served **zero** `show.v1` events, and the `#i` discovery
+filter returned nothing — another client looking for followers of that guid
+correctly finds none.
+
+**`relay.fizx.uk` honoured this deletion.** That is the question left open on
+2026-08-18, and the same session provides its own control group: the 7 stations
+deleted with `a`-only tags on 08-06/08-18 are *still being served* by that relay.
+
+| relay | stations (`a`-only deletes) | this show (`a` + `e`) |
+|-------|----------------------------|------------------------|
+| `relay.fizx.uk` | **5 still served** | **0 — dropped** |
+| `nos.lol` | 0 | 0 |
+
+Same relay, same author, same day. The only variable is the `e` tag. That turns
+the 2026-08-18 inference into a measurement, and validates commit `24c874d` on live
+infrastructure rather than in a unit test. (5 rather than 7 is the
+addressable-replaceable count collapsing duplicate `d` values.)
+
+**Two consequences beyond this slice:**
+
+1. **`e` is required in practice, not optional**, for anything published to
+   `relay.fizx.uk` — the suite's own discovery hub. Any future kind that supports
+   retraction should tag both targets from day one. This belongs in the schema
+   conventions, not only in `unfollow_station` / `unfollow_show`.
+2. **The 5 station tombstones are still live on the hub.** ntune filters them
+   client-side (`resolveAddressable`) so no user sees them, but any other client
+   reading that relay does. They clear only by re-following and re-unfollowing each
+   with the current build, or by fixing NIP-09 support server-side (root there is
+   macOS-only).
+
 #### Still open in S4
 
 - [ ] Confirm the row renders `following` in-app (the read-back path; stubs proved
-      the rendering, not the live subscription).
-- [ ] A real unfollow — the `a` + `e` deletion against a live event, and whether
-      `relay.fizx.uk` honours it now that an `e` tag is present. It ignored
-      `a`-only deletions on 2026-08-18, so this is the first genuine test of that fix.
+      the rendering, not the live subscription — and the follow/unfollow round trip
+      above was verified from the relay side, not the UI side).
 - [ ] macOS pass.
 - [ ] Settle the `t` question above.
 - [ ] Decide on a **single-instance guard** (see below) — arguably a prerequisite
       for trusting any multi-run verification.
+- [ ] **Unfollow and unsubscribe are one gesture.** The ✕ on a published row does
+      both, and the `following` chip is a chip, not a toggle — so there is no way to
+      retract a follow while keeping the local subscription. Inherited from the
+      Stations tab, but arguably wrong here: unsubscribing is local housekeeping,
+      unfollowing is public. Likely fix is making the chip a toggle, leaving ✕ as
+      "remove from my list".
 
 #### Hazard found while verifying: no single-instance guard
 
