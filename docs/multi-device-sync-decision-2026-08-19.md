@@ -155,6 +155,29 @@ what a person did on it — but this needs settling before the button exists.
 
 ---
 
+## Version skew (raised by macOS, `fda15d5`) — answered
+
+Migrating the live follows exposed a case the decision did not cover: a device on a
+build older than the contract keeps publishing the old format and nothing says so.
+The macOS build was five hours behind step 1, republished both follows as name-slugs,
+every relay accepted them, and the UI showed `following`. It was caught only because
+the expected addresses had been computed in advance.
+
+**Adopted — the reader-side check.** Two `show.v1` events sharing an `r` or an `i`
+are the same show at two addresses, which is never a legitimate state; the same holds
+for two `station.v1` sharing an `r`. Surface that as **one row flagged
+needs-migration** rather than as two follows. It needs no contract change, works
+retroactively on events already published, and would have caught this with no
+foreknowledge. **Lands with step 2.**
+
+**Declined for now — a `dfmt` marker tag.** Its own limitation is decisive: a build
+predating the marker cannot emit one, so it could not have caught the incident that
+prompted it, and its value is entirely prospective. For *this* transition the format
+is already self-describing — a pre-#11 `d` is a word-slug, a post-#11 one is exactly
+16 lowercase hex — so a reader can tell them apart for free. Revisit if a future
+change is hash-to-hash, where shape can no longer distinguish them; the duplicate
+check above covers the symptom either way, whatever the cause.
+
 ## What this does not decide
 
 - **Playback state, positions, favourites.** Different problem: high-frequency,
@@ -227,10 +250,20 @@ airplay:show:bitcoin-and-bitcoin-economic-news -> airplay:show:070f66ab867bb7ce 
 
 Nothing migrates them automatically, and nothing should: re-addressing is a publish,
 and this app does not publish without being asked. **Toggle `following` off, then on**
-for each. The retraction still lands on the old event because `unfollow_show` sends
-the `e` tag (its event id) alongside the `a` coordinate — which is why the 2026-08-19
-`e`-tag fix had to come first; an `a`-only retraction would now compute the *new*
-address and miss the old event entirely, orphaning it permanently.
+for each.
+
+> **These instructions were wrong when written, and the correction is instructive.**
+> They assumed the `e` tag would carry the retraction to the old event. It does — but
+> the `a` tag in the same event named the *newly derived* address, so one click asked
+> two different things of two kinds of relay: `relay.fizx.uk`, which deletes by id,
+> dropped the orphan; `nos.lol` and `relay.primal.net`, which delete by address,
+> tombstoned the **good** follow instead. Not a failed cleanup — a different and worse
+> outcome per relay, and the orphans then had to be retracted out-of-band with `nak`
+> because nothing in the app could name them. Fixed in `468aff7`: `Show`/`Station`
+> keep the event's own `d` verbatim and retraction uses it, deriving only for a row
+> that exists solely on this device. **The instructions above are safe as of that
+> commit** — the hazard was never the toggle, it was retracting at a computed address
+> rather than the one the event occupies.
 
 ## Raised from macOS — version skew is invisible (open sub-question)
 

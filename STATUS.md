@@ -370,6 +370,32 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   (deleted 12:41, re-published 12:45, resolves followed). Evidence:
   [`docs/show-v1-plumbing-buildmap-2026-08-18.md`](docs/show-v1-plumbing-buildmap-2026-08-18.md)
   § S4.
+- **Step 1 had a retraction bug — found and fixed by macOS (`468aff7`), verified
+  here.** My unfollow paths re-derived `d` from the URL/guid, which is correct only
+  while the format never changes — and #11 changed it, so every follow published
+  before step 1 became unretractable from the app the moment step 1 landed. Worse
+  than unretractable: one click published a `kind:5` naming the **new** address in
+  `a` while its `e` named the **old** event, so `relay.fizx.uk` (deletes by id)
+  dropped the orphan while nos.lol and primal (delete by address) tombstoned the
+  **good** follow. Different, worse outcome per relay; the orphans needed `nak` to
+  clear because nothing in the app could name them. Fixed by carrying the event's own
+  `d` verbatim on `Show`/`Station` and retracting at it, deriving only for local-only
+  rows. **My migration instructions in the decision doc were the trigger** and are
+  corrected in place rather than quietly edited. Verified on Linux: 45 Rust + 102 TS
+  green, and the live events' `d` is carried verbatim through the read path. *Not
+  reproducible here:* the wire holds no pre-#11 event any more — macOS had the only
+  two and both are migrated (`070f66ab867bb7ce`, `f5a81dadd784fbf5`, on all three
+  relays).
+- **Version skew — answered (2026-08-19).** macOS's build was 5h behind step 1 and
+  republished both follows in the old format; relays accepted them and the UI looked
+  right. **Adopted:** the reader-side check — two `show.v1` sharing an `r`/`i` (or two
+  stations sharing an `r`) are one show at two addresses, which is never legitimate;
+  show one row flagged needs-migration. No contract change, retroactive, would have
+  caught this without foreknowledge. Lands with **step 2**. **Declined for now:** a
+  `dfmt` marker — a build predating it cannot emit one, so it could not have caught
+  the incident that prompted it, and for this transition the format is already
+  self-describing (word-slug vs exactly 16 hex). Revisit if a future change is
+  hash-to-hash.
 - **Decision #11 ACCEPTED; step 1 (content-derived addressing) BUILT 2026-08-19.**
   A follow's `d` now comes from what it points at, not what the user typed:
   `airplay:station:` + first 16 hex of SHA-256 of the **canonical stream URL**, and
