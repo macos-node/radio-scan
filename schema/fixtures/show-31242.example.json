@@ -1,17 +1,27 @@
 {
-  "_comment": "show.v1 example — A Duck in a Tree, the show whose feed was wrongly published as a station.v1 on 2026-08-10 and deleted on 2026-08-18. Deliberately the case with NO podcast:guid (podbean's feed carries none, verified 2026-08-18), so it shows the minimal legal record: d + name + r, no `i`. Cross-user discovery for this show therefore falls back to the #r URL — and that URL is not stable, since feed.podbean.com/zovietfrance/feed.xml and zovietfrance.podbean.com/feed.xml serve the byte-identical document. id/pubkey/created_at/sig are illustrative; pubkey is the suite owner.",
+  "_comment": "show.v1 example \u2014 A Duck in a Tree, the show whose feed was wrongly published as a station.v1 on 2026-08-10 and deleted on 2026-08-18. Deliberately the case with NO podcast:guid (podbean's feed carries none, verified 2026-08-18), so it shows the minimal legal record: d + name + r, no `i`, and no `t` \u2014 ntune emits no topic tags for shows. Cross-user discovery for this show therefore falls back to the #r URL \u2014 and that URL is not stable, since feed.podbean.com/zovietfrance/feed.xml and zovietfrance.podbean.com/feed.xml serve the byte-identical document. id/pubkey/created_at/sig are illustrative; pubkey is the suite owner.",
   "kind": 31242,
   "content": "Weekly ~59-minute continuous mix by :zoviet*france:. Show notes carry the full tracklist.",
   "tags": [
-    ["d", "airplay:show:a-duck-in-a-tree"],
-    ["name", "A Duck in a Tree"],
-    ["r", "https://zovietfrance.podbean.com/feed.xml"],
-    ["t", "ambient"],
-    ["t", "experimental"],
-    ["alt", "A podcast followed in radio-scan"]
+    [
+      "d",
+      "airplay:show:a-duck-in-a-tree"
+    ],
+    [
+      "name",
+      "A Duck in a Tree"
+    ],
+    [
+      "r",
+      "https://zovietfrance.podbean.com/feed.xml"
+    ],
+    [
+      "alt",
+      "A podcast followed in radio-scan"
+    ]
   ],
-  "id": "<illustrative — 64-hex event id>",
+  "id": "<illustrative \u2014 64-hex event id>",
   "pubkey": "916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d",
   "created_at": 1787000000,
-  "sig": "<illustrative — 128-hex signature>"
+  "sig": "<illustrative \u2014 128-hex signature>"
 }

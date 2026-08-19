@@ -257,9 +257,16 @@ deleted at 12:41 and re-published at 12:45, and resolves as **followed**.
 Every phase of this slice is built and verified on both platforms. Remaining items
 are **follow-ups, not gaps in the slice**:
 
-- [ ] `t: talk` in `show-31242.guid.json` — nothing emits `t` tags (no topic UI).
-      Add a control or drop it from the fixture; as it stands the fixture documents
-      a capability the app does not expose.
+- [x] `t: talk` in the fixtures — **resolved 2026-08-19 by dropping it.** Neither
+      candidate source could be published unasked: the feed's own categories are
+      harvest, which this contract keeps off the wire, and the user's categories are
+      typed into a private notes dialog and must not reach a relay by surprise. `t`
+      stays *accepted* in the contract (a deliberate topic control is the way in) and
+      the note there now says so. The fixture-diff test was also self-consistent
+      rather than true — it fed the fixture's own `t` values back into the builder,
+      so it stayed green while the fixture advertised a tag ntune cannot emit. It now
+      builds with **no topics, as `publish_show` is actually called**, and was checked
+      by reinserting the bogus tag: it fails.
 - [ ] **Unfollow and unsubscribe are one gesture** — hit on both platforms now. The
       ✕ on a published row does both and the `following` chip is not a toggle, so a
       follow cannot be retracted while keeping the subscription. Local housekeeping

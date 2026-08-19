@@ -517,6 +517,19 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   plus the macOS-recorded state the app cannot exit (a deleted station's row is
   hidden, so no ✕ remains to re-issue from, while the publish guard blocks re-adding
   it to get a fresh event).
+- **`t` fixture mismatch — RESOLVED 2026-08-19 (dropped, not implemented).** Both
+  `show-31242.*` fixtures advertised topic tags ntune has no way to emit. Deriving
+  them was rejected on both available sources: the **feed's** categories are harvest
+  and `show.v1` keeps harvest off the wire, and the **user's** categories are typed
+  into a private notes dialog — publishing those to relays unasked would be a real
+  surprise. `t` stays accepted in the contract with a note explaining the gap; a
+  deliberate topic control is the way in. **The test was the weaker half:** the
+  fixture-diff fed the fixture's own `t` values back into `show_tags`, making it
+  self-consistent rather than true, so it stayed green while the fixture over-
+  promised. It now builds with **no topics — what `publish_show` is actually called
+  with** — and was verified by reinserting the bogus tag and watching it fail.
+  Same shape as the H3 export guard: a test can check one layer and miss the defect
+  in the layer that matters.
 - **✕ / unfollow conflation — FIXED + Linux-verified (2026-08-19).** The S4
   affordance gap, hit on both platforms: ✕ on a published row unsubscribed *and*
   unfollowed, so local housekeeping and a public retraction shared one control.

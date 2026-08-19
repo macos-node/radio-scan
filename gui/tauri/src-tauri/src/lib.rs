@@ -2064,11 +2064,12 @@ mod tests {
             .iter()
             .find(|t| t[0] == "i")
             .map(|t| t[1].trim_start_matches("podcast:guid:").to_string());
-        let topics: Vec<String> = expected
-            .iter()
-            .filter(|t| t[0] == "t")
-            .map(|t| t[1].clone())
-            .collect();
+        // Build with NO topics — because that is what publish_show is actually
+        // called with: shows have no topic control. Feeding the fixture's own `t`
+        // values back in made this test self-consistent rather than true, and it
+        // stayed green while the fixture advertised a `t: talk` tag ntune could
+        // never emit. A fixture may only describe records the app can produce.
+        let topics: Vec<String> = Vec::new();
 
         let built: Vec<Vec<String>> = show_tags(&d, &name, &url, guid.as_deref(), &topics)
             .unwrap()

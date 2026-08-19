@@ -1,17 +1,31 @@
 {
-  "_comment": "show.v1 example — the identified case. No Agenda's feed carries <podcast:guid>856cd618-7f34-57ea-9b84-3600f1f65e7f (read from the live feed 2026-08-18), so the follow can name it as a NIP-73 `i` tag. #i is then the preferred cross-user key: it matches every follower of this show regardless of which URL they subscribed with, and survives the feed moving host. The #r URL is still published — it is what this user actually subscribed with. id/pubkey/created_at/sig are illustrative.",
+  "_comment": "show.v1 example \u2014 the identified case. No Agenda's feed carries <podcast:guid>856cd618-7f34-57ea-9b84-3600f1f65e7f (read from the live feed 2026-08-18), so the follow can name it as a NIP-73 `i` tag. #i is then the preferred cross-user key: it matches every follower of this show regardless of which URL they subscribed with, and survives the feed moving host. The #r URL is still published \u2014 it is what this user actually subscribed with. NO `t` TAGS: the contract allows them, but ntune has no topic control for shows, so a fixture carrying them would document a capability the app does not have (unlike station-31241.example.json, whose `t` tags come from the Add-station dialog's genres field). id/pubkey/created_at/sig are illustrative.",
   "kind": 31242,
   "content": "",
   "tags": [
-    ["d", "airplay:show:no-agenda-show"],
-    ["name", "No Agenda Show"],
-    ["r", "http://feed.nashownotes.com/rss.xml"],
-    ["i", "podcast:guid:856cd618-7f34-57ea-9b84-3600f1f65e7f"],
-    ["t", "talk"],
-    ["alt", "A podcast followed in radio-scan"]
+    [
+      "d",
+      "airplay:show:no-agenda-show"
+    ],
+    [
+      "name",
+      "No Agenda Show"
+    ],
+    [
+      "r",
+      "http://feed.nashownotes.com/rss.xml"
+    ],
+    [
+      "i",
+      "podcast:guid:856cd618-7f34-57ea-9b84-3600f1f65e7f"
+    ],
+    [
+      "alt",
+      "A podcast followed in radio-scan"
+    ]
   ],
-  "id": "<illustrative — 64-hex event id>",
+  "id": "<illustrative \u2014 64-hex event id>",
   "pubkey": "916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d",
   "created_at": 1787000000,
-  "sig": "<illustrative — 128-hex signature>"
+  "sig": "<illustrative \u2014 128-hex signature>"
 }
