@@ -379,6 +379,28 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   in ntune (client-side filtering) but visible to any other client, and they clear
   only by re-following/re-unfollowing with the current build or by fixing NIP-09
   server-side (root is macOS-only).
+- **`show.v1` S0 — macOS pass, VERIFIED 2026-08-19.** The guid harvest and the cache
+  version gate both hold on a second platform and a larger, hostile profile: 29 subs
+  whose cached bodies all predated the extractor and all carried live ETags — exactly
+  the case that would 304 forever and return a guid-less parse if `FEED_CACHE_VERSION`
+  were not honoured. **All 29 re-fetched and now read `v: 2`; 16/29 carry a guid**, 13
+  legitimately publish none. **Conformance is against outside values, not self-
+  consistency:** four guids had been read off the live feeds with `curl` on 2026-08-18,
+  *before* the extractor existed (`43a4f801…` Bitcoin And, `2d0d7fdd…` Once Bitten!,
+  `e22a2294…` TFTC, `28e3b6e8…` Closed Network) — the build reproduces all four
+  exactly. `latestAt` (24/29) and the Recent order survived the full cache
+  invalidation. **Still `Needs-verify: macos`** for S1–S4: all three relays currently
+  serve **0** `show.v1` (the S4 event was published then unfollowed), so the in-app
+  `following` render needs a fresh signed follow — the operator's call, not a code
+  question.
+- **The duplicate-pair count, measured (macOS, 2026-08-19).** With guids now
+  harvested, the 29-sub profile resolves to **exactly four duplicate groups**, 8 rows:
+  Bitcoin And (podhome = soundcloud), Once Bitten! and TFTC (fountain.fm = anchor.fm),
+  Closed Network Privacy (yellowball = anchor.fm). The 13 guid-less subs were checked
+  for content-duplicates and have none, so guid dedupe would collapse **all** of the
+  library's duplication and nothing else. Until a dedupe slice lands the rows stay
+  visible — `mergeFollows` maps `subs` 1:1 — so the interim fix is removing one of each
+  pair by hand.
 - **No single-instance guard (found 2026-08-19).** Two ntune processes were running
   against one data dir — a `--tray` instance from before S0 plus a leftover test run.
   Nothing prevents it (no `tauri-plugin-single-instance`), yet every durable store
