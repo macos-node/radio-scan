@@ -1131,6 +1131,38 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   key mismatch reading the whole archive as new — are in
   [`docs/episodic-linux-handoff-2026-08-19.md`](docs/episodic-linux-handoff-2026-08-19.md).
 
+- **macOS reads nothing from the relays — a network filter, not the app (2026-08-20).**
+  Steps 2–3 landed and macOS showed `publish all (6)` / `follow all (25)` with the
+  header reading `saved on this device`: `relayStations` empty, everything looking
+  unpublished. **The app is not at fault.** This machine runs Little Snitch *and*
+  LuLu, and the webview's traffic had not been approved. Two properties make it hard
+  to see: Rust and the webview are **different processes to a filter** (feed fetches
+  and publishes kept working while the read did not), and `install.sh` produces an
+  **ad-hoc, linker-signed** bundle, so *every rebuild is a new code identity* and last
+  night's approval does not carry — which makes it look correlated with whatever code
+  landed in between. Ruled out along the way, each with a measurement: the relays (all
+  three served the events under the app's exact filter), the resolver (**3,578-event
+  stream → 9 stations, 10 shows in 10 ms**), `nostr-tools` (3,580 events, first at
+  ~1 s), the same frontend in Chrome (renders `0 local · +9 station.v1`), WebKit
+  itself (Safari opened all four test relays), and ATS/entitlements. **A wrong
+  measurement cost most of the hour:** `lsof` on ntune's own pid shows no sockets
+  because WKWebView's belong to `com.apple.WebKit.Networking` — checking the helper
+  showed the app *was* connected to `relay.fizx.uk`. Procedure, and the five checks
+  that localise it quickly, in
+  [`docs/macos-webview-network-filter-2026-08-20.md`](docs/macos-webview-network-filter-2026-08-20.md).
+  **Still open:** the operator has to approve the traffic (prefer a path-scoped rule),
+  after which `publish all` should read **(2)** and `follow all` **(16)** — the counts
+  computed from this store against the 9 stations + 10 shows already published. The
+  publish-all/follow-all test itself is therefore **not yet run on macOS**.
+- **The read subscription is wasteful regardless (found 2026-08-20).** `useFollows`
+  asks for every `kind:5` the author ever wrote: **3,559 deletions** — nearly all
+  ndisc's release retractions, tagged `k=31237` — for **19** useful events, and it
+  recomputes on each one. It is fast enough today (487 ms for the whole incremental
+  pass) so this is not a bug report, but it grows with the suite's history, not with
+  ntune's. Two-phase (`31241`+`31242` first, then `kind:5` filtered by `#a` on the
+  resolved addresses) would bound it; ntune's own deletions carry no `k` tag, which
+  is why `#k` filtering cannot work yet.
+
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
   reconcile heard tracks vs ndisc's catalogue) and the Nostr publisher/poller.
