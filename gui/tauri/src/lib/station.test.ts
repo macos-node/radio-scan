@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Event as NostrEvent } from "nostr-tools";
-import { parseStation, resolveStations, stationIdentity } from "./station";
+import {
+  parseStation,
+  parseStationsJson,
+  resolveStations,
+  stationIdentity,
+  toExportStation,
+  type Station,
+} from "./station";
 
 const PK = "916c25cf07a65b36fa7805f31f750fcb27f5cce2d39a7ac92035570aa2672a2d";
 
@@ -136,5 +143,66 @@ describe("stationIdentity — user words vs what the stream says", () => {
 
   it("strips scheme and trailing slash from either homepage source", () => {
     expect(stationIdentity({ ...base, harvest: { homepage: "https://x.example///", probedAt: 1 } }).homepage).toBe("x.example");
+  });
+});
+
+describe("export == persisted state (U4.5 H3)", () => {
+  // A station with EVERY persisted field populated. If a field is added to the
+  // store and not to the export shape, the first test below fails — which is the
+  // whole point: the drift this minor exists to close cannot come back silently.
+  const full: Station = {
+    slug: "acid-jazz",
+    name: "Acid Jazz",
+    url: "http://79.111.14.76:8000/acidjazz",
+    fmt: "audio/aacp",
+    bitrate: 320,
+    tags: ["acid-jazz", "funk"],
+    description: "My late-night station",
+    harvest: {
+      icyName: "Acid Jazz [banner]",
+      genre: "acid jazz",
+      bitrate: 320,
+      homepage: "http://acidjazz.example",
+      fmt: "audio/aacp",
+      probedAt: 1_787_128_976,
+    },
+  };
+
+  it("exports every persisted field", () => {
+    const exported = toExportStation(full);
+    const persisted = Object.keys(full).filter((k) => k !== "eventId");
+    for (const key of persisted) {
+      expect(exported).toHaveProperty(key);
+    }
+  });
+
+  it("round-trips through import unchanged", () => {
+    const back = parseStationsJson(JSON.parse(JSON.stringify([toExportStation(full)])));
+    expect(back).toHaveLength(1);
+    expect(back[0]).toEqual(full);
+  });
+
+  it("never exports eventId — it identifies a relay event, not the station", () => {
+    const exported = toExportStation({ ...full, eventId: "ab".repeat(32) });
+    expect(exported).not.toHaveProperty("eventId");
+  });
+
+  it("a station with no harvest exports no empty harvest key", () => {
+    const { harvest: _drop, ...bare } = full;
+    expect(toExportStation(bare)).not.toHaveProperty("harvest");
+  });
+
+  it("still reads a pre-U4.5 export that has no harvest", () => {
+    const legacy = [{ slug: "s", name: "S", url: "http://x/y", tags: [] }];
+    const back = parseStationsJson(legacy);
+    expect(back[0].harvest).toBeUndefined();
+    expect(back[0].url).toBe("http://x/y");
+  });
+
+  it("ignores a junk harvest rather than importing it", () => {
+    const back = parseStationsJson([
+      { slug: "s", name: "S", url: "http://x/y", harvest: { icyName: 42, bitrate: "loud" } },
+    ]);
+    expect(back[0].harvest).toBeUndefined();
   });
 });

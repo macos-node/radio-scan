@@ -444,6 +444,19 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   plus the macOS-recorded state the app cannot exit (a deleted station's row is
   hidden, so no ✕ remains to re-issue from, while the publish guard blocks re-adding
   it to get a fresh event).
+- **U4.5 H3 — export == persisted state (2026-08-19, Linux-verified). THE MINOR'S
+  DEFINITION OF DONE.** The station export hand-listed fields, so H2's `harvest`
+  would have been dropped on write and unreadable on read — the drift this minor
+  exists to close, recreating itself two commits after being closed. Both writers now
+  share `toExportStation` (one shape, cannot disagree), `parseStationHarvest` reads
+  the slice back, and the app-level backup stops emitting `eventId` (a relay event id,
+  meaningless on another machine). **The guard that makes it stick:** a test walks
+  every key of a fully-populated persisted `Station` and fails if the export omits
+  one — adding a stored field without exporting it now breaks a test instead of
+  shipping a lossy backup. Verified against the real store: 10 stations + 10
+  subscriptions (83 harvest fields) round-trip **identical**. Podcast export was
+  already whole (it writes `Sub` objects directly) and is now covered by the same
+  round-trip guard.
 - **U4.5 H2 — station harvest persisted (2026-08-19, Linux-verified).** The ICY
   probe (`icyName`, `genre`, `bitrate`, `homepage`, `fmt`, `probedAt`) now lands on
   the local station via `set_station_harvest`, replacing the slice wholesale per

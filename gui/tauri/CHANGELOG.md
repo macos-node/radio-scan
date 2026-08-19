@@ -47,6 +47,18 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   fields stay absent rather than becoming empty strings, so "not stated" and "stated
   as blank" remain distinguishable. Verified on a 10-feed profile: all 10 carry 6–7
   fields.
+- **Export is now exactly what is stored (U4.5 H3).** Backing up a station used to
+  hand-list its fields, so the newly persisted `harvest` slice would have been
+  dropped on the way out and unreadable on the way back — the serializer drift this
+  minor exists to close, about to happen again. Both writers (the Stations tab and
+  the app-level backup) now share one `toExportStation` shape, and the importer
+  reads the slice back, so a backup restores the station you had rather than a
+  thinner copy of it. The backup also stops emitting `eventId`, which identifies a
+  relay event rather than a station and means nothing on another machine. A test
+  walks every persisted field and fails if one is missing from the export, so the
+  next stored field is either exported or caught — never quietly lost. Verified by
+  round-tripping the real store: 10 stations and 10 subscriptions, 83 harvest fields,
+  identical before and after.
 - **Station identity survives a restart (U4.5 H2).** What a stream advertises on
   tune-in — `icy-name`, genre, bitrate, homepage, content-type — now persists as a
   `harvest` slice on the local station, with the time it was probed. It lived only in

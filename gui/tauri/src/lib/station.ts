@@ -76,7 +76,7 @@ export function parseStationsJson(data: unknown): Station[] {
       const url = String(r.url ?? "").trim();
       const name = String(r.name ?? "").trim() || url;
       const slug = String(r.slug ?? "").trim() || slugify(name);
-      return {
+      const station: Station = {
         slug,
         name,
         url,
@@ -85,6 +85,9 @@ export function parseStationsJson(data: unknown): Station[] {
         tags: Array.isArray(r.tags) ? r.tags.map(String) : [],
         description: r.description != null ? String(r.description) : null,
       };
+      const harvest = parseStationHarvest(r.harvest);
+      if (harvest) station.harvest = harvest;
+      return station;
     })
     .filter((s) => s.url && s.slug);
 }
@@ -176,4 +179,46 @@ export function stationIdentity(
     bitrate: station.bitrate ?? live?.bitrate ?? h?.bitrate ?? null,
     genre: live?.genre ?? h?.genre ?? null,
   };
+}
+
+/** Read a station harvest slice out of imported JSON, keeping only stated values.
+ *  A file written before U4.5 has none, which is not an error. */
+export function parseStationHarvest(raw: unknown): StationHarvest | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? String(v) : undefined);
+  const h: StationHarvest = {
+    probedAt: typeof r.probedAt === "number" ? r.probedAt : 0,
+  };
+  if (str(r.icyName)) h.icyName = str(r.icyName);
+  if (str(r.genre)) h.genre = str(r.genre);
+  if (str(r.homepage)) h.homepage = str(r.homepage);
+  if (str(r.fmt)) h.fmt = str(r.fmt);
+  if (typeof r.bitrate === "number" && Number.isFinite(r.bitrate)) h.bitrate = r.bitrate;
+  return Object.keys(h).length > 1 ? h : undefined;
+}
+
+/** The station as it should be WRITTEN OUT — every persisted field, and nothing
+ *  that isn't persisted.
+ *
+ *  This exists so "export == persisted state" holds by construction rather than by
+ *  everyone remembering. Both writers (the Stations-tab export and the app-level
+ *  backup) go through here, so they cannot disagree, and adding a stored field to
+ *  `Station` without adding it here fails the round-trip test rather than silently
+ *  shipping a lossy backup.
+ *
+ *  `eventId` is deliberately excluded: it identifies a relay event, not the
+ *  station, and means nothing on another machine or after the event is replaced. */
+export function toExportStation(s: Station): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    slug: s.slug,
+    name: s.name,
+    url: s.url,
+    fmt: s.fmt,
+    bitrate: s.bitrate,
+    tags: s.tags,
+    description: s.description,
+  };
+  if (s.harvest) out.harvest = s.harvest;
+  return out;
 }

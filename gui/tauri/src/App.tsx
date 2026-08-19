@@ -54,7 +54,7 @@ import {
   VOLUME_KEY,
 } from "./lib/settings";
 import { resumePosition, savePosition, type Playing } from "./lib/player";
-import { OWNER_PUBKEY, parseStationsJson } from "./lib/station";
+import { OWNER_PUBKEY, parseStationsJson, toExportStation } from "./lib/station";
 import { useFollows } from "./hooks/useFollows";
 import { shortVersion } from "./lib/format";
 import { cn } from "./lib/cn";
@@ -241,18 +241,12 @@ export default function App() {
   // Export the current station list as JSON (native Save dialog). Exports the
   // merged, displayed list — the same rows the user sees.
   const exportStations = useCallback(() => {
-    exportJson(
-      "ntune-stations.json",
-      stations.map((s) => ({
-        slug: s.slug,
-        name: s.name,
-        url: s.url,
-        fmt: s.fmt,
-        bitrate: s.bitrate,
-        tags: s.tags,
-        description: s.description,
-      })),
-    ).catch((e) => console.error("export stations failed", e));
+    // One shared shape (lib/station.ts) so the tab export and the app-level backup
+    // cannot drift apart, and so a newly stored field is either exported or fails a
+    // test — never quietly dropped, which is how `harvest` would have been lost.
+    exportJson("ntune-stations.json", stations.map(toExportStation)).catch((e) =>
+      console.error("export stations failed", e),
+    );
   }, [stations]);
 
   const flashStationMsg = useCallback((m: string) => {

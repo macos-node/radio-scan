@@ -10,7 +10,7 @@ import {
   parseSubsJson,
   setPodcasts,
 } from "../lib/podcasts";
-import { parseStationsJson, type Station } from "../lib/station";
+import { parseStationsJson, toExportStation, type Station } from "../lib/station";
 
 /** App-level Backup & Restore. Exports both stores in one file (or podcasts as
  *  portable OPML), and restores by routing entries to the right store BY SHAPE —
@@ -42,7 +42,9 @@ export function BackupDialog({
       const path = await exportJson("ntune-backup.json", {
         app: "ntune",
         version: 1,
-        stations,
+        // Same serializer as the Stations tab: every persisted field, no relay-only
+        // `eventId`, which this used to include and which means nothing elsewhere.
+        stations: stations.map(toExportStation),
         podcasts,
       });
       if (path)

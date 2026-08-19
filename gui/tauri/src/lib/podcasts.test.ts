@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   harvestOf,
+  parseSubsJson,
   latestEpisodeAt,
   mergeSubs,
   parseHarvest,
@@ -244,5 +245,48 @@ describe("mergeSubs — the harvest slice survives an import", () => {
       { url: "a", title: "Alpha", harvest: { author: "New", fetchedAt: 2 } },
     ]);
     expect(merged[0].harvest?.author).toBe("New");
+  });
+});
+
+describe("export == persisted state — podcasts (U4.5 H3)", () => {
+  // The podcast export writes `Sub` objects straight out, so the guard here is
+  // that a full round-trip through the importer loses nothing.
+  const full: Sub = {
+    url: "https://serve.podhome.fm/rss/43a4f801",
+    title: "Bitcoin And",
+    npub: "npub1e0f808a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6071829a4b5c6",
+    guid: "43a4f801-04a3-5897-bc32-9f905e163a36",
+    latestAt: 1_787_000_000,
+    harvest: {
+      author: "David Bennett",
+      ownerEmail: "david.bennett.c@gmail.com",
+      website: "https://serve.podhome.fm/bitcoin-and-",
+      categories: ["News"],
+      language: "en",
+      copyright: "All rights reserved",
+      image: "https://assets.podhome.fm/art.jpg",
+      description: "A daily bitcoin news podcast",
+      fetchedAt: 1_787_100_000,
+    },
+  };
+
+  it("round-trips every persisted field through import", () => {
+    const back = parseSubsJson(JSON.parse(JSON.stringify([full])));
+    expect(back).toHaveLength(1);
+    expect(back[0]).toEqual(full);
+  });
+
+  it("keeps each key of the persisted shape", () => {
+    const back = parseSubsJson(JSON.parse(JSON.stringify([full])))[0];
+    for (const key of Object.keys(full)) expect(back).toHaveProperty(key);
+  });
+
+  it("a restore of that export re-merges without losing harvest", () => {
+    // The realistic path: restore a backup over a store that already has the feed.
+    const stored: Sub[] = [{ url: full.url, title: "Bitcoin And", latestAt: 1 }];
+    const merged = mergeSubs(stored, parseSubsJson(JSON.parse(JSON.stringify([full]))));
+    expect(merged).toHaveLength(1);
+    expect(merged[0].harvest?.ownerEmail).toBe("david.bennett.c@gmail.com");
+    expect(merged[0].guid).toBe(full.guid);
   });
 });
