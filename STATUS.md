@@ -1131,6 +1131,25 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   key mismatch reading the whole archive as new — are in
   [`docs/episodic-linux-handoff-2026-08-19.md`](docs/episodic-linux-handoff-2026-08-19.md).
 
+- **Decision #11 step 3 — publish-all / follow-all VERIFIED from macOS (2026-08-20).**
+  The whole decision, exercised end to end across two devices. Both buttons offered
+  **exactly the predicted counts** — `publish all (2)` and `follow all (16)`, computed
+  beforehand from this store against the 9 stations + 10 shows Linux had published —
+  which is itself the test of `2c0054c`'s canonical matching: 4 stations and 9 shows
+  were recognised as already-published despite Linux having typed different names.
+  After pressing: **11 stations and 26 shows on all three relays**, every address
+  16-hex, 12 shows carrying an `i` guid tag, all 25 local subs represented, and the
+  one address that is not mine is Linux's show I never subscribed to.
+  **The open sub-question holds in practice:** a device did not re-assert what it
+  received. Linux's four stations kept their event ids *and their names* — the wire
+  still says `Indie Pop Rocks!`, not this machine's `SomaFM — Indie Pop Rocks`, for
+  the address both devices derive — and Linux's `Bitcoin And` is still `f25af65c8d7c`.
+  **18 items × 3 relays = 54 writes, zero failures**, paced at 400 ms by
+  `publishSequentially`; the rate-limiting that motivated the pacing did not bite even
+  with 16 podcast follows in one burst.
+  *Caveat:* this ran with the VPN up, since the direct path is still blocked by the
+  local network filter — see the note below. The publish path itself is unaffected by
+  that (it is Rust, which was never blocked).
 - **macOS reads nothing from the relays — a network filter, not the app (2026-08-20).**
   Steps 2–3 landed and macOS showed `publish all (6)` / `follow all (25)` with the
   header reading `saved on this device`: `relayStations` empty, everything looking
