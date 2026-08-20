@@ -1191,6 +1191,19 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   resolved addresses) would bound it; ntune's own deletions carry no `k` tag, which
   is why `#k` filtering cannot work yet.
 
+- **Podcast `refresh` button — macOS pass, VERIFIED (2026-08-20).** Pressed against a
+  cache last read at launch (~1h 50m stale): **25 of 25 entries re-confirmed, none
+  left stale, 15 s for the whole list** — the conditional GET doing its job, since a
+  full re-download of these bodies is tens of megabytes. UI reported `refreshed 26, no
+  failures`. One feed genuinely changed (spreaker +1 episode), every other episode
+  count identical, so a refresh does not thin a parse. Cache and subscriptions ended
+  **1:1 with no orphans**: the 26th was a body for a feed no longer subscribed, pruned
+  during the run, which is why the UI counted 26 and the disk holds 25.
+  *Method note:* the first comparison flagged that feed as **278 episodes → 0** and
+  looked exactly like data loss. It was `dict.get(url, 0)` reading *absent from cache*
+  as *emptied* — the same false-negative shape as an empty relay capture. Absence and
+  zero are not the same measurement; check which one you have before reporting a
+  regression.
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
   reconcile heard tracks vs ndisc's catalogue) and the Nostr publisher/poller.
