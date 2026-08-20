@@ -362,6 +362,7 @@ export function PodcastTab({
   // Following the whole list at once — a bulk public act, so it asks.
   const [confirmFollowAll, setConfirmFollowAll] = useState(false);
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Re-sync when a restore (the app-level Backup dialog) writes subs from
   // outside this tab — same-document localStorage writes don't fire `storage`.
@@ -510,6 +511,42 @@ export function PodcastTab({
       sortSubs(rows, sort, (s) => latestEpisodeAt(cache[s.url]) ?? s.latestAt ?? null) as FollowRow[],
     [rows, sort, cache],
   );
+
+  /** Re-read every subscribed feed from the network, now.
+   *
+   *  Without this a feed is fetched at most ONCE per launch: `refreshed` is
+   *  module-level, so the prefetch loop skips it for the rest of the session and
+   *  tab-switching does not re-run it. That is right for a background prefetch and
+   *  wrong for a long-lived window — leave ntune open for a week and the episode
+   *  lists are a week old with no way to say "check again".
+   *
+   *  Sequential rather than parallel, via the same runner the publish-all path uses:
+   *  an unpaced burst is what drew rate limits from fountain.fm and anchor.fm during
+   *  a read sweep on 2026-08-19. No added delay — each request is already paced by
+   *  the one before it, and a conditional GET makes an unchanged feed a 304. */
+  const refreshAll = async () => {
+    const urls = rows.map((r) => r.url);
+    if (urls.length === 0 || refreshing) return;
+    setRefreshing(true);
+    setError(null);
+    const outcome = await publishSequentially(
+      urls,
+      async (url) => {
+        const p = await fetchPodcast(url);
+        refreshed.add(url);
+        putCache(url, p);
+      },
+      {
+        delayMs: 0,
+        onProgress: (done, total) =>
+          setBulkMsg(done < total ? `refreshing ${done + 1}/${total}…` : null),
+      },
+    );
+    setRefreshing(false);
+    const msg = describeOutcome(outcome, "refreshed");
+    setBulkMsg(msg);
+    setTimeout(() => setBulkMsg((m) => (m === msg ? null : m)), 4000);
+  };
 
   const fetchInto = async (url: string) => {
     setLoadingUrl(url);
@@ -707,6 +744,17 @@ export function PodcastTab({
             </span>
             {bulkMsg && (
               <span className="font-mono text-[10px] text-accent">{bulkMsg}</span>
+            )}
+            {rows.length > 0 && !bulkMsg && (
+              <button
+                type="button"
+                onClick={() => void refreshAll()}
+                disabled={refreshing}
+                title="Re-read every subscribed feed now — feeds are otherwise fetched once per launch"
+                className="rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-fg disabled:opacity-40"
+              >
+                refresh
+              </button>
             )}
             {signedIn && unpublishedRows.length > 0 && !bulkMsg && (
               <button

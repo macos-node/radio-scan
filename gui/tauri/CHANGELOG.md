@@ -21,6 +21,17 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   yet rendered. **Export == persisted state**, closing the serializer-drift.
 
 ### Added
+- **A `refresh` button on the Podcasts tab.** Feeds were fetched **once per launch**:
+  `refreshed` is module-level, so the background prefetch skips a feed for the rest of
+  the session and switching tabs does not re-run it — right for a prefetch, wrong for
+  a window left open, where the episode lists quietly go stale with no way to say
+  "check again". The button re-reads every subscription now, sequentially through the
+  same runner publish-all uses (an unpaced burst is what drew rate limits from
+  fountain.fm and anchor.fm during a read sweep), with no added delay since each
+  request is paced by the one before it and a conditional GET makes an unchanged feed
+  a 304. Progress shows as `refreshing 3/25…` and the result as `refreshed 25` or
+  `refreshed 23, 2 failed` — one failing feed never stops the rest. `describeOutcome`
+  gained a verb so publish and refresh share one vocabulary rather than growing two.
 - **Podcasts sort by recency.** The Podcasts tab gets a **Recent | A–Z | Added**
   order switch beside the list/card toggle, defaulting to **Recent** — the feed
   that published most recently sits at the top. Each feed's newest-episode date is

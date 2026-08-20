@@ -43,13 +43,16 @@ export async function publishSequentially<T>(
   return out;
 }
 
-/** How a finished run reads in the UI. Kept here so both tabs word it identically. */
-export function describeOutcome<T>(o: PublishOutcome<T>): string {
+/** How a finished run reads in the UI. Kept here so both tabs word it identically —
+ *  and so a refresh run, which is the same shape (sequential, failure-tolerant,
+ *  reports both halves), does not grow a second vocabulary. `published` counts
+ *  successes whatever the verb. */
+export function describeOutcome<T>(o: PublishOutcome<T>, verb = "published"): string {
   if (o.failed.length === 0) {
-    return `published ${o.published}`;
+    return `${verb} ${o.published}`;
   }
   if (o.published === 0) {
-    return `none published — ${o.failed.length} failed`;
+    return `none ${verb} — ${o.failed.length} failed`;
   }
-  return `published ${o.published}, ${o.failed.length} failed`;
+  return `${verb} ${o.published}, ${o.failed.length} failed`;
 }

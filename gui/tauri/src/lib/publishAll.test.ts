@@ -73,3 +73,19 @@ describe("describeOutcome", () => {
     ).toBe("published 2, 1 failed");
   });
 });
+
+describe("describeOutcome verb", () => {
+  it("defaults to published, so existing callers are unchanged", () => {
+    expect(describeOutcome({ published: 3, failed: [] })).toBe("published 3");
+  });
+
+  it("words a refresh run without inventing a second vocabulary", () => {
+    expect(describeOutcome({ published: 25, failed: [] }, "refreshed")).toBe("refreshed 25");
+    expect(
+      describeOutcome({ published: 23, failed: [{ item: "a", error: "x" }, { item: "b", error: "y" }] }, "refreshed"),
+    ).toBe("refreshed 23, 2 failed");
+    expect(
+      describeOutcome({ published: 0, failed: [{ item: "a", error: "x" }] }, "refreshed"),
+    ).toBe("none refreshed — 1 failed");
+  });
+});
