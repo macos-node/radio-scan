@@ -1159,31 +1159,29 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   `publishSequentially`; the rate-limiting that motivated the pacing did not bite even
   with 16 podcast follows in one burst.
   *Caveat:* this ran with the VPN up, since the direct path is still blocked by the
-  local network filter — see the note below. The publish path itself is unaffected by
-  that (it is Rust, which was never blocked).
-- **macOS reads nothing from the relays — a network filter, not the app (2026-08-20).**
-  Steps 2–3 landed and macOS showed `publish all (6)` / `follow all (25)` with the
-  header reading `saved on this device`: `relayStations` empty, everything looking
-  unpublished. **The app is not at fault.** This machine runs Little Snitch *and*
-  LuLu, and the webview's traffic had not been approved. Two properties make it hard
-  to see: Rust and the webview are **different processes to a filter** (feed fetches
-  and publishes kept working while the read did not), and `install.sh` produces an
-  **ad-hoc, linker-signed** bundle, so *every rebuild is a new code identity* and last
-  night's approval does not carry — which makes it look correlated with whatever code
-  landed in between. Ruled out along the way, each with a measurement: the relays (all
+  direct network path still fails for reasons not established — see the note below.
+  The publish path is unaffected by it (Rust, which was never blocked).
+- **macOS reads nothing from the relays — UNRESOLVED, VPN restores it (2026-08-20).**
+  Steps 2–3 verification stalled: `publish all (6)` / `follow all (25)` with the header
+  reading `saved on this device` — `relayStations` empty, everything looking
+  unpublished. **Connecting a VPN restored it immediately** and the counts became the
+  predicted `(2)` / `(16)`; the direct path still fails and **the cause is not
+  established.** Measured and ruled out, so they need no re-testing: the relays (all
   three served the events under the app's exact filter), the resolver (**3,578-event
-  stream → 9 stations, 10 shows in 10 ms**), `nostr-tools` (3,580 events, first at
-  ~1 s), the same frontend in Chrome (renders `0 local · +9 station.v1`), WebKit
-  itself (Safari opened all four test relays), and ATS/entitlements. **A wrong
-  measurement cost most of the hour:** `lsof` on ntune's own pid shows no sockets
-  because WKWebView's belong to `com.apple.WebKit.Networking` — checking the helper
-  showed the app *was* connected to `relay.fizx.uk`. Procedure, and the five checks
-  that localise it quickly, in
-  [`docs/macos-webview-network-filter-2026-08-20.md`](docs/macos-webview-network-filter-2026-08-20.md).
-  **Still open:** the operator has to approve the traffic (prefer a path-scoped rule),
-  after which `publish all` should read **(2)** and `follow all` **(16)** — the counts
-  computed from this store against the 9 stations + 10 shows already published. The
-  publish-all/follow-all test itself is therefore **not yet run on macOS**.
+  stream → 9 stations, 10 shows in 10 ms**; incremental path 487 ms), `nostr-tools`
+  (3,580 events, first at ~1 s), the same frontend in Chrome (`0 local · +9
+  station.v1`), WebKit itself (Safari opened all four test relays), and
+  ATS/entitlements. Rust networking was never affected — only the webview's reads.
+  **A wrong measurement cost most of the hour:** `lsof` on ntune's own pid shows no
+  sockets because WKWebView's belong to `com.apple.WebKit.Networking`; checking the
+  helper showed the app *was* connected to `relay.fizx.uk` while displaying nothing,
+  which is the real shape of the problem. A per-connection filter (this machine runs
+  Little Snitch and LuLu) plus `install.sh`'s ad-hoc re-signing would fit "worked last
+  night, stopped tonight", but **no filter was observed denying anything** — LuLu holds
+  no rule at all and Little Snitch's log needs `sudo` and was never read. Hypothesis,
+  not answer. Evidence, the correct `lsof` incantation, and the two checks that would
+  settle it are in
+  [`docs/macos-webview-relay-reads-2026-08-20.md`](docs/macos-webview-relay-reads-2026-08-20.md).
 - **The read subscription is wasteful regardless (found 2026-08-20).** `useFollows`
   asks for every `kind:5` the author ever wrote: **3,559 deletions** — nearly all
   ndisc's release retractions, tagged `k=31237` — for **19** useful events, and it
