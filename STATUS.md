@@ -1204,6 +1204,31 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   as *emptied* — the same false-negative shape as an empty relay capture. Absence and
   zero are not the same measurement; check which one you have before reporting a
   regression.
+
+- **Podcast `refresh` button — Linux pass, VERIFIED (2026-08-21). `Needs-verify` on
+  `c5fa8e7` is now closed on both platforms.** Release binary installed to
+  `~/.local/bin` and driven through XTEST, so the button was really pressed. Two runs.
+  **Run 1, the real profile** (10 subscribed · 26 published): the counter ticked
+  `refreshing 1/26… → 26/26…` monotonically over **~21 s** (~0.8 s/feed, never two in
+  flight — the sequential pacing that the fountain.fm/anchor.fm rate limits on
+  2026-08-19 bought), settled on **`refreshed 26`**, and cleared back to the button
+  after the 4 s timeout. On disk: **all 26 `feed-cache/` entries restamped**, and the
+  `podcasts.json` diff was *only* `harvest.fetchedAt` on all 10 subs
+  (`1787250263 → 1787250833`) — same restamp-on-304 semantics macOS measured, and
+  nothing else in the store moved.
+  **Run 2, the failing-feed half**, which macOS did not cover: the same installed
+  binary against a throwaway `XDG_DATA_HOME` profile — two live feeds plus a
+  deliberate `https://feeds.nope.invalid.fizx.uk/missing.xml`. `refreshing 1/27… →
+  27/27…`, then **`refreshed 26, 1 failed`**. The run did not abort on the failure,
+  both halves were reported, and `describeOutcome`'s new verb read correctly in the
+  mixed wording. A scratch profile rather than a poisoned real store, because the
+  point was to break one feed, not the catalogue.
+  *Nit, not a defect:* the tooltip says "Re-read every **subscribed** feed", but
+  `refreshAll` maps over `rows`, so it re-reads relay-followed rows too — 26 rows
+  against 10 subscriptions here (and macOS's "refreshed 26" against 25 subs is the
+  same arithmetic). Refreshing what is on screen is the defensible behaviour; it is
+  the wording that undersells it.
+
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
   reconcile heard tracks vs ndisc's catalogue) and the Nostr publisher/poller.
