@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Event as NostrEvent } from "nostr-tools";
 import {
+  followState,
   mergeFollows,
   parseShow,
   resolveShows,
@@ -223,5 +224,48 @@ describe("a relay-sourced show carries its own d", () => {
     const show = parseShow(ev)!;
     expect(show.d).toBe("airplay:show:the-peter-mccormack-show");
     expect(show.slug).toBe("the-peter-mccormack-show");
+  });
+});
+
+describe("followState", () => {
+  const show = (url: string): Show => ({
+    slug: "s",
+    title: "T",
+    url,
+    tags: [],
+    description: null,
+    eventId: "ff".repeat(32),
+  });
+
+  it("reads a subscription with a published follow as synced", () => {
+    expect(followState({ url: "u", title: "T", show: show("u") })).toBe("synced");
+  });
+
+  it("reads a subscription with no follow as local-only", () => {
+    expect(followState({ url: "u", title: "T" })).toBe("local-only");
+  });
+
+  it("reads a follow with no local subscription as relay-only", () => {
+    // relayOnly implies published: the row was built out of the follow event.
+    expect(followState({ url: "u", title: "T", show: show("u"), relayOnly: true })).toBe(
+      "relay-only",
+    );
+  });
+
+  it("classifies every row mergeFollows can produce", () => {
+    // The fourth quadrant — neither here nor published — has no row to classify,
+    // which is why callers can switch on three cases and stop.
+    const rows = mergeFollows(
+      [
+        { url: "a", title: "Synced" },
+        { url: "b", title: "Local only" },
+      ],
+      [show("a"), { ...show("c"), title: "Relay only", url: "c" }],
+    );
+    expect(rows.map((r) => [r.title, followState(r)])).toEqual([
+      ["Synced", "synced"],
+      ["Local only", "local-only"],
+      ["Relay only", "relay-only"],
+    ]);
   });
 });

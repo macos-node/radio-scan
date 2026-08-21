@@ -5,12 +5,14 @@ import {
   ChevronRight,
   Copy,
   Download,
+  Laptop,
   LayoutGrid,
   List,
   Loader2,
   Play,
   Plus,
   Rss,
+  Share2,
   Upload,
   X,
 } from "lucide-react";
@@ -26,6 +28,7 @@ import {
   type Podcast,
 } from "../lib/tauri";
 import {
+  followState,
   mergeFollows,
   type FollowRow,
   type Show,
@@ -243,22 +246,39 @@ function IdentityRow({
   );
 }
 
-/** The Follow / Following control for one row.
+/** The two-slot state column for one row.
  *
- *  Published state is not local state: the chip reflects a `show.v1` read back off
- *  the relays, so it lights up when the event lands, not when the click happens.
- *  Hidden entirely without a signing key — there is nothing to publish with, and a
- *  dead button explains less than no button.
+ *  A row answers two questions — is this show HERE (subscribed on this device),
+ *  and is it PUBLISHED (a `show.v1` the relays serve)? Those answers used to be
+ *  spread across three places: a `relay` chip, a `follow`/`following` text toggle,
+ *  and whether ✕ was drawn at all. Reading one row meant assembling three
+ *  scattered signals, and comparing two rows meant doing it twice. Both slots are
+ *  drawn in the same two positions on every row now, so the state is a shape you
+ *  scan down a column rather than a sentence you reassemble per row.
  *
- *  Distinct from the `nostr` chip on these rows: that one means the feed is *served
- *  from* an npub (a castr.me-style bridge); this means the follow is *published to*
- *  the relays. Both are Nostr, neither implies the other. */
-function FollowControl({
+ *  Each slot toggles the dimension it shows, which is the other half of the point.
+ *  The relay slot publishes or retracts the follow. The device slot SUBSCRIBES a
+ *  relay-only row onto this machine — new, and the move that actually brings two
+ *  devices into line: pulling across a show followed elsewhere previously meant
+ *  copying its feed URL out of the row and pasting it back into the Add box.
+ *
+ *  Deliberately NOT symmetrical. A filled device slot is an indicator, not a
+ *  button: removing a local subscription stays on ✕, which asks first, because one
+ *  stray click on a hover-revealed row must not drop a subscription. Retracting a
+ *  follow asks too — it is a public act — while following, being additive and
+ *  undone by clicking again, does not.
+ *
+ *  Every word these glyphs replaced lives on in their tooltips; nothing here is
+ *  only a shape. `nostr` stays a chip of its own: it means the feed is SERVED FROM
+ *  an npub, which is a different fact from a follow being PUBLISHED TO the relays.
+ *  Both are Nostr, neither implies the other. */
+function StateColumn({
   row,
   signedIn,
   busy,
   onFollow,
   onUnfollow,
+  onSubscribeHere,
   compact = false,
 }: {
   row: FollowRow;
@@ -266,34 +286,64 @@ function FollowControl({
   busy: boolean;
   onFollow: (row: FollowRow) => void;
   onUnfollow: (row: FollowRow) => void;
+  onSubscribeHere: (row: FollowRow) => void;
   compact?: boolean;
 }) {
-  if (!signedIn) return null;
-  // `following` is a TOGGLE, not a badge. It used to be a label, which left ✕ as
-  // the only way to retract a follow — and ✕ also removes the subscription, so
-  // "stop publishing this" and "remove it from my list" could not be done
-  // separately. One is a public act, the other is local housekeeping.
+  const here = followState(row) !== "relay-only";
   const published = !!row.show;
+  const size = compact ? 11 : 13;
+  const slot = cn(
+    "grid shrink-0 place-items-center rounded-sm transition-colors",
+    compact ? "h-4 w-4" : "h-5 w-5",
+  );
   return (
-    <button
-      type="button"
-      onClick={() => (published ? onUnfollow(row) : onFollow(row))}
-      disabled={busy}
-      title={
-        published
-          ? `Published as show.v1 — airplay:show:${row.show!.slug}\nClick to unfollow (publishes a kind:5). Your subscription stays.`
-          : "Publish a show.v1 follow to the relays"
-      }
-      className={cn(
-        "shrink-0 rounded-sm px-1.5 py-0.5 text-[9px] transition-colors disabled:opacity-40",
-        published
-          ? "bg-surface font-mono text-nostr hover:text-alert"
-          : "border border-surface text-muted hover:border-nostr hover:text-nostr",
-        compact ? "px-1" : "w-full text-center",
+    <div className={cn("flex shrink-0 items-center", compact ? "gap-0.5" : "gap-1")}>
+      {here ? (
+        <span className={cn(slot, "bg-surface text-fg/80")} title="Subscribed on this device.">
+          <Laptop size={size} />
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onSubscribeHere(row)}
+          title={"Followed on the relays, not subscribed on this device.\nClick to subscribe here — the feed URL comes from the follow itself."}
+          aria-label={`Subscribe to ${row.title} on this device`}
+          className={cn(slot, "text-muted/40 hover:bg-surfaceHover hover:text-fg")}
+        >
+          <Laptop size={size} />
+        </button>
       )}
-    >
-      {busy ? "…" : published ? "following" : "follow"}
-    </button>
+      {/* Published state is not local state: this reflects a `show.v1` read back
+          off the relays, so it lights up when the event lands, not when the click
+          happens. Hidden entirely without a signing key — there is nothing to
+          publish with, and a dead control explains less than no control. */}
+      {signedIn && (
+        <button
+          type="button"
+          onClick={() => (published ? onUnfollow(row) : onFollow(row))}
+          disabled={busy}
+          title={
+            published
+              ? `Published to your relays as show.v1 — airplay:show:${row.show!.slug}\nClick to unfollow (publishes a kind:5). Your subscription stays.`
+              : "Not published. Click to publish a show.v1 follow to your relays."
+          }
+          aria-label={published ? `Unfollow ${row.title}` : `Follow ${row.title}`}
+          className={cn(
+            slot,
+            "disabled:opacity-40",
+            published
+              ? "bg-surface text-nostr hover:text-alert"
+              : "text-muted/40 hover:bg-surfaceHover hover:text-nostr",
+          )}
+        >
+          {busy ? (
+            <Loader2 size={size} className="animate-spin" />
+          ) : (
+            <Share2 size={size} />
+          )}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -647,6 +697,22 @@ export function PodcastTab({
     setConfirmUrl(null);
   };
 
+  /** Pull a relay-only row onto this device — the mirror of `follow`, and the
+   *  move that brings a second machine into line with the first. The feed URL is
+   *  already in the row: it is the follow event's own `r` tag, which is what made
+   *  the row exist. Local only, and nothing is published — the follow it came from
+   *  is already there, and re-publishing it would say nothing new. */
+  const subscribeHere = (row: FollowRow) => {
+    const fresh: Sub = { url: row.url, title: row.title };
+    if (row.guid) fresh.guid = row.guid;
+    setSubs((prev) => {
+      const next = mergeSubs(prev, [fresh]);
+      saveSubs(next);
+      return next;
+    });
+    flashRow(row.url);
+  };
+
   // Follow = publish a `show.v1`. Deliberately per-show and never automatic: a
   // station is added one at a time, but podcasts arrive in bulk from OPML, and
   // auto-publishing an import would fire dozens of events at once (at hosts already
@@ -871,7 +937,7 @@ export function PodcastTab({
                     key={s.url}
                     className={cn(
                       "border-b border-surface/50 transition-colors",
-                      flash === s.url && "bg-nostr/10",
+                      flash === s.url && "bg-nostr/20",
                     )}
                   >
                     <div className="group flex items-stretch">
@@ -899,21 +965,13 @@ export function PodcastTab({
                             <Loader2 size={12} className="animate-spin text-muted" />
                           )}
                         </span>
-                        <span className="flex w-[5.5rem] shrink-0 items-center justify-end gap-1">
+                        <span className="flex w-12 shrink-0 items-center justify-end">
                           {s.npub && (
                             <span
                               className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[9px] text-nostr"
                               title={`Nostr npub feed — ${s.npub}\n(RSS bridge today; native 1063 reading planned)`}
                             >
                               nostr
-                            </span>
-                          )}
-                          {s.relayOnly && (
-                            <span
-                              className="rounded-sm bg-surface px-1.5 py-0.5 text-[9px] text-muted"
-                              title="Followed on the relays, not subscribed on this device."
-                            >
-                              relay
                             </span>
                           )}
                         </span>
@@ -945,20 +1003,19 @@ export function PodcastTab({
                       {/* Sibling of the row button, never a child: a <button>
                           inside a <button> is invalid HTML and React refuses to
                           hydrate it. */}
-                      {/* Fixed rail: `follow` and `following` are different widths,
-                          so the control must not size its own column — otherwise the
-                          copy/✕ gutter to its right dances from row to row. */}
-                      {signedIn && (
-                        <div className="flex w-[4.75rem] shrink-0 items-center pr-1">
-                          <FollowControl
-                            row={s}
-                            signedIn={signedIn}
-                            busy={publishing === s.url}
-                            onFollow={follow}
-                            onUnfollow={(r) => setConfirmUnfollow(r.url)}
-                          />
-                        </div>
-                      )}
+                      {/* Fixed rail, drawn signed in or out: the device slot means
+                          something without a key, and a column that appears and
+                          disappears is the raggedness this layout just removed. */}
+                      <div className="flex w-12 shrink-0 items-center pr-1">
+                        <StateColumn
+                          row={s}
+                          signedIn={signedIn}
+                          busy={publishing === s.url}
+                          onFollow={follow}
+                          onUnfollow={(r) => setConfirmUnfollow(r.url)}
+                          onSubscribeHere={subscribeHere}
+                        />
+                      </div>
                       {/* One gutter of FIXED width holding both icon buttons, rather
                           than two buttons that each size themselves. A relay-only row
                           has nothing local to remove — ✕ is absent by design, and
@@ -1045,7 +1102,7 @@ export function PodcastTab({
                       key={s.url}
                       className={cn(
                         "group relative shrink-0 min-w-[136px] basis-[calc((100%_-_4.5rem)/10)]",
-                        flash === s.url && "rounded-sm bg-nostr/10",
+                        flash === s.url && "rounded-sm bg-nostr/20",
                       )}
                     >
                       <button
@@ -1102,12 +1159,13 @@ export function PodcastTab({
                       </button>
                       {/* Outside the card button — nested buttons are invalid. */}
                       <div className="absolute left-1 top-1">
-                        <FollowControl
+                        <StateColumn
                           row={s}
                           signedIn={signedIn}
                           busy={publishing === s.url}
                           onFollow={follow}
                           onUnfollow={(r) => setConfirmUnfollow(r.url)}
+                          onSubscribeHere={subscribeHere}
                           compact
                         />
                       </div>
@@ -1234,7 +1292,7 @@ export function PodcastTab({
           </p>
           <p className="mt-2 text-xs text-muted">
             {unfollowRow.relayOnly
-              ? "A Nostr unfollow (kind:5) is published to your relays and the row goes — this show is followed but not subscribed on this device. You can follow it again at any time."
+              ? "A Nostr unfollow (kind:5) is published to your relays and the row goes with it — this show is followed but not subscribed on this device, so the follow is the only thing holding it in the list. You can follow it again at any time."
               : "A Nostr unfollow (kind:5) is published to your relays. Your subscription and its episodes stay exactly as they are; only the public follow goes."}
           </p>
           <div className="mt-4 flex justify-end gap-2">
@@ -1270,7 +1328,7 @@ export function PodcastTab({
           </p>
           <p className="mt-2 text-xs text-muted">
             {confirmSub.show
-              ? "Only the subscription goes. You still publish this show as a follow, so it stays in the list marked “relay” until you turn “following” off — nothing is sent to the relays by removing it here."
+              ? "Only the subscription goes. You still publish this show as a follow, so the row stays — with its device slot hollow, meaning followed but not here — until you turn the follow off. Nothing is sent to the relays by removing it here."
               : "Only the subscription goes — nothing is deleted from the feed or from disk, and you can add the URL back at any time."}
           </p>
           <div className="mt-4 flex justify-end gap-2">

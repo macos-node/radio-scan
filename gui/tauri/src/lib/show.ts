@@ -95,6 +95,23 @@ export interface FollowRow extends Sub {
   relayOnly?: boolean;
 }
 
+/** Where one row stands between this device and the relays.
+ *
+ *  The two questions a row answers are "is it HERE?" (a local subscription) and
+ *  "is it PUBLISHED?" (a `show.v1` the relays serve) — but only three of the four
+ *  combinations can exist. Neither-here-nor-published is not a state a row can be
+ *  in: a row exists BECAUSE one of the two is true, so there is nothing to render
+ *  it from. Callers can therefore treat this as a closed three-way choice rather
+ *  than a pair of independent flags. */
+export type FollowState = "synced" | "local-only" | "relay-only";
+
+/** Classify a row. `relayOnly` implies published — a relay-only row is one that
+ *  mergeFollows built out of a follow event, so the follow is by definition there. */
+export function followState(row: FollowRow): FollowState {
+  if (row.relayOnly) return "relay-only";
+  return row.show ? "synced" : "local-only";
+}
+
 /** Merge local subscriptions with published follows.
  *
  *  Matched by **guid first, then URL** — the U4.5 keying rule, and not

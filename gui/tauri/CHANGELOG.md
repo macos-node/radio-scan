@@ -21,6 +21,20 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   yet rendered. **Export == persisted state**, closing the serializer-drift.
 
 ### Changed
+- **A row's state is two glyphs in a fixed column, not three scattered signals.**
+  Whether a show is HERE (subscribed on this device) and whether it is PUBLISHED (a
+  `show.v1` the relays serve) used to be spread across a `relay` chip, a
+  `follow`/`following` text toggle, and whether ✕ was drawn at all — so reading one
+  row meant assembling three things, and comparing two rows meant doing it twice.
+  Both slots are now drawn in the same two positions on every row: a device glyph
+  (filled = here, hollow = followed elsewhere) and a share glyph (filled in the
+  Nostr tint = published, hollow = local only). Every word the glyphs replaced
+  survives in their tooltips. `nostr` stays a chip of its own — a feed SERVED FROM
+  an npub is a different fact from a follow PUBLISHED TO the relays.
+  Deliberately not symmetrical: a filled device slot is an indicator, not a button.
+  Removing a local subscription stays on ✕, which asks first, because one stray
+  click on a hover-revealed row must not drop a subscription. Both confirm dialogs
+  were rewritten — they described the chips that no longer exist.
 - **The Podcasts list is a set of columns now, not a row of optional chips.** Every
   slot — spinner, `nostr`/`relay` chips, copyright, language, the follow control, the
   copy/✕ gutter — is rendered on every row and owns its width; only the *contents* are
@@ -48,6 +62,16 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   wash, in both the list and card views.
 
 ### Added
+- **Subscribe a relay-only show onto this device, from its own row.** Clicking the
+  hollow device glyph on a show followed from another machine subscribes it here.
+  The feed URL was always in the row — it is the follow event's `r` tag, which is
+  what made the row exist — but pulling a show across previously meant copying that
+  URL out of the row and pasting it back into the Add box, which is a strange thing
+  to have to do to two devices that already agree. Local only: nothing is published,
+  because the follow it came from is already on the relays. Note the row does move
+  when you click — it joins the local group, and lands first under **Added**, which
+  is what "newest subscription first" means — so the brief tint on a just-changed
+  row is doing real work here.
 - **A `refresh` button on the Podcasts tab.** Feeds were fetched **once per launch**:
   `refreshed` is module-level, so the background prefetch skips a feed for the rest of
   the session and switching tabs does not re-run it — right for a prefetch, wrong for
