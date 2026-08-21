@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, LayoutGrid, List, Loader2, Radio, X } from "lucide-react";
 import { copyText, type IcyInfo, type Station } from "../lib/tauri";
 import { isRelayOnly, stationIdentity, stationSyncCounts } from "../lib/station";
@@ -53,8 +53,9 @@ function StationState({
   onAdopt?: (s: Station) => void;
   compact?: boolean;
 }) {
-  const here = !isRelayOnly(station);
-  const published = !!station.d;
+  const ghost = !!station.ghost;
+  const here = !ghost && !isRelayOnly(station);
+  const published = !ghost && !!station.d;
   const canToggle = published ? !!onUnpublish : !!onPublish;
   return (
     <StateSlots
@@ -71,10 +72,14 @@ function StationState({
       titles={{
         device: here
           ? "Kept on this device."
-          : "Published from another device, not kept on this one.\nClick to save it here — the stream URL comes from the published station itself.",
+          : ghost
+            ? "Unpublished a moment ago — not kept here, and no longer on your relays.\nThe row stays until ntune closes so the click can be taken back. Click to save it to this device."
+            : "Published from another device, not kept on this one.\nClick to save it here — the stream URL comes from the published station itself.",
         relay: published
           ? `Published to your relays as station.v1 — ${station.d}\nClick to unpublish (kind:5). The station stays on this device.`
-          : "Not published. Click to publish this station so your other devices see it.",
+          : ghost
+            ? "Unpublished. Click to publish it again — a fresh station.v1 at the same address, as though it never left."
+            : "Not published. Click to publish this station so your other devices see it.",
       }}
       labels={{
         device: `Save ${station.name} to this device`,
@@ -138,6 +143,11 @@ export function StationList({
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
   // Publishing the whole list at once is a bulk public act, so it asks.
   const [confirmPublishAll, setConfirmPublishAll] = useState(false);
+  /** Rows kept on screen after their published event was retracted — see
+   *  `Station.ghost`. Session-only: what needs covering is the seconds after a
+   *  mis-click, and in those seconds this row is the only place the stream URL
+   *  still exists on this machine. */
+  const [ghosts, setGhosts] = useState<Station[]>([]);
 
   // Re-read once the durable settings store finishes loading (initSettings),
   // so a migrated / non-graceful-stale view pref lands even though this list is
@@ -172,7 +182,30 @@ export function StationList({
     if (!onUnpublish) return;
     setConfirmUnpublish(null);
     setBusySlug(s.slug);
+    if (isRelayOnly(s)) {
+      // The published event was the ONLY thing holding this row in the list, and
+      // the row was the only place its stream URL survived on this machine. Keep a
+      // ghost so a mis-click is one click back rather than a hunt for a URL that
+      // no directory lists.
+      const ghost: Station = {
+        ...s,
+        d: undefined,
+        eventId: undefined,
+        relayOnly: undefined,
+        ghost: true,
+      };
+      setGhosts((prev) =>
+        prev.some((g) => g.slug === ghost.slug) ? prev : [...prev, ghost],
+      );
+    }
     Promise.resolve(onUnpublish(s)).finally(() => setBusySlug(null));
+  };
+
+  /** Drop a ghost for good. No confirm: it is already off this device and off the
+   *  relays, so there is nothing left to lose — this only stops the row waiting
+   *  around for an undo that is not coming. */
+  const dismissGhost = (slug: string) => {
+    setGhosts((prev) => prev.filter((g) => g.slug !== slug));
   };
 
   const chooseView = (v: View) => {
@@ -180,11 +213,22 @@ export function StationList({
     setSetting(STATION_VIEW_KEY, v);
   };
 
+  /** The list as drawn: what the parent merged, plus any ghosts still standing.
+   *  A ghost drops out the moment the thing it stands for comes back — publish it
+   *  again and the relay overlay serves the row, save it here and the local store
+   *  does. Matched on slug OR url, since either identifies the same stream. */
+  const rows = useMemo(() => {
+    if (ghosts.length === 0) return stations;
+    const slugs = new Set(stations.map((s) => s.slug));
+    const urls = new Set(stations.map((s) => s.url));
+    return [...stations, ...ghosts.filter((g) => !slugs.has(g.slug) && !urls.has(g.url))];
+  }, [stations, ghosts]);
+
   /** How far this device and the relays have converged — the same reading, from
    *  the same helper, that the Podcasts tab gives. */
-  const counts = stationSyncCounts(stations);
-  const notHere = stations.filter((s) => isRelayOnly(s));
-  const unpublished = stations.filter((s) => !isRelayOnly(s) && !s.d);
+  const counts = stationSyncCounts(rows);
+  const notHere = rows.filter((s) => !s.ghost && isRelayOnly(s));
+  const unpublished = rows.filter((s) => !s.ghost && !isRelayOnly(s) && !s.d);
 
   const say = (msg: string) => {
     setBulkMsg(msg);
@@ -251,10 +295,10 @@ export function StationList({
   };
 
   const confirmStation = confirmSlug
-    ? stations.find((s) => s.slug === confirmSlug)
+    ? rows.find((s) => s.slug === confirmSlug)
     : undefined;
   const unpublishStation = confirmUnpublish
-    ? stations.find((s) => s.slug === confirmUnpublish)
+    ? rows.find((s) => s.slug === confirmUnpublish)
     : undefined;
 
   if (loading) {
@@ -358,11 +402,20 @@ export function StationList({
 
       {view === "list" ? (
         <ul className="flex flex-col">
-          {stations.map((s) => {
+          {rows.map((s) => {
             const current = s.slug === currentSlug;
             const meta = enrich(s);
             return (
-              <li key={s.slug} className="group relative flex items-stretch">
+              <li
+                key={s.slug}
+                className={cn(
+                  "group relative flex items-stretch transition-opacity",
+                  // A ghost reads as a tombstone rather than a row — dimmed, but it
+                  // brightens as you reach for it, because the whole reason it is
+                  // still here is that you might want it back.
+                  s.ghost && "opacity-50 hover:opacity-100",
+                )}
+              >
                 <button
                   type="button"
                   onClick={() => onTune(s)}
@@ -388,6 +441,17 @@ export function StationList({
                         className={cn(current ? "text-accent" : "text-muted")}
                       />
                       <span className="truncate text-sm text-fg">{s.name}</span>
+                      {/* Inside the elastic name block on purpose: a chip here
+                          cannot shift the fixed columns on the right, which is the
+                          bug this layout spent three commits removing. */}
+                      {s.ghost && (
+                        <span
+                          className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[9px] text-muted"
+                          title="Unpublished this session. Kept on screen so you can undo it — it goes for good when ntune closes."
+                        >
+                          gone
+                        </span>
+                      )}
                     </span>
                     {s.tags.length > 0 && (
                       <span className="mt-0.5 block truncate pl-6 text-xs text-muted">
@@ -463,16 +527,29 @@ export function StationList({
                       <Copy size={14} />
                     )}
                   </button>
-                  {onRemove && !isRelayOnly(s) && (
+                  {s.ghost ? (
                     <button
                       type="button"
-                      onClick={() => setConfirmSlug(s.slug)}
-                      title={`Remove ${s.name} from this device`}
-                      aria-label={`Remove ${s.name}`}
-                      className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+                      onClick={() => dismissGhost(s.slug)}
+                      title="Dismiss. This station is already off this device and off your relays — the row is only waiting in case you want it back."
+                      aria-label={`Dismiss ${s.name}`}
+                      className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-fg group-hover:opacity-100"
                     >
                       <X size={14} />
                     </button>
+                  ) : (
+                    onRemove &&
+                    !isRelayOnly(s) && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmSlug(s.slug)}
+                        title={`Remove ${s.name} from this device`}
+                        aria-label={`Remove ${s.name}`}
+                        className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+                      >
+                        <X size={14} />
+                      </button>
+                    )
                   )}
                 </div>
               </li>
@@ -483,7 +560,7 @@ export function StationList({
         <div className="px-3 pb-3">
           <div className="overflow-x-auto pb-1">
           <div className="flex items-stretch gap-2">
-            {stations.map((s) => {
+            {rows.map((s) => {
               const current = s.slug === currentSlug;
               const meta = enrich(s);
               return (
@@ -617,7 +694,7 @@ export function StationList({
           </p>
           <p className="mt-2 text-xs text-muted">
             {isRelayOnly(unpublishStation)
-              ? "A Nostr deletion (kind:5) goes to your relays and this row disappears — it lives only there, not on this device. Publish it again from whichever machine has it."
+              ? "A Nostr deletion (kind:5) goes to your relays. This station lives only there, not on this device — so the row stays behind dimmed and marked “gone”, and publishes again in one click, until you close ntune."
               : "A Nostr deletion (kind:5) goes to your relays, so your other devices stop seeing it. The station stays here, exactly as it is."}
           </p>
           <div className="mt-4 flex justify-end gap-2">

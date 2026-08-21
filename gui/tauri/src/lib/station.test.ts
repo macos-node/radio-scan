@@ -249,3 +249,41 @@ describe("stationSyncCounts", () => {
     expect(stationSyncCounts([]).inSync).toBe(false);
   });
 });
+
+describe("station ghosts", () => {
+  const ghost: Station = {
+    slug: "gone",
+    name: "Gone",
+    url: "https://example.com/gone",
+    tags: [],
+    fmt: null,
+    bitrate: null,
+    description: null,
+    ghost: true,
+  };
+  const live: Station = {
+    slug: "a",
+    name: "A",
+    url: "https://example.com/a",
+    tags: [],
+    fmt: null,
+    bitrate: null,
+    description: null,
+    d: "airplay:station:a",
+  };
+
+  it("counts a ghost nowhere", () => {
+    const c = stationSyncCounts([live, ghost]);
+    expect([c.total, c.here, c.published]).toEqual([1, 1, 1]);
+    expect([c.notHere, c.notPublished]).toEqual([0, 0]);
+  });
+
+  it("does not let a ghost hold `in sync` hostage", () => {
+    // The user retracted that station deliberately; a tombstone is not a gap.
+    expect(stationSyncCounts([live, ghost]).inSync).toBe(true);
+  });
+
+  it("is not in sync when the list holds nothing but ghosts", () => {
+    expect(stationSyncCounts([ghost]).inSync).toBe(false);
+  });
+});

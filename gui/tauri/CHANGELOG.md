@@ -100,6 +100,17 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   wash, in both the list and card views.
 
 ### Added
+- **Unpublishing a relay-only station leaves a ghost too.** The twin of the Podcasts
+  ghost, and the hole was worse here: a station published from another machine lives
+  only on the relays, so retracting it took its STREAM URL with it — and a stream URL
+  has no directory to look it up in. The row now stays until ntune closes, dimmed and
+  marked `gone` beside its name, both slots hollow, brightening as you reach for it.
+  The relay slot publishes it again at the same address, the device slot saves it
+  here instead, ✕ dismisses it (no confirm — it is already gone from both sides).
+  Counted nowhere, and specifically unable to hold `in sync` hostage. The `gone` chip
+  sits INSIDE the elastic name block rather than in a column of its own: a chip in a
+  fixed slot is a column that has to exist on every row forever, and one wider than
+  its slot is what drags a column out of line.
 - **`add all` and `publish all` for stations, and per-row save from the relays.**
   The mirror of the Podcasts pair, and the same asymmetry: `add all (N)` saves every
   station published from another device onto this one — local, silent, no confirm,

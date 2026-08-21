@@ -71,6 +71,14 @@ export interface Station {
    *  another machine. There is nothing local to remove, so ✕ is not offered.
    *  Never persisted or exported: it describes this merge, not the station. */
   relayOnly?: boolean;
+  /** A row kept on screen after its published event was retracted, for this
+   *  session only — the twin of `FollowRow.ghost` (lib/show.ts). Unpublishing a
+   *  relay-only station removes the one thing holding it in the list, and the row
+   *  was the only place its STREAM URL still existed on this machine — harder to
+   *  re-derive than a podcast feed, since there is no directory to look it up in.
+   *  Never persisted, never merge output: the UI remembering, until the window
+   *  closes, what it was just told to forget. */
+  ghost?: boolean;
 }
 
 /** Parse an imported JSON array into Stations — accepts the app's own export
@@ -244,7 +252,15 @@ export function isRelayOnly(s: Station): boolean {
  *  address: set means the relays serve this station as a `station.v1`. */
 export function stationSyncCounts(stations: Station[]): SyncCounts {
   return countSync(
-    stations.map((s) => ({ here: !isRelayOnly(s), published: !!s.d })),
+    stations.map((s) => ({
+      // A ghost is neither: it is a tombstone for something removed from both
+      // sides, and countSync leaves it out of every tally — including, crucially,
+      // out of the gaps, or `in sync` could never return after a deliberate
+      // unpublish.
+      here: !s.ghost && !isRelayOnly(s),
+      published: !s.ghost && !!s.d,
+      ghost: !!s.ghost,
+    })),
   );
 }
 
