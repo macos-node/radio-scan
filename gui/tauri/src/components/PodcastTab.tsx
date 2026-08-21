@@ -289,7 +289,7 @@ function FollowControl({
         published
           ? "bg-surface font-mono text-nostr hover:text-alert"
           : "border border-surface text-muted hover:border-nostr hover:text-nostr",
-        compact && "px-1",
+        compact ? "px-1" : "w-full text-center",
       )}
     >
       {busy ? "…" : published ? "following" : "follow"}
@@ -345,6 +345,10 @@ export function PodcastTab({
   const [loadingUrl, setLoadingUrl] = useState<string | null>(null);
   // Feed URL just copied to the clipboard — briefly shows a ✓ on that row.
   const [copied, setCopied] = useState<string | null>(null);
+  // Row whose state just changed (followed / unfollowed) — tinted for a moment so
+  // the eye can find it again. In a list of dozens, a chip quietly changing its
+  // label two hundred pixels from the pointer is a change you have to hunt for.
+  const [flash, setFlash] = useState<string | null>(null);
   // Feed the user clicked ✕ on — unsubscribing waits on the confirm dialog. The
   // ✕ sits under the pointer on a hover-revealed row, so a stray click used to
   // drop a subscription outright with no undo.
@@ -399,6 +403,12 @@ export function PodcastTab({
   const chooseSort = (v: PodcastSort) => {
     setSort(v);
     setSetting(PODCAST_SORT_KEY, v);
+    resettle(); // an explicit ask for an order — re-read the dates, do not freeze
+  };
+
+  const flashRow = (url: string) => {
+    setFlash(url);
+    setTimeout(() => setFlash((f) => (f === url ? null : f)), 1600);
   };
 
   const copy = (url: string) => {
@@ -482,6 +492,9 @@ export function PodcastTab({
         } catch (e) {
           console.error("cached_podcasts failed", e);
         }
+        // First moment the list holds real dates: settle once here, then hold that
+        // order steady through the network sweep below.
+        if (!cancelled) resettle();
       }
       // Then refresh each feed in the background. Conditional GET makes an
       // unchanged feed a cheap 304, and the disk-primed rows just get restated.
@@ -497,6 +510,8 @@ export function PodcastTab({
           /* ignore prefetch errors */
         }
       }
+      // Sweep done — let the order settle again, once, on today's episodes.
+      if (!cancelled) resettle();
     })();
     return () => {
       cancelled = true;
@@ -504,12 +519,43 @@ export function PodcastTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subUrlKey]);
 
-  // Display order. Falls back to the persisted stamp for feeds not fetched yet;
-  // `sortSubs` is stable, so unknown-date feeds hold their stored order.
+  /** Display order, with the sort keys FROZEN between settle points.
+   *
+   *  `Recent` sorts on the newest episode date, and those dates arrive one feed at
+   *  a time as the prefetch/refresh sweep lands. Keying the sort off `cache`
+   *  directly re-sorted the whole list on every one of those writes — 26 reorders
+   *  in ~21 s on the reference profile — so rows crawled out from under the
+   *  pointer while you were reading them. Relay-only rows moved furthest: no date
+   *  until their feed answers, so each one started at the bottom and jumped into
+   *  the middle mid-sweep.
+   *
+   *  The order now settles when the user asks for it (a sort change), when the
+   *  disk prime is in, and when a sweep FINISHES — never while one runs. Falls
+   *  back to the persisted stamp for feeds not fetched yet; `sortSubs` is stable,
+   *  so unknown-date feeds hold their stored order.
+   *
+   *  A url the map has not seen is keyed on the spot, so a feed just added — or
+   *  just discovered on a relay — still lands in its right place immediately
+   *  rather than waiting for the next settle. */
+  const orderKeys = useRef(new Map<string, number | null>());
+  const [orderEpoch, setOrderEpoch] = useState(0);
+  const resettle = () => {
+    orderKeys.current.clear();
+    setOrderEpoch((n) => n + 1);
+  };
   const ordered = useMemo(
     () =>
-      sortSubs(rows, sort, (s) => latestEpisodeAt(cache[s.url]) ?? s.latestAt ?? null) as FollowRow[],
-    [rows, sort, cache],
+      sortSubs(rows, sort, (s) => {
+        const keys = orderKeys.current;
+        if (!keys.has(s.url)) {
+          keys.set(s.url, latestEpisodeAt(cache[s.url]) ?? s.latestAt ?? null);
+        }
+        return keys.get(s.url) ?? null;
+      }) as FollowRow[],
+    // `cache` is read here but deliberately NOT a dependency — that omission IS
+    // the freeze. `orderEpoch` is what lets the order move.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, sort, orderEpoch],
   );
 
   /** Re-read every subscribed feed from the network, now.
@@ -543,6 +589,7 @@ export function PodcastTab({
       },
     );
     setRefreshing(false);
+    resettle(); // the run is over: it is now safe for the list to reorder
     const msg = describeOutcome(outcome, "refreshed");
     setBulkMsg(msg);
     setTimeout(() => setBulkMsg((m) => (m === msg ? null : m)), 4000);
@@ -617,6 +664,7 @@ export function PodcastTab({
       // stayed `follow` until restart), so re-read the relays and let
       // mergeFollows mark the row from what they actually serve.
       onPublished?.();
+      flashRow(row.url);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -657,6 +705,7 @@ export function PodcastTab({
     try {
       await unfollowShow(row.url, row.guid, row.show.eventId, row.show.d);
       onPublished?.(); // same reason as follow(): re-read rather than assume
+      flashRow(row.url); // a relay-only row leaves with it; a subscribed one stays
     } catch (e) {
       setError(String(e));
     } finally {
@@ -818,7 +867,13 @@ export function PodcastTab({
                 const open = expanded === s.url;
                 const pod = cache[s.url];
                 return (
-                  <li key={s.url} className="border-b border-surface/50">
+                  <li
+                    key={s.url}
+                    className={cn(
+                      "border-b border-surface/50 transition-colors",
+                      flash === s.url && "bg-nostr/10",
+                    )}
+                  >
                     <div className="group flex items-stretch">
                       <button
                         type="button"
@@ -833,46 +888,56 @@ export function PodcastTab({
                         <span className="min-w-0 flex-1 truncate text-sm text-fg">
                           {s.title}
                         </span>
-                        {s.npub && (
-                          <span
-                            className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[9px] text-nostr"
-                            title={`Nostr npub feed — ${s.npub}\n(RSS bridge today; native 1063 reading planned)`}
-                          >
-                            nostr
-                          </span>
-                        )}
-                        {s.relayOnly && (
-                          <span
-                            className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 text-[9px] text-muted"
-                            title="Followed on the relays, not subscribed on this device."
-                          >
-                            relay
-                          </span>
-                        )}
-                        {loadingUrl === s.url && (
-                          <Loader2 size={12} className="animate-spin text-muted" />
-                        )}
+                        {/* COLUMNS, not inline chips. Every slot below is on every
+                            row and owns its width; only the CONTENTS are optional.
+                            Rendering a chip only when it applies makes each row a
+                            different shape — with `nostr`, `relay`, the spinner and a
+                            variable-width copyright all optional, no two rows lined up
+                            and the eye had nothing straight to run down. */}
+                        <span className="grid w-4 shrink-0 place-items-center">
+                          {loadingUrl === s.url && (
+                            <Loader2 size={12} className="animate-spin text-muted" />
+                          )}
+                        </span>
+                        <span className="flex w-[5.5rem] shrink-0 items-center justify-end gap-1">
+                          {s.npub && (
+                            <span
+                              className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[9px] text-nostr"
+                              title={`Nostr npub feed — ${s.npub}\n(RSS bridge today; native 1063 reading planned)`}
+                            >
+                              nostr
+                            </span>
+                          )}
+                          {s.relayOnly && (
+                            <span
+                              className="rounded-sm bg-surface px-1.5 py-0.5 text-[9px] text-muted"
+                              title="Followed on the relays, not subscribed on this device."
+                            >
+                              relay
+                            </span>
+                          )}
+                        </span>
                         {/* Harvested language + copyright, read through the merge:
                             the STORED slice answers before anything is fetched, so
-                            these survive a restart instead of waiting on a refetch. */}
+                            these survive a restart instead of waiting on a refetch.
+                            Both cells keep their width when empty — that is what makes
+                            the language column a column. */}
                         {(() => {
                           const id = podcastIdentity(s, pod ? liveHarvest(pod) : undefined);
-                          if (!id.language && !id.copyright) return null;
                           return (
                             <span className="flex shrink-0 items-center gap-2 pl-2 text-[10px] text-muted/60">
-                              {id.copyright && (
-                                <span
-                                  className="max-w-[16rem] truncate text-muted/85"
-                                  title={id.copyright}
-                                >
-                                  {id.copyright}
-                                </span>
-                              )}
-                              {id.language && (
-                                <span className="font-mono uppercase text-fg/80">
-                                  {id.language}
-                                </span>
-                              )}
+                              <span
+                                className="w-48 truncate text-right text-muted/85"
+                                title={id.copyright ?? undefined}
+                              >
+                                {id.copyright}
+                              </span>
+                              <span
+                                className="w-10 shrink-0 truncate text-right font-mono uppercase text-fg/80"
+                                title={id.language ?? undefined}
+                              >
+                                {id.language}
+                              </span>
                             </span>
                           );
                         })()}
@@ -880,46 +945,58 @@ export function PodcastTab({
                       {/* Sibling of the row button, never a child: a <button>
                           inside a <button> is invalid HTML and React refuses to
                           hydrate it. */}
-                      <div className="flex shrink-0 items-center pr-1">
-                        <FollowControl
-                          row={s}
-                          signedIn={signedIn}
-                          busy={publishing === s.url}
-                          onFollow={follow}
-                          onUnfollow={(r) => setConfirmUnfollow(r.url)}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => copy(s.url)}
-                        title="Copy feed URL"
-                        aria-label={`Copy ${s.title} feed URL`}
-                        className={cn(
-                          "grid w-8 shrink-0 place-items-center text-muted transition-opacity hover:text-fg",
-                          copied === s.url
-                            ? "opacity-100"
-                            : "opacity-0 group-hover:opacity-100",
-                        )}
-                      >
-                        {copied === s.url ? (
-                          <Check size={14} className="text-ok" />
-                        ) : (
-                          <Copy size={14} />
-                        )}
-                      </button>
-                      {/* Nothing local to remove on a relay-only row: that one is
-                          a published follow, and `following` is how it goes. */}
-                      {!s.relayOnly && (
+                      {/* Fixed rail: `follow` and `following` are different widths,
+                          so the control must not size its own column — otherwise the
+                          copy/✕ gutter to its right dances from row to row. */}
+                      {signedIn && (
+                        <div className="flex w-[4.75rem] shrink-0 items-center pr-1">
+                          <FollowControl
+                            row={s}
+                            signedIn={signedIn}
+                            busy={publishing === s.url}
+                            onFollow={follow}
+                            onUnfollow={(r) => setConfirmUnfollow(r.url)}
+                          />
+                        </div>
+                      )}
+                      {/* One gutter of FIXED width holding both icon buttons, rather
+                          than two buttons that each size themselves. A relay-only row
+                          has nothing local to remove — ✕ is absent by design, and
+                          `following` is how that row goes — but its 2rem must stay
+                          spoken for or every control on those rows slides right and
+                          the whole right edge goes ragged. (An empty spacer element
+                          does not hold the space here: the container has to.) */}
+                      <div className="flex w-16 shrink-0 items-center">
                         <button
                           type="button"
-                          onClick={() => setConfirmUrl(s.url)}
-                          title="Remove from my list"
-                          aria-label={`Unsubscribe ${s.title}`}
-                          className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+                          onClick={() => copy(s.url)}
+                          title="Copy feed URL"
+                          aria-label={`Copy ${s.title} feed URL`}
+                          className={cn(
+                            "grid w-8 shrink-0 place-items-center text-muted transition-opacity hover:text-fg",
+                            copied === s.url
+                              ? "opacity-100"
+                              : "opacity-0 group-hover:opacity-100",
+                          )}
                         >
-                          <X size={14} />
+                          {copied === s.url ? (
+                            <Check size={14} className="text-ok" />
+                          ) : (
+                            <Copy size={14} />
+                          )}
                         </button>
-                      )}
+                        {!s.relayOnly && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmUrl(s.url)}
+                            title="Remove from my list"
+                            aria-label={`Unsubscribe ${s.title}`}
+                            className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {open && (
@@ -966,7 +1043,10 @@ export function PodcastTab({
                   return (
                     <div
                       key={s.url}
-                      className="group relative shrink-0 min-w-[136px] basis-[calc((100%_-_4.5rem)/10)]"
+                      className={cn(
+                        "group relative shrink-0 min-w-[136px] basis-[calc((100%_-_4.5rem)/10)]",
+                        flash === s.url && "rounded-sm bg-nostr/10",
+                      )}
                     >
                       <button
                         type="button"

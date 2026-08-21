@@ -20,6 +20,33 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   compatibility contract for import/export from here on. `image` URL stored, not
   yet rendered. **Export == persisted state**, closing the serializer-drift.
 
+### Changed
+- **The Podcasts list is a set of columns now, not a row of optional chips.** Every
+  slot — spinner, `nostr`/`relay` chips, copyright, language, the follow control, the
+  copy/✕ gutter — is rendered on every row and owns its width; only the *contents* are
+  conditional. Before, each absent element collapsed and shoved everything to its
+  right, so no two rows lined up and there was nothing straight for the eye to run
+  down. The worst offender was ✕, which is absent by design on a relay-only row (there
+  is no local subscription to remove): dropping the button outright pulled that row's
+  whole right-hand cluster **40 px** rightwards. Measured after: every row's follow
+  chip ends on the same pixel column, relay-only and subscribed alike. The language
+  cell also had to be allowed to CLIP — a flex item keeps `min-width: auto`, so
+  `en-us` grew its own cell and pushed the columns left on exactly those rows.
+- **The list no longer re-sorts under the pointer while feeds arrive.** `Recent`
+  orders on the newest episode date, and those dates land one feed at a time as the
+  prefetch or a `refresh` sweep runs — the order was recomputed on every one of those
+  cache writes, which is **26 reorders in ~21 s** on the reference profile. Relay-only
+  rows moved furthest: no date until their feed answers, so each started at the bottom
+  and jumped into the middle mid-sweep. Sort keys are now frozen between settle
+  points — a sort change, the disk prime landing, and a sweep *finishing* — never
+  while one runs. A url the map has not seen is keyed on the spot, so a feed just
+  added or just discovered on a relay still lands in its right place immediately.
+  Verified live: the list region is pixel-identical across a full 27-feed refresh.
+- **A row that just changed state is tinted for a moment.** Following or unfollowing
+  altered one small chip, often hundreds of pixels from the pointer, in a list of
+  dozens — a change you had to hunt for. The row now carries a brief Nostr-tinted
+  wash, in both the list and card views.
+
 ### Added
 - **A `refresh` button on the Podcasts tab.** Feeds were fetched **once per launch**:
   `refreshed` is module-level, so the background prefetch skips a feed for the rest of
