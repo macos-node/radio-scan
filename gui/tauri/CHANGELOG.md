@@ -75,6 +75,26 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   wash, in both the list and card views.
 
 ### Added
+- **A sync line, and `add all` to close the gap it names.** The Podcasts header used
+  to read `10 subscribed · 26 published`, which sounds like this machine published
+  26 — when 16 of those were follows from the other machine that this one had never
+  subscribed to. It now reads `24 shows · 24 here · 24 published`: how many shows
+  are in the list, how many are on THIS device, how many are published to your
+  relays. The counts overlap by design (a synced show is both) and are not meant to
+  total; the two gaps are what you act on, and they are the two buttons — `add all
+  (N)` pulls in every show followed on the relays but missing here, `follow all (N)`
+  publishes every subscription this device has never shared. Push and pull, one
+  each. When both gaps are zero the line says **✓ in sync**.
+  *That claim is scoped, deliberately:* it means every subscription here is
+  published and every published follow is subscribed here. It cannot speak for the
+  other machine — nothing in a relay read reveals what someone else's local list
+  holds, so the other machine is in sync when it says so itself. The tooltip says
+  as much rather than letting the badge overpromise.
+  `add all` takes no confirm and no sequential runner, unlike `follow all`: it
+  writes the local store once, touches no network, and publishes nothing — every
+  row it adds is *already* a follow on the relays, which is why the row is on
+  screen at all. `follow all` asks because publishing is a public act; this is
+  housekeeping, undone per row with ✕, which does ask.
 - **Subscribe a relay-only show onto this device, from its own row.** Clicking the
   hollow device glyph on a show followed from another machine subscribes it here.
   The feed URL was always in the row — it is the follow event's `r` tag, which is

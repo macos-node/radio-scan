@@ -112,6 +112,58 @@ export function followState(row: FollowRow): FollowState {
   return row.show ? "synced" : "local-only";
 }
 
+/** How far this device and the relays have converged, counted over the merged
+ *  rows. The two gaps are the useful part: `notHere` is what another machine
+ *  published and this one has not pulled in, `notPublished` is what this machine
+ *  holds and has never shared. Both zero is the finish line.
+ *
+ *  `inSync` is a claim about THIS device only, and deliberately so: it says every
+ *  subscription here is published and every published follow is subscribed here.
+ *  It cannot say whether the other machine has caught up — that machine is in sync
+ *  when it says so itself. Nothing in a relay read can tell you what someone
+ *  else's local list contains, so the honest scope is the one we can measure. */
+export interface SyncCounts {
+  total: number;
+  here: number;
+  published: number;
+  notHere: number;
+  notPublished: number;
+  inSync: boolean;
+}
+
+export function syncCounts(rows: FollowRow[]): SyncCounts {
+  let here = 0;
+  let published = 0;
+  let notHere = 0;
+  let notPublished = 0;
+  for (const row of rows) {
+    switch (followState(row)) {
+      case "synced":
+        here++;
+        published++;
+        break;
+      case "local-only":
+        here++;
+        notPublished++;
+        break;
+      case "relay-only":
+        published++;
+        notHere++;
+        break;
+    }
+  }
+  return {
+    total: rows.length,
+    here,
+    published,
+    notHere,
+    notPublished,
+    // An empty list is not "in sync", it is empty — claiming convergence over
+    // nothing reads as an answer when no question has been asked yet.
+    inSync: rows.length > 0 && notHere === 0 && notPublished === 0,
+  };
+}
+
 /** Merge local subscriptions with published follows.
  *
  *  Matched by **guid first, then URL** — the U4.5 keying rule, and not

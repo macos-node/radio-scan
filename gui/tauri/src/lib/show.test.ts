@@ -3,6 +3,8 @@ import type { Event as NostrEvent } from "nostr-tools";
 import {
   followState,
   mergeFollows,
+  syncCounts,
+  type FollowState,
   parseShow,
   resolveShows,
   SHOW_KIND,
@@ -267,5 +269,57 @@ describe("followState", () => {
       ["Local only", "local-only"],
       ["Relay only", "relay-only"],
     ]);
+  });
+});
+
+describe("syncCounts", () => {
+  const show = (url: string): Show => ({
+    slug: "s",
+    title: "T",
+    url,
+    tags: [],
+    description: null,
+    eventId: "ff".repeat(32),
+  });
+  const rows = (...specs: FollowState[]) =>
+    specs.map((s, i) => {
+      const url = `u${i}`;
+      if (s === "local-only") return { url, title: url };
+      if (s === "synced") return { url, title: url, show: show(url) };
+      return { url, title: url, show: show(url), relayOnly: true };
+    });
+
+  it("counts a row under both headings when it is both", () => {
+    // A synced row is HERE and PUBLISHED — the two counts overlap by design, so
+    // here + published does not add up to total and is not meant to.
+    const c = syncCounts(rows("synced", "synced"));
+    expect([c.total, c.here, c.published]).toEqual([2, 2, 2]);
+    expect([c.notHere, c.notPublished]).toEqual([0, 0]);
+    expect(c.inSync).toBe(true);
+  });
+
+  it("names both gaps separately", () => {
+    const c = syncCounts(rows("synced", "local-only", "local-only", "relay-only"));
+    expect(c).toEqual({
+      total: 4,
+      here: 3,
+      published: 2,
+      notHere: 1,
+      notPublished: 2,
+      inSync: false,
+    });
+  });
+
+  it("is not in sync while anything is published but not pulled in", () => {
+    expect(syncCounts(rows("synced", "relay-only")).inSync).toBe(false);
+  });
+
+  it("is not in sync while anything is held here but never shared", () => {
+    expect(syncCounts(rows("synced", "local-only")).inSync).toBe(false);
+  });
+
+  it("does not call an empty list in sync", () => {
+    // Convergence over nothing is not an answer; it is an unasked question.
+    expect(syncCounts([]).inSync).toBe(false);
   });
 });

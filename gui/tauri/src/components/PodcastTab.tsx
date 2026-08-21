@@ -30,6 +30,7 @@ import {
 import {
   followState,
   mergeFollows,
+  syncCounts,
   type FollowRow,
   type Show,
 } from "../lib/show";
@@ -738,6 +739,11 @@ export function PodcastTab({
     }
   };
 
+  /** How far this device and the relays have converged. Drives the status line
+   *  and both bulk buttons, so the numbers you read and the numbers you act on
+   *  cannot drift apart. */
+  const counts = useMemo(() => syncCounts(rows), [rows]);
+
   /** Subscriptions this device holds that are not yet published. Relay-only rows
    *  are excluded by construction: they have no local copy, and a device publishes
    *  only what a person did on it (decision #11, step 3). */
@@ -762,6 +768,37 @@ export function PodcastTab({
     setBulkMsg(describeOutcome(outcome));
     setTimeout(() => setBulkMsg((m) => (m === describeOutcome(outcome) ? null : m)), 4000);
     onPublished?.();
+  };
+
+  /** Pull every relay-only row onto this device at once — the mirror of
+   *  `followAll`, and the other half of getting two machines to agree. Push what
+   *  is only here, pull what is only there, and the two gaps close from both ends.
+   *
+   *  No sequential runner and no confirm, unlike `followAll`, and both differences
+   *  are deliberate. This touches nothing but the local store: one write, no
+   *  network, so there is no host to rate-limit and no per-item failure to report.
+   *  And it publishes nothing — every row it adds is already a follow on the
+   *  relays, which is precisely why the row is on screen. Undone per row with ✕,
+   *  which does ask. `followAll` asks because publishing is a public act; this is
+   *  housekeeping. */
+  const addAll = () => {
+    const items = rows.filter((r) => r.relayOnly);
+    if (items.length === 0) return;
+    setSubs((prev) => {
+      const next = mergeSubs(
+        prev,
+        items.map((r) => {
+          const fresh: Sub = { url: r.url, title: r.title };
+          if (r.guid) fresh.guid = r.guid;
+          return fresh;
+        }),
+      );
+      saveSubs(next);
+      return next;
+    });
+    const msg = `added ${items.length}`;
+    setBulkMsg(msg);
+    setTimeout(() => setBulkMsg((m) => (m === msg ? null : m)), 4000);
   };
 
   const unfollow = async (row: FollowRow) => {
@@ -852,11 +889,37 @@ export function PodcastTab({
         <>
           {/* Count + sort + list/card view toggle */}
           <div className="flex items-center gap-2 px-3 pb-1">
-            <span className="font-mono text-[10px] text-muted/60">
-              {subs.length} subscribed
-              {rows.some((r) => r.show) &&
-                ` · ${rows.filter((r) => r.show).length} published`}
+            {/* The three-way state in one line: how many shows there are, how many
+                are on THIS device, how many are published to the relays. The old
+                line said "10 subscribed · 26 published", which read as though this
+                machine had published 26 — when 16 of those were follows from the
+                other machine that this one had never subscribed to. The counts
+                overlap on purpose (a synced show is both), so they are not meant to
+                add up to the total; the gaps are what you act on, and those are the
+                two buttons. */}
+            <span
+              className="font-mono text-[10px] text-muted/60"
+              title={
+                signedIn
+                  ? "shows in this list · subscribed on this device · published to your relays as show.v1"
+                  : "shows in this list · subscribed on this device"
+              }
+            >
+              {counts.total} shows · {counts.here} here
+              {signedIn && ` · ${counts.published} published`}
             </span>
+            {signedIn && counts.inSync && !bulkMsg && (
+              <span
+                className="flex items-center gap-1 font-mono text-[10px] text-ok"
+                title={
+                  "Every subscription here is published, and every published follow is subscribed here.\n" +
+                  "This speaks for THIS device only — another machine is in sync when it says so itself."
+                }
+              >
+                <Check size={11} />
+                in sync
+              </span>
+            )}
             {bulkMsg && (
               <span className="font-mono text-[10px] text-accent">{bulkMsg}</span>
             )}
@@ -869,6 +932,16 @@ export function PodcastTab({
                 className="rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-fg disabled:opacity-40"
               >
                 refresh
+              </button>
+            )}
+            {counts.notHere > 0 && !bulkMsg && (
+              <button
+                type="button"
+                onClick={addAll}
+                title={`Subscribe to ${counts.notHere} show(s) followed on your relays but not held on this device. Local only — nothing is published.`}
+                className="rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+              >
+                add all ({counts.notHere})
               </button>
             )}
             {signedIn && unpublishedRows.length > 0 && !bulkMsg && (
