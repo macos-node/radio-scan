@@ -21,6 +21,19 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   yet rendered. **Export == persisted state**, closing the serializer-drift.
 
 ### Changed
+- **The Stations list lines up too.** Same defect as the Podcasts list, found by
+  looking at a screenshot: a relay-only station has nothing local to remove, so ✕
+  was dropped entirely rather than emptied, and that row's whole right-hand cluster
+  slid **40 px** right — the `published` chip ended at x=1814 on every local row and
+  x=1854 on the two `station.v1` rows followed from another machine. Copy and ✕ now
+  share one fixed gutter, the publish control has a fixed rail (`publish` and
+  `published` are different widths, and the unpublished state carries a border the
+  published one does not — a list holding one of each would have gone ragged the
+  same way), and the bitrate is a cell that stays when empty. Measured after: three
+  local and two relay-only rows all end at the same pixel. The bitrate cell is a
+  latent case rather than an observed one — every station in the seeded list states
+  a bitrate, and one reporting 0 still renders `0k` — but the first feed that omits
+  it would have collapsed the column.
 - **A row's state is two glyphs in a fixed column, not three scattered signals.**
   Whether a show is HERE (subscribed on this device) and whether it is PUBLISHED (a
   `show.v1` the relays serve) used to be spread across a `relay` chip, a

@@ -63,7 +63,7 @@ function PublishControl({
         published
           ? "bg-surface font-mono text-nostr hover:text-alert"
           : "border border-surface text-muted hover:border-nostr hover:text-nostr",
-        compact && "px-1",
+        compact ? "px-1" : "w-full text-center",
       )}
     >
       {busy ? "…" : published ? "published" : "publish"}
@@ -277,51 +277,74 @@ export function StationList({
                       </span>
                     )}
                   </span>
-                  {s.bitrate != null && (
-                    <span className="shrink-0 font-mono text-xs text-muted">
-                      {s.bitrate}k
-                    </span>
-                  )}
+                  {/* A CELL, kept even when empty. Dropping it when a station
+                      states no bitrate would collapse the column and drag
+                      everything right of it along — the same shape as the ✕ slot
+                      below. Nothing in the seeded list hits this today (a station
+                      reporting 0 still renders `0k`), but the first feed that
+                      omits it would. Clips rather than grows: a flex item keeps
+                      `min-width: auto`, so an unusually wide value would push the
+                      column left on exactly the rows carrying it. */}
+                  <span className="w-10 shrink-0 truncate text-right font-mono text-xs text-muted">
+                    {s.bitrate != null ? `${s.bitrate}k` : ""}
+                  </span>
                 </button>
                 {/* Sibling of the row button, never a child — a <button> inside a
                     <button> is invalid HTML (learned on the Podcasts tab). */}
-                <div className="flex shrink-0 items-center pr-1">
-                  <PublishControl
-                    station={s}
-                    signedIn={!!signedIn}
-                    busy={busySlug === s.slug}
-                    published={!!s.d}
-                    onPublish={publish}
-                    onUnpublish={() => setConfirmUnpublish(s.slug)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => copy(s)}
-                  title={`Copy ${s.name} URL`}
-                  aria-label={`Copy ${s.name} stream URL`}
-                  className={cn(
-                    "grid w-8 shrink-0 place-items-center text-muted transition-opacity hover:text-fg",
-                    copied === s.slug ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                  )}
-                >
-                  {copied === s.slug ? (
-                    <Check size={14} className="text-ok" />
-                  ) : (
-                    <Copy size={14} />
-                  )}
-                </button>
-                {onRemove && !isRelayOnly(s) && (
+                {/* Fixed rail: `publish` and `published` are different widths (and
+                    the unpublished state carries a border the published one does
+                    not), so the control must not size its own column — otherwise
+                    the gutter to its right dances from row to row the moment the
+                    list holds one of each. */}
+                {!!signedIn && (
+                  <div className="flex w-[4.75rem] shrink-0 items-center pr-1">
+                    <PublishControl
+                      station={s}
+                      signedIn={!!signedIn}
+                      busy={busySlug === s.slug}
+                      published={!!s.d}
+                      onPublish={publish}
+                      onUnpublish={() => setConfirmUnpublish(s.slug)}
+                    />
+                  </div>
+                )}
+                {/* One gutter of FIXED width holding both icon buttons. A
+                    relay-only station has nothing local to remove, so ✕ is absent
+                    by design — but its 2rem must stay spoken for or that row's
+                    whole right-hand cluster slides right and the column goes
+                    ragged. Measured before this: the published chip ended at
+                    x=1814 on every local row and x=1854 on the two relay-only ones.
+                    (The space has to live on the container; an empty spacer
+                    element lays out at zero width here — learned on Podcasts.) */}
+                <div className="flex w-16 shrink-0 items-center">
                   <button
                     type="button"
-                    onClick={() => setConfirmSlug(s.slug)}
-                    title={`Remove ${s.name} from this device`}
-                    aria-label={`Remove ${s.name}`}
-                    className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+                    onClick={() => copy(s)}
+                    title={`Copy ${s.name} URL`}
+                    aria-label={`Copy ${s.name} stream URL`}
+                    className={cn(
+                      "grid w-8 shrink-0 place-items-center text-muted transition-opacity hover:text-fg",
+                      copied === s.slug ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                    )}
                   >
-                    <X size={14} />
+                    {copied === s.slug ? (
+                      <Check size={14} className="text-ok" />
+                    ) : (
+                      <Copy size={14} />
+                    )}
                   </button>
-                )}
+                  {onRemove && !isRelayOnly(s) && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmSlug(s.slug)}
+                      title={`Remove ${s.name} from this device`}
+                      aria-label={`Remove ${s.name}`}
+                      className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
               </li>
             );
           })}
