@@ -323,3 +323,36 @@ describe("syncCounts", () => {
     expect(syncCounts([]).inSync).toBe(false);
   });
 });
+
+describe("ghost rows", () => {
+  const ghost = { url: "u", title: "Gone", ghost: true };
+
+  it("classifies a ghost as its own state, not as local-only", () => {
+    // Without the flag a ghost reads local-only — the one reading that is
+    // actively wrong, since nothing local exists to read.
+    expect(followState(ghost)).toBe("ghost");
+  });
+
+  it("leaves a ghost out of every count", () => {
+    const c = syncCounts([
+      { url: "a", title: "A", show: { slug: "a", title: "A", url: "a", tags: [], description: null } },
+      ghost,
+    ]);
+    expect([c.total, c.here, c.published]).toEqual([1, 1, 1]);
+    expect([c.notHere, c.notPublished]).toEqual([0, 0]);
+  });
+
+  it("does not let a ghost hold `in sync` hostage", () => {
+    // The user retracted that follow deliberately. A tombstone must not read as
+    // an unclosed gap, or the badge could never come back.
+    const c = syncCounts([
+      { url: "a", title: "A", show: { slug: "a", title: "A", url: "a", tags: [], description: null } },
+      ghost,
+    ]);
+    expect(c.inSync).toBe(true);
+  });
+
+  it("is not in sync when the list holds nothing but ghosts", () => {
+    expect(syncCounts([ghost]).inSync).toBe(false);
+  });
+});

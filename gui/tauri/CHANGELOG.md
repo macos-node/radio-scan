@@ -21,6 +21,15 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   yet rendered. **Export == persisted state**, closing the serializer-drift.
 
 ### Changed
+- **The list no longer re-sorts when a row LEAVES.** The prefetch effect re-runs
+  whenever the row set changes — which includes a removal — and it settled the
+  order every time it finished, even when it had fetched nothing. So unsubscribing
+  or unfollowing one show reshuffled the whole list, which is the "rows moved under
+  me" complaint wearing a different hat, and it would have thrown a ghost away from
+  the one spot the eye was looking. The settle is now gated on the sweep actually
+  bringing something back. Measured: the title column at the top of the list is
+  pixel-identical across a removal (0 differing pixels), while the status line
+  updates as it should.
 - **The Stations list lines up too.** Same defect as the Podcasts list, found by
   looking at a screenshot: a relay-only station has nothing local to remove, so ✕
   was dropped entirely rather than emptied, and that row's whole right-hand cluster
@@ -75,6 +84,23 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   wash, in both the list and card views.
 
 ### Added
+- **An unfollowed relay-only show leaves a ghost behind, so the click can be taken
+  back.** Unfollowing a show that is followed but not subscribed here removed the
+  only thing holding it in the list — and the row was the only place its feed URL
+  still existed on this machine, so a mis-click could not be undone from the UI at
+  all; you had to go to the other device and look the URL up. The row now stays
+  until ntune closes: dimmed, marked `gone`, both slots hollow, brightening as you
+  reach for it. One click on the relay slot follows it again at the same address,
+  one click on the device slot subscribes it here instead, and ✕ dismisses it for
+  good (no confirm — it is already off this device and off your relays; the row is
+  only waiting). Session-only by design: persisting it would invent a third store
+  to reconcile, and what needs covering is the seconds after a mis-click.
+  A ghost is the fourth quadrant of a state space documented as having three — so
+  `FollowState` grew a `ghost` case and says why: the three-way invariant holds
+  over merge output, and this row lives above the merge, never persisted, never
+  merged. It counts as neither here nor published, is left out of the sync line's
+  totals, and specifically cannot hold `in sync` hostage — a tombstone for
+  something you removed from both sides is not an unclosed gap.
 - **A sync line, and `add all` to close the gap it names.** The Podcasts header used
   to read `10 subscribed · 26 published`, which sounds like this machine published
   26 — when 16 of those were follows from the other machine that this one had never

@@ -93,21 +93,34 @@ export function resolveShows(
 export interface FollowRow extends Sub {
   show?: Show;
   relayOnly?: boolean;
+  /** A row kept on screen after its follow was retracted, for this session only.
+   *  Unfollowing a relay-only show removes the one thing holding it in the list —
+   *  and its feed URL went with it, so a mis-click could not be undone from the
+   *  UI at all. A ghost is not merge output and is never persisted: it is the UI
+   *  remembering, until the window closes, what it was just told to forget. */
+  ghost?: boolean;
 }
 
 /** Where one row stands between this device and the relays.
  *
  *  The two questions a row answers are "is it HERE?" (a local subscription) and
- *  "is it PUBLISHED?" (a `show.v1` the relays serve) — but only three of the four
- *  combinations can exist. Neither-here-nor-published is not a state a row can be
- *  in: a row exists BECAUSE one of the two is true, so there is nothing to render
- *  it from. Callers can therefore treat this as a closed three-way choice rather
- *  than a pair of independent flags. */
-export type FollowState = "synced" | "local-only" | "relay-only";
+ *  "is it PUBLISHED?" (a `show.v1` the relays serve). Of the four combinations,
+ *  only three can come out of `mergeFollows`: neither-here-nor-published gives it
+ *  nothing to build a row from.
+ *
+ *  `ghost` is that fourth quadrant, and it exists only above the merge — a row the
+ *  UI holds open after a retraction so the retraction can be undone (see
+ *  `FollowRow.ghost`). It is never persisted and never merge output, so the
+ *  invariant still holds where it was claimed: over merged rows. Callers switching
+ *  on this must handle all four; a ghost counts as neither, which is the point. */
+export type FollowState = "synced" | "local-only" | "relay-only" | "ghost";
 
 /** Classify a row. `relayOnly` implies published — a relay-only row is one that
- *  mergeFollows built out of a follow event, so the follow is by definition there. */
+ *  mergeFollows built out of a follow event, so the follow is by definition there.
+ *  `ghost` is checked first: a ghost has neither flag, and would otherwise read as
+ *  `local-only`, which is the one reading that would be actively wrong. */
 export function followState(row: FollowRow): FollowState {
+  if (row.ghost) return "ghost";
   if (row.relayOnly) return "relay-only";
   return row.show ? "synced" : "local-only";
 }
@@ -132,12 +145,19 @@ export interface SyncCounts {
 }
 
 export function syncCounts(rows: FollowRow[]): SyncCounts {
+  let total = 0;
   let here = 0;
   let published = 0;
   let notHere = 0;
   let notPublished = 0;
   for (const row of rows) {
-    switch (followState(row)) {
+    const state = followState(row);
+    // A ghost is a tombstone, not a show: counting it would report a list longer
+    // than the one on screen means anything, and — worse — it would hold `inSync`
+    // false forever over something the user deliberately removed from BOTH sides.
+    if (state === "ghost") continue;
+    total++;
+    switch (state) {
       case "synced":
         here++;
         published++;
@@ -153,14 +173,14 @@ export function syncCounts(rows: FollowRow[]): SyncCounts {
     }
   }
   return {
-    total: rows.length,
+    total,
     here,
     published,
     notHere,
     notPublished,
     // An empty list is not "in sync", it is empty — claiming convergence over
     // nothing reads as an answer when no question has been asked yet.
-    inSync: rows.length > 0 && notHere === 0 && notPublished === 0,
+    inSync: total > 0 && notHere === 0 && notPublished === 0,
   };
 }
 

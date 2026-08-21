@@ -290,7 +290,8 @@ function StateColumn({
   onSubscribeHere: (row: FollowRow) => void;
   compact?: boolean;
 }) {
-  const here = followState(row) !== "relay-only";
+  const state = followState(row);
+  const here = state === "synced" || state === "local-only";
   const published = !!row.show;
   const size = compact ? 11 : 13;
   const slot = cn(
@@ -307,7 +308,11 @@ function StateColumn({
         <button
           type="button"
           onClick={() => onSubscribeHere(row)}
-          title={"Followed on the relays, not subscribed on this device.\nClick to subscribe here — the feed URL comes from the follow itself."}
+          title={
+            state === "ghost"
+              ? "Unfollowed a moment ago — not on this device, and no longer published.\nThe row stays until ntune closes so the click can be taken back. Click to subscribe here."
+              : "Followed on the relays, not subscribed on this device.\nClick to subscribe here — the feed URL comes from the follow itself."
+          }
           aria-label={`Subscribe to ${row.title} on this device`}
           className={cn(slot, "text-muted/40 hover:bg-surfaceHover hover:text-fg")}
         >
@@ -326,7 +331,9 @@ function StateColumn({
           title={
             published
               ? `Published to your relays as show.v1 — airplay:show:${row.show!.slug}\nClick to unfollow (publishes a kind:5). Your subscription stays.`
-              : "Not published. Click to publish a show.v1 follow to your relays."
+              : state === "ghost"
+                ? "Unfollowed. Click to follow again — a fresh show.v1 at the same address, as though it never left."
+                : "Not published. Click to publish a show.v1 follow to your relays."
           }
           aria-label={published ? `Unfollow ${row.title}` : `Follow ${row.title}`}
           className={cn(
@@ -396,6 +403,12 @@ export function PodcastTab({
   const [loadingUrl, setLoadingUrl] = useState<string | null>(null);
   // Feed URL just copied to the clipboard — briefly shows a ✓ on that row.
   const [copied, setCopied] = useState<string | null>(null);
+  /** Rows kept on screen after their follow was retracted — see `FollowRow.ghost`.
+   *  Session-only and deliberately so: persisting them would invent a third store
+   *  to reconcile, and the point is narrower than that. It is the seconds after a
+   *  mis-click that need covering, and in those seconds this row is the only place
+   *  the feed URL still exists on this machine. */
+  const [ghosts, setGhosts] = useState<FollowRow[]>([]);
   // Row whose state just changed (followed / unfollowed) — tinted for a moment so
   // the eye can find it again. In a list of dozens, a chip quietly changing its
   // label two hundred pixels from the pointer is a change you have to hunt for.
@@ -517,7 +530,14 @@ export function PodcastTab({
   // Local subscriptions merged with the follows published to the relays. A show
   // followed on another machine appears here even though this device never
   // subscribed to it — that is the whole point of publishing them.
-  const rows = useMemo(() => mergeFollows(subs, shows), [subs, shows]);
+  const rows = useMemo(() => {
+    const merged = mergeFollows(subs, shows);
+    if (ghosts.length === 0) return merged;
+    // A ghost drops out the moment the thing it stands for comes back — re-follow
+    // it and the relays serve the row again, subscribe it and the store does.
+    const have = new Set(merged.map((r) => r.url));
+    return [...merged, ...ghosts.filter((g) => !have.has(g.url))];
+  }, [subs, shows, ghosts]);
 
   // Prefetch every subscription's feed in the background so card/list metadata
   // (language, copyright, identity, newest-episode date) shows without expanding.
@@ -527,7 +547,10 @@ export function PodcastTab({
   // Keyed on the URL SET, not on `subs` identity: the latestAt reconcile below
   // rewrites `subs` after every fetch, and a dep on the array would cancel and
   // restart this loop each time — re-fetching whichever feed was in flight.
-  const subUrlKey = rows.map((s) => s.url).join("\n");
+  const subUrlKey = rows
+    .filter((s) => !s.ghost)
+    .map((s) => s.url)
+    .join("\n");
   useEffect(() => {
     let cancelled = false;
     const urls = subUrlKey ? subUrlKey.split("\n") : [];
@@ -549,6 +572,7 @@ export function PodcastTab({
       }
       // Then refresh each feed in the background. Conditional GET makes an
       // unchanged feed a cheap 304, and the disk-primed rows just get restated.
+      let fetched = 0;
       for (const url of urls) {
         if (cancelled) return;
         if (refreshed.has(url)) continue;
@@ -557,12 +581,19 @@ export function PodcastTab({
           if (cancelled) return;
           refreshed.add(url);
           putCache(url, p);
+          fetched++;
         } catch {
           /* ignore prefetch errors */
         }
       }
-      // Sweep done — let the order settle again, once, on today's episodes.
-      if (!cancelled) resettle();
+      // Sweep done — let the order settle again, once, on today's episodes. ONLY
+      // if the sweep actually brought some back: this effect re-runs whenever the
+      // row set changes, which includes a row LEAVING (unsubscribed, or unfollowed
+      // down to a ghost). Re-sorting the whole list because something was removed
+      // is the "rows moved under me" complaint wearing a different hat — and it
+      // would throw a ghost away from the spot its row was occupying, which is the
+      // one place the eye is looking.
+      if (fetched > 0 && !cancelled) resettle();
     })();
     return () => {
       cancelled = true;
@@ -622,7 +653,7 @@ export function PodcastTab({
    *  a read sweep on 2026-08-19. No added delay — each request is already paced by
    *  the one before it, and a conditional GET makes an unchanged feed a 304. */
   const refreshAll = async () => {
-    const urls = rows.map((r) => r.url);
+    const urls = rows.filter((r) => !r.ghost).map((r) => r.url);
     if (urls.length === 0 || refreshing) return;
     setRefreshing(true);
     setError(null);
@@ -747,7 +778,7 @@ export function PodcastTab({
   /** Subscriptions this device holds that are not yet published. Relay-only rows
    *  are excluded by construction: they have no local copy, and a device publishes
    *  only what a person did on it (decision #11, step 3). */
-  const unpublishedRows = rows.filter((r) => !r.show && !r.relayOnly);
+  const unpublishedRows = rows.filter((r) => !r.show && !r.relayOnly && !r.ghost);
 
   const followAll = async () => {
     setConfirmFollowAll(false);
@@ -807,13 +838,32 @@ export function PodcastTab({
     setPublishing(row.url);
     try {
       await unfollowShow(row.url, row.guid, row.show.eventId, row.show.d);
+      if (row.relayOnly) {
+        // The follow was the ONLY thing holding this row in the list, and the row
+        // was the only place its feed URL survived on this machine. Keep a ghost
+        // so a mis-click is one click back rather than a trip to the other device
+        // to look the URL up again.
+        const ghost: FollowRow = { url: row.url, title: row.title, ghost: true };
+        if (row.guid) ghost.guid = row.guid;
+        setGhosts((prev) =>
+          prev.some((g) => g.url === ghost.url) ? prev : [...prev, ghost],
+        );
+      }
       onPublished?.(); // same reason as follow(): re-read rather than assume
-      flashRow(row.url); // a relay-only row leaves with it; a subscribed one stays
+      flashRow(row.url); // a relay-only row leaves a ghost behind; a subscribed one stays
     } catch (e) {
       setError(String(e));
     } finally {
       setPublishing(null);
     }
+  };
+
+  /** Drop a ghost for good. No confirm: it is already off this device and off the
+   *  relays, so there is nothing left to lose — this only stops the row waiting
+   *  around for an undo that is not coming. */
+  const dismissGhost = (url: string) => {
+    setGhosts((prev) => prev.filter((g) => g.url !== url));
+    if (expanded === url) setExpanded(null);
   };
 
   const toggle = (url: string) => {
@@ -1009,7 +1059,11 @@ export function PodcastTab({
                   <li
                     key={s.url}
                     className={cn(
-                      "border-b border-surface/50 transition-colors",
+                      "border-b border-surface/50 transition-all",
+                      // A ghost reads as a tombstone rather than a row — dimmed,
+                      // but it brightens as you reach for it, because the whole
+                      // reason it is still here is that you might want it back.
+                      s.ghost && "opacity-50 hover:opacity-100",
                       flash === s.url && "bg-nostr/20",
                     )}
                   >
@@ -1039,13 +1093,27 @@ export function PodcastTab({
                           )}
                         </span>
                         <span className="flex w-12 shrink-0 items-center justify-end">
-                          {s.npub && (
+                          {/* One chip fits this slot, so a ghost takes it: the row
+                              is dimmed and a word beats leaving the reader to infer
+                              why. `gone` and not `unfollowed` because the longer
+                              word does not fit — and a chip wider than its slot is
+                              exactly what drags a column out of line. */}
+                          {s.ghost ? (
                             <span
-                              className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[9px] text-nostr"
-                              title={`Nostr npub feed — ${s.npub}\n(RSS bridge today; native 1063 reading planned)`}
+                              className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[9px] text-muted"
+                              title={"Unfollowed this session. Kept on screen so you can undo it — it goes for good when ntune closes."}
                             >
-                              nostr
+                              gone
                             </span>
+                          ) : (
+                            s.npub && (
+                              <span
+                                className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[9px] text-nostr"
+                                title={`Nostr npub feed — ${s.npub}\n(RSS bridge today; native 1063 reading planned)`}
+                              >
+                                nostr
+                              </span>
+                            )
                           )}
                         </span>
                         {/* Harvested language + copyright, read through the merge:
@@ -1115,16 +1183,28 @@ export function PodcastTab({
                             <Copy size={14} />
                           )}
                         </button>
-                        {!s.relayOnly && (
+                        {s.ghost ? (
                           <button
                             type="button"
-                            onClick={() => setConfirmUrl(s.url)}
-                            title="Remove from my list"
-                            aria-label={`Unsubscribe ${s.title}`}
-                            className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+                            onClick={() => dismissGhost(s.url)}
+                            title="Dismiss. This show is already off this device and off your relays — the row is only waiting in case you want it back."
+                            aria-label={`Dismiss ${s.title}`}
+                            className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-fg group-hover:opacity-100"
                           >
                             <X size={14} />
                           </button>
+                        ) : (
+                          !s.relayOnly && (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmUrl(s.url)}
+                              title="Remove from my list"
+                              aria-label={`Unsubscribe ${s.title}`}
+                              className="grid w-8 shrink-0 place-items-center text-muted opacity-0 transition-opacity hover:text-alert group-hover:opacity-100"
+                            >
+                              <X size={14} />
+                            </button>
+                          )
                         )}
                       </div>
                     </div>
@@ -1365,7 +1445,7 @@ export function PodcastTab({
           </p>
           <p className="mt-2 text-xs text-muted">
             {unfollowRow.relayOnly
-              ? "A Nostr unfollow (kind:5) is published to your relays and the row goes with it — this show is followed but not subscribed on this device, so the follow is the only thing holding it in the list. You can follow it again at any time."
+              ? "A Nostr unfollow (kind:5) is published to your relays. This show is followed but not subscribed on this device, so the follow is the only thing holding it in the list — the row stays behind dimmed and marked “gone”, and follows again in one click, until you close ntune."
               : "A Nostr unfollow (kind:5) is published to your relays. Your subscription and its episodes stay exactly as they are; only the public follow goes."}
           </p>
           <div className="mt-4 flex justify-end gap-2">
