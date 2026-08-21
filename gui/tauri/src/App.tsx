@@ -22,6 +22,7 @@ import { BackupDialog } from "./components/BackupDialog";
 import { Modal } from "./components/Modal";
 import {
   addFavorite,
+  addLocalStation,
   exportJson,
   getIdentity,
   getProxyPort,
@@ -190,13 +191,15 @@ export default function App() {
     return `${n} follow${n === 1 ? "" : "s"} published twice — a device is on an older build. Unpublish and re-publish from the newest one.`;
   }, [superseded]);
 
-  /** Where the station list came from — shown next to the section header. */
+  /** Where the station list came from — shown next to the section header. Says
+   *  nothing about COUNTS once the relays are in: the list's own sync line states
+   *  those, and two differently-worded tallies of one situation on one screen is
+   *  the confusion this was all in aid of. */
   const source = useMemo(() => {
-    const local = `${localStations.length} local`;
-    if (usingRelay) return `${local} · +${relayStations.length} station.v1`;
-    if (relayLoading) return `${local} · checking relays…`;
-    return `${local} · saved on this device`;
-  }, [localStations.length, usingRelay, relayStations.length, relayLoading]);
+    if (usingRelay) return "local + station.v1";
+    if (relayLoading) return `${localStations.length} local · checking relays…`;
+    return `${localStations.length} local · saved on this device`;
+  }, [localStations.length, usingRelay, relayLoading]);
 
   // One hidden <audio> element drives all playback, fed through the Rust loopback
   // proxy (proxy.rs) so a packaged secure origin can play plain http:// without
@@ -286,6 +289,29 @@ export default function App() {
     removeLocalStation(s.slug).catch((e) =>
       console.error("remove_local_station failed", e),
     );
+  }, []);
+
+  /** Save a station this device does not hold — one published from another
+   *  machine — into the local store. The mirror of publishing, and the move that
+   *  brings a second device into line: the stream URL is already in the row (it is
+   *  the published event's own `r` tag, which is what put the row on screen), but
+   *  taking it across used to mean copying that URL out and pasting it into Add.
+   *  Local only: nothing is published, because the event it came from is already
+   *  on the relays. */
+  const adoptStation = useCallback(async (s: Station) => {
+    const saved = await addLocalStation({
+      slug: s.slug,
+      name: s.name,
+      url: s.url,
+      fmt: s.fmt,
+      bitrate: s.bitrate,
+      tags: s.tags,
+      description: s.description,
+    });
+    setLocalStations((prev) => [
+      saved,
+      ...prev.filter((p) => p.url !== saved.url && p.slug !== saved.slug),
+    ]);
   }, []);
 
   /** Publish this station as a `station.v1` follow. */
@@ -843,6 +869,7 @@ export default function App() {
                 onRemove={removeStation}
                 onPublish={publishStationRow}
                 onUnpublish={unpublishStation}
+                onAdopt={adoptStation}
                 signedIn={!!identity}
                 icy={icyByUrl}
               />

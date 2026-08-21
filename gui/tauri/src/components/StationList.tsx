@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy, LayoutGrid, List, Loader2, Radio, X } from "lucide-react";
 import { copyText, type IcyInfo, type Station } from "../lib/tauri";
-import { isRelayOnly, stationIdentity } from "../lib/station";
+import { isRelayOnly, stationIdentity, stationSyncCounts } from "../lib/station";
+import { describeOutcome, publishSequentially } from "../lib/publishAll";
 import { stationIconKey } from "../lib/mediaIcon";
 import {
   getSetting,
@@ -11,6 +12,7 @@ import {
 } from "../lib/settings";
 import { MediaGlyph } from "./MediaGlyph";
 import { Modal } from "./Modal";
+import { StateSlots } from "./StateSlots";
 import { cn } from "../lib/cn";
 
 type View = "list" | "cards";
@@ -19,55 +21,67 @@ function loadView(): View {
   return getSetting(STATION_VIEW_KEY) === "cards" ? "cards" : "list";
 }
 
-/** Publish / unpublish one station — the toggle that separates "share this" from
- *  "keep this here".
+/** The Stations tab's reading of the shared two-slot control (components/
+ *  StateSlots.tsx, which the Podcasts list uses too).
  *
- *  Mirrors the Podcasts tab's control, and exists for the same reason: ✕ used to do
- *  both, so a station could not be tidied off one device without retracting it for
- *  every device, nor unshared without losing it locally. Hidden without a signing
- *  key, since there is nothing to publish with.
+ *  It answers the same two questions the Podcasts rows answer — is this station
+ *  HERE (in this device's store) and is it PUBLISHED (served by your relays as a
+ *  `station.v1`)? Before this the answers were spread across a `published` text
+ *  chip and whether ✕ was drawn at all, which meant a station published from
+ *  another machine was identifiable only by a MISSING control: the one signal a
+ *  reader cannot see.
  *
- *  A row that came only from the relays has no local copy — its `d` is set and its
- *  slug is a content hash — so unpublishing it makes it disappear entirely, which the
- *  confirm says plainly. */
-function PublishControl({
+ *  The words are this tab's own — a station is KEPT where a podcast is
+ *  SUBSCRIBED — but the shape and the rules are shared, so the two lists cannot
+ *  drift into describing one situation differently. Publishing is one click;
+ *  unpublishing asks, because it writes a deletion to every relay; and removing
+ *  the local copy stays on ✕, which asks too. */
+function StationState({
   station,
   signedIn,
   busy,
-  published,
   onPublish,
   onUnpublish,
+  onAdopt,
   compact = false,
 }: {
   station: Station;
   signedIn: boolean;
   busy: boolean;
-  published: boolean;
   onPublish?: (s: Station) => void;
   onUnpublish?: (s: Station) => void;
+  onAdopt?: (s: Station) => void;
   compact?: boolean;
 }) {
-  if (!signedIn || (!onPublish && !onUnpublish)) return null;
+  const here = !isRelayOnly(station);
+  const published = !!station.d;
+  const canToggle = published ? !!onUnpublish : !!onPublish;
   return (
-    <button
-      type="button"
-      onClick={() => (published ? onUnpublish?.(station) : onPublish?.(station))}
-      disabled={busy}
-      title={
-        published
-          ? `Published as station.v1 — ${station.d ?? "this station"}\nClick to unpublish (kind:5). The station stays on this device.`
-          : "Publish this station to the relays so your other devices see it"
+    <StateSlots
+      here={here}
+      published={published}
+      signedIn={signedIn}
+      busy={busy}
+      onAdopt={here || !onAdopt ? undefined : () => onAdopt(station)}
+      onPublishToggle={
+        canToggle
+          ? () => (published ? onUnpublish?.(station) : onPublish?.(station))
+          : undefined
       }
-      className={cn(
-        "shrink-0 rounded-sm px-1.5 py-0.5 text-[9px] transition-colors disabled:opacity-40",
-        published
-          ? "bg-surface font-mono text-nostr hover:text-alert"
-          : "border border-surface text-muted hover:border-nostr hover:text-nostr",
-        compact ? "px-1" : "w-full text-center",
-      )}
-    >
-      {busy ? "…" : published ? "published" : "publish"}
-    </button>
+      titles={{
+        device: here
+          ? "Kept on this device."
+          : "Published from another device, not kept on this one.\nClick to save it here — the stream URL comes from the published station itself.",
+        relay: published
+          ? `Published to your relays as station.v1 — ${station.d}\nClick to unpublish (kind:5). The station stays on this device.`
+          : "Not published. Click to publish this station so your other devices see it.",
+      }}
+      labels={{
+        device: `Save ${station.name} to this device`,
+        relay: published ? `Unpublish ${station.name}` : `Publish ${station.name}`,
+      }}
+      compact={compact}
+    />
   );
 }
 
@@ -86,6 +100,7 @@ export function StationList({
   onRemove,
   onPublish,
   onUnpublish,
+  onAdopt,
   icy,
   signedIn,
 }: {
@@ -99,6 +114,9 @@ export function StationList({
   onPublish?: (s: Station) => void;
   /** Retract the published follow, leaving the local row alone. */
   onUnpublish?: (s: Station) => void;
+  /** Save a station this device does not hold — one published from another
+   *  machine — into the local store. Local only; nothing is published. */
+  onAdopt?: (s: Station) => void | Promise<void>;
   icy?: Record<string, IcyInfo>;
   /** Signed in — removing also publishes a kind:5 unfollow, so the confirm says so. */
   signedIn?: boolean;
@@ -116,6 +134,10 @@ export function StationList({
   const unpublishCancelRef = useRef<HTMLButtonElement>(null);
   // Slug currently being published/retracted, so only that row's control is busy.
   const [busySlug, setBusySlug] = useState<string | null>(null);
+  // Progress / summary for a bulk run, in the status line's own slot.
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
+  // Publishing the whole list at once is a bulk public act, so it asks.
+  const [confirmPublishAll, setConfirmPublishAll] = useState(false);
 
   // Re-read once the durable settings store finishes loading (initSettings),
   // so a migrated / non-graceful-stale view pref lands even though this list is
@@ -157,6 +179,68 @@ export function StationList({
     setView(v);
     setSetting(STATION_VIEW_KEY, v);
   };
+
+  /** How far this device and the relays have converged — the same reading, from
+   *  the same helper, that the Podcasts tab gives. */
+  const counts = stationSyncCounts(stations);
+  const notHere = stations.filter((s) => isRelayOnly(s));
+  const unpublished = stations.filter((s) => !isRelayOnly(s) && !s.d);
+
+  const say = (msg: string) => {
+    setBulkMsg(msg);
+    setTimeout(() => setBulkMsg((m) => (m === msg ? null : m)), 4000);
+  };
+
+  const adopt = (s: Station) => {
+    if (!onAdopt) return;
+    Promise.resolve(onAdopt(s)).catch((e) =>
+      console.error("adopt station failed", e),
+    );
+  };
+
+  /** Take every station published from another device onto this one. Sequential
+   *  because each one is a store write, and a store that rewrites the same file
+   *  per entry should not be asked to do it from twelve directions at once. Local
+   *  only, so no confirm: nothing is published — every station it saves is already
+   *  a `station.v1` on the relays, which is why the row is on screen — and each is
+   *  undone by its own ✕, which does ask. */
+  const adoptAll = async () => {
+    if (!onAdopt || notHere.length === 0) return;
+    const outcome = await publishSequentially(
+      notHere,
+      (s) => Promise.resolve(onAdopt(s)),
+      {
+        delayMs: 0,
+        onProgress: (done, total) =>
+          setBulkMsg(done < total ? `adding ${done + 1}/${total}…` : null),
+      },
+    );
+    for (const f of outcome.failed) {
+      console.error("adopt station failed", f.item.slug, f.error);
+    }
+    say(describeOutcome(outcome, "added"));
+  };
+
+  /** Publish every station this device holds and has never shared. Sequential and
+   *  behind a confirm, unlike adoptAll: this one writes to every relay, once per
+   *  station — the same line the Podcasts tab draws between `add all` and
+   *  `follow all`. */
+  const publishAll = async () => {
+    setConfirmPublishAll(false);
+    if (!onPublish || unpublished.length === 0) return;
+    const outcome = await publishSequentially(
+      unpublished,
+      (s) => Promise.resolve(onPublish(s)),
+      {
+        onProgress: (done, total) =>
+          setBulkMsg(done < total ? `publishing ${done + 1}/${total}…` : null),
+      },
+    );
+    for (const f of outcome.failed) {
+      console.error("publish_station failed", f.item.slug, f.error);
+    }
+    say(describeOutcome(outcome));
+  };
   const copy = (s: Station) => {
     copyText(s.url)
       .then(() => {
@@ -193,8 +277,58 @@ export function StationList({
 
   return (
     <div className="flex flex-col">
-      {/* View toggle */}
-      <div className="flex items-center px-3 pb-1">
+      {/* The three-way state in one line, worded exactly as the Podcasts tab
+          words it: how many stations there are, how many are on THIS device, how
+          many are published to your relays. The counts overlap on purpose (a
+          synced station is both), so they are not meant to add up; the gaps are
+          what you act on, and those are the two buttons. */}
+      <div className="flex items-center gap-2 px-3 pb-1">
+        <span
+          className="font-mono text-[10px] text-muted/60"
+          title={
+            signedIn
+              ? "stations in this list · kept on this device · published to your relays as station.v1"
+              : "stations in this list · kept on this device"
+          }
+        >
+          {counts.total} stations · {counts.here} here
+          {signedIn && ` · ${counts.published} published`}
+        </span>
+        {signedIn && counts.inSync && !bulkMsg && (
+          <span
+            className="flex items-center gap-1 font-mono text-[10px] text-ok"
+            title={
+              "Everything here is published, and everything published is here.\n" +
+              "This speaks for THIS device only — another machine is in sync when it says so itself."
+            }
+          >
+            <Check size={11} />
+            in sync
+          </span>
+        )}
+        {bulkMsg && (
+          <span className="font-mono text-[10px] text-accent">{bulkMsg}</span>
+        )}
+        {!bulkMsg && onAdopt && notHere.length > 0 && (
+          <button
+            type="button"
+            onClick={() => void adoptAll()}
+            title={`Save ${notHere.length} station(s) published from another device onto this one. Local only — nothing is published.`}
+            className="rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+          >
+            add all ({notHere.length})
+          </button>
+        )}
+        {!bulkMsg && signedIn && onPublish && unpublished.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setConfirmPublishAll(true)}
+            title={`Publish ${unpublished.length} station(s) this device holds but has not shared`}
+            className="rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-nostr"
+          >
+            publish all ({unpublished.length})
+          </button>
+        )}
         <div className="ml-auto flex items-center gap-0.5">
           {(
             [
@@ -291,23 +425,19 @@ export function StationList({
                 </button>
                 {/* Sibling of the row button, never a child — a <button> inside a
                     <button> is invalid HTML (learned on the Podcasts tab). */}
-                {/* Fixed rail: `publish` and `published` are different widths (and
-                    the unpublished state carries a border the published one does
-                    not), so the control must not size its own column — otherwise
-                    the gutter to its right dances from row to row the moment the
-                    list holds one of each. */}
-                {!!signedIn && (
-                  <div className="flex w-[4.75rem] shrink-0 items-center pr-1">
-                    <PublishControl
-                      station={s}
-                      signedIn={!!signedIn}
-                      busy={busySlug === s.slug}
-                      published={!!s.d}
-                      onPublish={publish}
-                      onUnpublish={() => setConfirmUnpublish(s.slug)}
-                    />
-                  </div>
-                )}
+                {/* Fixed rail, drawn signed in or out: the device slot means
+                    something without a key, and a column that appears and
+                    disappears is the raggedness this layout just removed. */}
+                <div className="flex w-12 shrink-0 items-center pr-1">
+                  <StationState
+                    station={s}
+                    signedIn={!!signedIn}
+                    busy={busySlug === s.slug}
+                    onPublish={publish}
+                    onUnpublish={() => setConfirmUnpublish(s.slug)}
+                    onAdopt={onAdopt ? adopt : undefined}
+                  />
+                </div>
                 {/* One gutter of FIXED width holding both icon buttons. A
                     relay-only station has nothing local to remove, so ✕ is absent
                     by design — but its 2rem must stay spoken for or that row's
@@ -407,13 +537,13 @@ export function StationList({
                     />
                   )}
                   <div className="absolute left-1 top-1">
-                    <PublishControl
+                    <StationState
                       station={s}
                       signedIn={!!signedIn}
                       busy={busySlug === s.slug}
-                      published={!!s.d}
                       onPublish={publish}
                       onUnpublish={() => setConfirmUnpublish(s.slug)}
+                      onAdopt={onAdopt ? adopt : undefined}
                       compact
                     />
                   </div>
@@ -434,6 +564,43 @@ export function StationList({
           </div>
           </div>
         </div>
+      )}
+
+      {/* Publishing the whole list is a bulk PUBLIC act, so it asks — the same
+          line the Podcasts tab draws between `add all` (local, silent) and
+          `follow all` (relays, confirmed). */}
+      {confirmPublishAll && (
+        <Modal title="Publish all?" onClose={() => setConfirmPublishAll(false)}>
+          <p className="text-sm text-fg">
+            Publish{" "}
+            <span className="font-medium">
+              {unpublished.length} station{unpublished.length === 1 ? "" : "s"}
+            </span>{" "}
+            to your relays?
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            Only the stations this device keeps and has not published yet. Anything
+            already published is left alone, and stations that came from another
+            device are never re-published from here. They go out one at a time, so a
+            long list takes a moment.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmPublishAll(false)}
+              className="rounded-sm border border-surface px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void publishAll()}
+              className="rounded-sm bg-accent px-3 py-1.5 text-xs font-medium text-bg transition-opacity hover:opacity-90"
+            >
+              Publish all
+            </button>
+          </div>
+        </Modal>
       )}
 
       {/* Removal is confirmed — the hover-✕ sits right where the pointer already

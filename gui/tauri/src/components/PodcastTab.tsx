@@ -5,14 +5,12 @@ import {
   ChevronRight,
   Copy,
   Download,
-  Laptop,
   LayoutGrid,
   List,
   Loader2,
   Play,
   Plus,
   Rss,
-  Share2,
   Upload,
   X,
 } from "lucide-react";
@@ -59,6 +57,7 @@ import {
 } from "../lib/settings";
 import { podcastIconKey } from "../lib/mediaIcon";
 import { MediaGlyph } from "./MediaGlyph";
+import { StateSlots } from "./StateSlots";
 import { Modal } from "./Modal";
 import { EnrichDialog } from "./EnrichDialog";
 import { cn } from "../lib/cn";
@@ -247,32 +246,14 @@ function IdentityRow({
   );
 }
 
-/** The two-slot state column for one row.
+/** The Podcasts tab's reading of the shared two-slot control (components/
+ *  StateSlots.tsx, which the Stations list uses too). The shape is shared; the
+ *  words are not, because a podcast is SUBSCRIBED where a station is KEPT, and
+ *  the relay slot publishes a `show.v1` rather than a `station.v1`.
  *
- *  A row answers two questions — is this show HERE (subscribed on this device),
- *  and is it PUBLISHED (a `show.v1` the relays serve)? Those answers used to be
- *  spread across three places: a `relay` chip, a `follow`/`following` text toggle,
- *  and whether ✕ was drawn at all. Reading one row meant assembling three
- *  scattered signals, and comparing two rows meant doing it twice. Both slots are
- *  drawn in the same two positions on every row now, so the state is a shape you
- *  scan down a column rather than a sentence you reassemble per row.
- *
- *  Each slot toggles the dimension it shows, which is the other half of the point.
- *  The relay slot publishes or retracts the follow. The device slot SUBSCRIBES a
- *  relay-only row onto this machine — new, and the move that actually brings two
- *  devices into line: pulling across a show followed elsewhere previously meant
- *  copying its feed URL out of the row and pasting it back into the Add box.
- *
- *  Deliberately NOT symmetrical. A filled device slot is an indicator, not a
- *  button: removing a local subscription stays on ✕, which asks first, because one
- *  stray click on a hover-revealed row must not drop a subscription. Retracting a
- *  follow asks too — it is a public act — while following, being additive and
- *  undone by clicking again, does not.
- *
- *  Every word these glyphs replaced lives on in their tooltips; nothing here is
- *  only a shape. `nostr` stays a chip of its own: it means the feed is SERVED FROM
- *  an npub, which is a different fact from a follow being PUBLISHED TO the relays.
- *  Both are Nostr, neither implies the other. */
+ *  `nostr` stays a chip of its own rather than joining this column: it means the
+ *  feed is SERVED FROM an npub, which is a different fact from a follow being
+ *  PUBLISHED TO the relays. Both are Nostr, neither implies the other. */
 function StateColumn({
   row,
   signedIn,
@@ -293,65 +274,32 @@ function StateColumn({
   const state = followState(row);
   const here = state === "synced" || state === "local-only";
   const published = !!row.show;
-  const size = compact ? 11 : 13;
-  const slot = cn(
-    "grid shrink-0 place-items-center rounded-sm transition-colors",
-    compact ? "h-4 w-4" : "h-5 w-5",
-  );
   return (
-    <div className={cn("flex shrink-0 items-center", compact ? "gap-0.5" : "gap-1")}>
-      {here ? (
-        <span className={cn(slot, "bg-surface text-fg/80")} title="Subscribed on this device.">
-          <Laptop size={size} />
-        </span>
-      ) : (
-        <button
-          type="button"
-          onClick={() => onSubscribeHere(row)}
-          title={
-            state === "ghost"
-              ? "Unfollowed a moment ago — not on this device, and no longer published.\nThe row stays until ntune closes so the click can be taken back. Click to subscribe here."
-              : "Followed on the relays, not subscribed on this device.\nClick to subscribe here — the feed URL comes from the follow itself."
-          }
-          aria-label={`Subscribe to ${row.title} on this device`}
-          className={cn(slot, "text-muted/40 hover:bg-surfaceHover hover:text-fg")}
-        >
-          <Laptop size={size} />
-        </button>
-      )}
-      {/* Published state is not local state: this reflects a `show.v1` read back
-          off the relays, so it lights up when the event lands, not when the click
-          happens. Hidden entirely without a signing key — there is nothing to
-          publish with, and a dead control explains less than no control. */}
-      {signedIn && (
-        <button
-          type="button"
-          onClick={() => (published ? onUnfollow(row) : onFollow(row))}
-          disabled={busy}
-          title={
-            published
-              ? `Published to your relays as show.v1 — airplay:show:${row.show!.slug}\nClick to unfollow (publishes a kind:5). Your subscription stays.`
-              : state === "ghost"
-                ? "Unfollowed. Click to follow again — a fresh show.v1 at the same address, as though it never left."
-                : "Not published. Click to publish a show.v1 follow to your relays."
-          }
-          aria-label={published ? `Unfollow ${row.title}` : `Follow ${row.title}`}
-          className={cn(
-            slot,
-            "disabled:opacity-40",
-            published
-              ? "bg-surface text-nostr hover:text-alert"
-              : "text-muted/40 hover:bg-surfaceHover hover:text-nostr",
-          )}
-        >
-          {busy ? (
-            <Loader2 size={size} className="animate-spin" />
-          ) : (
-            <Share2 size={size} />
-          )}
-        </button>
-      )}
-    </div>
+    <StateSlots
+      here={here}
+      published={published}
+      signedIn={signedIn}
+      busy={busy}
+      onAdopt={here ? undefined : () => onSubscribeHere(row)}
+      onPublishToggle={() => (published ? onUnfollow(row) : onFollow(row))}
+      titles={{
+        device: here
+          ? "Subscribed on this device."
+          : state === "ghost"
+            ? "Unfollowed a moment ago — not on this device, and no longer published.\nThe row stays until ntune closes so the click can be taken back. Click to subscribe here."
+            : "Followed on the relays, not subscribed on this device.\nClick to subscribe here — the feed URL comes from the follow itself.",
+        relay: published
+          ? `Published to your relays as show.v1 — airplay:show:${row.show!.slug}\nClick to unfollow (publishes a kind:5). Your subscription stays.`
+          : state === "ghost"
+            ? "Unfollowed. Click to follow again — a fresh show.v1 at the same address, as though it never left."
+            : "Not published. Click to publish a show.v1 follow to your relays.",
+      }}
+      labels={{
+        device: `Subscribe to ${row.title} on this device`,
+        relay: published ? `Unfollow ${row.title}` : `Follow ${row.title}`,
+      }}
+      compact={compact}
+    />
   );
 }
 

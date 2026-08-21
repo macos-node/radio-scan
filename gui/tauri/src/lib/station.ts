@@ -8,6 +8,7 @@
 // descriptive tag (fmt / br / server / t) is optional.
 
 import type { Event as NostrEvent } from "nostr-tools";
+import { countSync, type SyncCounts } from "./sync";
 import { addressOf, resolveAddressable, DELETE_KIND } from "./addressable";
 
 export const STATION_KIND = 31241; // station.v1 — a followed radio stream
@@ -236,3 +237,14 @@ export function toExportStation(s: Station): Record<string, unknown> {
 export function isRelayOnly(s: Station): boolean {
   return s.relayOnly === true;
 }
+
+/** This device's convergence with the relays, over the merged station rows — the
+ *  same reading the Podcasts tab gives, from the same helper, so the two tabs
+ *  cannot describe one situation in two vocabularies. `d` is the published
+ *  address: set means the relays serve this station as a `station.v1`. */
+export function stationSyncCounts(stations: Station[]): SyncCounts {
+  return countSync(
+    stations.map((s) => ({ here: !isRelayOnly(s), published: !!s.d })),
+  );
+}
+

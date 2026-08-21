@@ -21,6 +21,22 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   yet rendered. **Export == persisted state**, closing the serializer-drift.
 
 ### Changed
+- **Stations and Podcasts now speak one language.** The two tabs described the same
+  three-way state in two vocabularies: Podcasts said `24 shows · 24 here · 24
+  published` with a glyph per dimension, Stations said `9 local · +11 station.v1`
+  with a `published` text chip and no device dimension at all — a station published
+  from another machine was identifiable only by a MISSING ✕, which is the one
+  signal a reader cannot see. Stations now carries the same two-slot column and the
+  same sync line, from the same code: the control is one shared component
+  (`components/StateSlots.tsx`) and the counting one shared helper (`lib/sync.ts`),
+  so the two lists cannot drift apart again by editing only one of them. Each tab
+  keeps its own words — a station is KEPT where a podcast is SUBSCRIBED — because
+  sharing a control should not mean sharing a vocabulary.
+  The old header count was not just differently worded, it was misleading:
+  `9 local · +11 station.v1` reads as twenty stations. There are **eleven** — nine
+  held here and published, two published from the other machine — which is exactly
+  what `11 stations · 9 here · 11 published` says. The header no longer counts at
+  all; it says where the list came from and leaves tallying to the line.
 - **The list no longer re-sorts when a row LEAVES.** The prefetch effect re-runs
   whenever the row set changes — which includes a removal — and it settled the
   order every time it finished, even when it had fetched nothing. So unsubscribing
@@ -84,6 +100,14 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   wash, in both the list and card views.
 
 ### Added
+- **`add all` and `publish all` for stations, and per-row save from the relays.**
+  The mirror of the Podcasts pair, and the same asymmetry: `add all (N)` saves every
+  station published from another device onto this one — local, silent, no confirm,
+  because nothing is published and each is undone by its own ✕ — while `publish all
+  (N)` writes to every relay once per station and therefore asks first. Clicking a
+  row's hollow device glyph does the same for one station. The stream URL was always
+  in the row (the published event's `r` tag, which is what put it on screen); taking
+  it across used to mean copying that URL out and pasting it into Add.
 - **An unfollowed relay-only show leaves a ghost behind, so the click can be taken
   back.** Unfollowing a show that is followed but not subscribed here removed the
   only thing holding it in the list — and the row was the only place its feed URL

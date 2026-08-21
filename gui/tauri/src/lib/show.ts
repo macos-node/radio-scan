@@ -9,7 +9,10 @@
 
 import type { Event as NostrEvent } from "nostr-tools";
 import { addressOf, resolveAddressable } from "./addressable";
+import { countSync, type SyncCounts } from "./sync";
 import type { Sub } from "./podcasts";
+
+export type { SyncCounts };
 
 export const SHOW_KIND = 31242; // show.v1 — a followed podcast feed
 
@@ -125,63 +128,20 @@ export function followState(row: FollowRow): FollowState {
   return row.show ? "synced" : "local-only";
 }
 
-/** How far this device and the relays have converged, counted over the merged
- *  rows. The two gaps are the useful part: `notHere` is what another machine
- *  published and this one has not pulled in, `notPublished` is what this machine
- *  holds and has never shared. Both zero is the finish line.
- *
- *  `inSync` is a claim about THIS device only, and deliberately so: it says every
- *  subscription here is published and every published follow is subscribed here.
- *  It cannot say whether the other machine has caught up — that machine is in sync
- *  when it says so itself. Nothing in a relay read can tell you what someone
- *  else's local list contains, so the honest scope is the one we can measure. */
-export interface SyncCounts {
-  total: number;
-  here: number;
-  published: number;
-  notHere: number;
-  notPublished: number;
-  inSync: boolean;
-}
-
+/** This device's convergence with the relays, over the merged podcast rows.
+ *  Shape and caveats live in lib/sync.ts, shared with stations so the two tabs
+ *  cannot describe the same situation in different words. */
 export function syncCounts(rows: FollowRow[]): SyncCounts {
-  let total = 0;
-  let here = 0;
-  let published = 0;
-  let notHere = 0;
-  let notPublished = 0;
-  for (const row of rows) {
-    const state = followState(row);
-    // A ghost is a tombstone, not a show: counting it would report a list longer
-    // than the one on screen means anything, and — worse — it would hold `inSync`
-    // false forever over something the user deliberately removed from BOTH sides.
-    if (state === "ghost") continue;
-    total++;
-    switch (state) {
-      case "synced":
-        here++;
-        published++;
-        break;
-      case "local-only":
-        here++;
-        notPublished++;
-        break;
-      case "relay-only":
-        published++;
-        notHere++;
-        break;
-    }
-  }
-  return {
-    total,
-    here,
-    published,
-    notHere,
-    notPublished,
-    // An empty list is not "in sync", it is empty — claiming convergence over
-    // nothing reads as an answer when no question has been asked yet.
-    inSync: total > 0 && notHere === 0 && notPublished === 0,
-  };
+  return countSync(
+    rows.map((row) => {
+      const state = followState(row);
+      return {
+        here: state === "synced" || state === "local-only",
+        published: state === "synced" || state === "relay-only",
+        ghost: state === "ghost",
+      };
+    }),
+  );
 }
 
 /** Merge local subscriptions with published follows.

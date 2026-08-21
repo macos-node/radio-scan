@@ -5,6 +5,7 @@ import {
   parseStationsJson,
   resolveStations,
   stationIdentity,
+  stationSyncCounts,
   toExportStation,
   type Station,
 } from "./station";
@@ -204,5 +205,47 @@ describe("export == persisted state (U4.5 H3)", () => {
       { slug: "s", name: "S", url: "http://x/y", harvest: { icyName: 42, bitrate: "loud" } },
     ]);
     expect(back[0].harvest).toBeUndefined();
+  });
+});
+
+describe("stationSyncCounts", () => {
+  const st = (slug: string, opts: { d?: string; relayOnly?: boolean } = {}): Station => ({
+    slug,
+    name: slug,
+    url: `https://example.com/${slug}`,
+    tags: [],
+    fmt: null,
+    bitrate: null,
+    description: null,
+    ...(opts.d ? { d: opts.d } : {}),
+    ...(opts.relayOnly ? { relayOnly: true } : {}),
+  });
+
+  it("reads the same three-way state the Podcasts tab reports", () => {
+    const c = stationSyncCounts([
+      st("synced", { d: "airplay:station:a" }),          // here and published
+      st("local", {}),                                    // here only
+      st("elsewhere", { d: "airplay:station:c", relayOnly: true }), // published only
+    ]);
+    expect(c).toEqual({
+      total: 3,
+      here: 2,
+      published: 2,
+      notHere: 1,
+      notPublished: 1,
+      inSync: false,
+    });
+  });
+
+  it("is in sync only when both gaps are closed", () => {
+    expect(stationSyncCounts([st("a", { d: "airplay:station:a" })]).inSync).toBe(true);
+    expect(stationSyncCounts([st("a", {})]).inSync).toBe(false);
+    expect(
+      stationSyncCounts([st("a", { d: "x", relayOnly: true })]).inSync,
+    ).toBe(false);
+  });
+
+  it("does not call an empty list in sync", () => {
+    expect(stationSyncCounts([]).inSync).toBe(false);
   });
 });
