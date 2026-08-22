@@ -322,6 +322,7 @@ export function PodcastTab({
   currentKey,
   playing,
   shows,
+  relaysAnswered,
   onPublished,
   signedIn,
 }: {
@@ -335,6 +336,11 @@ export function PodcastTab({
    *  published mid-session, so the row is marked by re-asking the relays rather
    *  than by trusting the click. */
   onPublished?: () => void;
+  /** At least one relay has answered — see FollowsState.answered. Everything this
+   *  tab says about PUBLISHED state is conditional on it: with no answer, `shows`
+   *  is empty for want of asking, not because nothing is published, and the two
+   *  read identically from here. */
+  relaysAnswered: boolean;
   /** A signing key is loaded — without one there is nothing to publish with. */
   signedIn: boolean;
 }) {
@@ -904,9 +910,24 @@ export function PodcastTab({
               }
             >
               {counts.total} shows · {counts.here} here
-              {signedIn && ` · ${counts.published} published`}
+              {signedIn && relaysAnswered && ` · ${counts.published} published`}
             </span>
-            {signedIn && counts.inSync && !bulkMsg && (
+            {/* Silence is not zero. With no relay answered there is nothing
+                truthful to say about publishing, so the line says nothing rather
+                than saying `0 published` — which reads as a fact and, next to
+                `follow all`, as an instruction. */}
+            {signedIn && !relaysAnswered && (
+              <span
+                className="font-mono text-[10px] text-muted/40"
+                title={
+                  "No relay has answered yet, so what is published is unknown — not zero.\n" +
+                  "Bulk publish stays hidden until one does."
+                }
+              >
+                · relays quiet
+              </span>
+            )}
+            {signedIn && relaysAnswered && counts.inSync && !bulkMsg && (
               <span
                 className="flex items-center gap-1 font-mono text-[10px] text-ok"
                 title={
@@ -932,7 +953,7 @@ export function PodcastTab({
                 refresh
               </button>
             )}
-            {counts.notHere > 0 && !bulkMsg && (
+            {relaysAnswered && counts.notHere > 0 && !bulkMsg && (
               <button
                 type="button"
                 onClick={addAll}
@@ -942,7 +963,7 @@ export function PodcastTab({
                 add all ({counts.notHere})
               </button>
             )}
-            {signedIn && unpublishedRows.length > 0 && !bulkMsg && (
+            {signedIn && relaysAnswered && unpublishedRows.length > 0 && !bulkMsg && (
               <button
                 type="button"
                 onClick={() => setConfirmFollowAll(true)}

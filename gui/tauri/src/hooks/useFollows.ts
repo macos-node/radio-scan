@@ -23,6 +23,17 @@ export interface FollowsState {
    *  target must have exactly one address, so a non-empty map is always wrong and
    *  always worth showing. */
   superseded: Map<string, string>;
+  /** Has ANY relay actually answered — an event, or an EOSE saying "nothing"?
+   *
+   *  The question `loading` cannot answer. `loading` is cleared by a 5 s timeout
+   *  precisely so a silent relay does not hang the spinner, so a machine that
+   *  reached nobody looks exactly like one whose relays serve nothing: both end
+   *  up `loading: false` with empty lists. Downstream that difference is the
+   *  difference between "you have published nothing" and "we have not asked
+   *  anyone yet", and one of those must not put a publish-everything button on
+   *  screen. Measured 2026-08-22: two of three sockets died over ten hours with
+   *  nothing reconnecting them, which is how a running app arrives at silence. */
+  answered: boolean;
   /** Re-read the published lists NOW, folding anything new into the live map.
    *
    *  Call it after publishing: a follow published mid-session did not mark its own
@@ -50,6 +61,7 @@ export function useFollows(
   const [shows, setShows] = useState<Show[]>([]);
   const [superseded, setSuperseded] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [answered, setAnswered] = useState(false);
   const byKeyRef = useRef<Map<string, NostrEvent>>(new Map());
   // Set while the subscription is live; a no-op before mount and after teardown,
   // so a late `refresh()` from an in-flight publish cannot touch a closed pool.
@@ -66,6 +78,7 @@ export function useFollows(
     setShows([]);
     setSuperseded(new Map());
     setLoading(true);
+    setAnswered(false);
 
     const pool = new SimplePool();
     const byKey = byKeyRef.current;
@@ -88,9 +101,12 @@ export function useFollows(
 
     const sub = pool.subscribeMany(RELAYS, filter, {
       onevent(ev) {
+        setAnswered(true);
         if (ingestEvent(byKey, ev, ADDRESSABLE)) recompute();
       },
       oneose() {
+        // EOSE is an answer: "nothing here" is a reading, silence is not.
+        setAnswered(true);
         setLoading(false);
       },
     });
@@ -105,6 +121,7 @@ export function useFollows(
           for (const ev of evs) {
             if (ingestEvent(byKey, ev, ADDRESSABLE)) changed = true;
           }
+          setAnswered(true);
           if (changed) recompute();
         })
         .catch((e) => console.error("follows refresh failed", e));
@@ -121,5 +138,5 @@ export function useFollows(
     };
   }, [ownerHex, active]);
 
-  return { stations, shows, loading, superseded, refresh };
+  return { stations, shows, loading, answered, superseded, refresh };
 }

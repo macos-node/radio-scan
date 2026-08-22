@@ -106,6 +106,7 @@ export function StationList({
   onPublish,
   onUnpublish,
   onAdopt,
+  relaysAnswered,
   icy,
   signedIn,
 }: {
@@ -122,6 +123,11 @@ export function StationList({
   /** Save a station this device does not hold — one published from another
    *  machine — into the local store. Local only; nothing is published. */
   onAdopt?: (s: Station) => void | Promise<void>;
+  /** At least one relay has answered — see FollowsState.answered. Everything this
+   *  list says about PUBLISHED state is conditional on it: with no answer, the
+   *  relay overlay is empty for want of asking, not because nothing is published,
+   *  and the two read identically from here. */
+  relaysAnswered: boolean;
   icy?: Record<string, IcyInfo>;
   /** Signed in — removing also publishes a kind:5 unfollow, so the confirm says so. */
   signedIn?: boolean;
@@ -336,9 +342,21 @@ export function StationList({
           }
         >
           {counts.total} stations · {counts.here} here
-          {signedIn && ` · ${counts.published} published`}
+          {signedIn && relaysAnswered && ` · ${counts.published} published`}
         </span>
-        {signedIn && counts.inSync && !bulkMsg && (
+        {/* Silence is not zero — same rule the Podcasts tab follows. */}
+        {signedIn && !relaysAnswered && (
+          <span
+            className="font-mono text-[10px] text-muted/40"
+            title={
+              "No relay has answered yet, so what is published is unknown — not zero.\n" +
+              "Bulk publish stays hidden until one does."
+            }
+          >
+            · relays quiet
+          </span>
+        )}
+        {signedIn && relaysAnswered && counts.inSync && !bulkMsg && (
           <span
             className="flex items-center gap-1 font-mono text-[10px] text-ok"
             title={
@@ -353,7 +371,7 @@ export function StationList({
         {bulkMsg && (
           <span className="font-mono text-[10px] text-accent">{bulkMsg}</span>
         )}
-        {!bulkMsg && onAdopt && notHere.length > 0 && (
+        {!bulkMsg && relaysAnswered && onAdopt && notHere.length > 0 && (
           <button
             type="button"
             onClick={() => void adoptAll()}
@@ -363,7 +381,7 @@ export function StationList({
             add all ({notHere.length})
           </button>
         )}
-        {!bulkMsg && signedIn && onPublish && unpublished.length > 0 && (
+        {!bulkMsg && signedIn && relaysAnswered && onPublish && unpublished.length > 0 && (
           <button
             type="button"
             onClick={() => setConfirmPublishAll(true)}

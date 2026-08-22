@@ -115,6 +115,7 @@ export default function App() {
     stations: relayStations,
     shows: relayShows,
     loading: relayLoading,
+    answered: relaysAnswered,
     superseded,
     refresh: refreshFollows,
   } = useFollows(ownerHex, identityResolved);
@@ -884,6 +885,7 @@ export default function App() {
                 onPublish={publishStationRow}
                 onUnpublish={unpublishStation}
                 onAdopt={adoptStation}
+                relaysAnswered={relaysAnswered}
                 signedIn={!!identity}
                 icy={icyByUrl}
               />
@@ -891,6 +893,7 @@ export default function App() {
           ) : (
             <PodcastTab
               shows={relayShows}
+              relaysAnswered={relaysAnswered}
               onPublished={refreshFollows}
               signedIn={!!identity}
               onPlayEpisode={playEpisode}
