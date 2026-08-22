@@ -1372,6 +1372,37 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   ntune's OWN `com.apple.WebKit.Networking` instance holds on 443 — 3
   connections, one per relay, on a healthy launch.
 
+- **FOR THE LINUX SESSION — overnight relay-decay run, agreed 2026-08-22 evening.**
+  Both machines are being left running overnight with ntune open, deliberately on
+  DIFFERENT builds, to settle whether the heartbeat in `122b1ef` actually recovers
+  a read that has gone silent. This is the one question neither side can answer
+  alone, and the window is tonight.
+  **Do NOT pull and rebuild before leaving it.** The Linux box holding the
+  pre-heartbeat build IS the control; macOS is running the treatment. Pulling
+  tonight throws the comparison away — pull in the morning, after the reading.
+  **In the morning, from the still-running app, record:**
+  1. The two status lines verbatim, and whether `✓ in sync` is still shown. macOS
+     went to bed on `26 shows · 26 here · 26 published ✓ in sync` and
+     `11 stations · 11 here · 11 published ✓ in sync`.
+  2. `ps -o lstart=,etime=` for the ntune process — the reading is worthless
+     without knowing how long it actually ran.
+  3. **The relay socket count, attributed to the WEBVIEW'S NETWORK PROCESS, not
+     to ntune.** On macOS that is this app's own
+     `com.apple.WebKit.Networking` instance; on Linux it is the WebKitGTK network
+     process. `lsof -p <ntune pid>` can never see a relay socket — it returns the
+     Rust/reqwest side instead. Do not count by relay IP either: `104.26.x` /
+     `172.67.x` are Cloudflare and shared with everything else on the machine, and
+     **primal answers over IPv6**, which an IPv4 address list misses outright.
+     Healthy is 3, one per relay.
+  **Baseline to beat:** 10h33m on the pre-gate build left two of three sockets
+  dead with nothing reconnecting them. The prediction is that the control shows
+  the same decay (and, being pre-`8c66b56`, states it as `0 published`), while the
+  treatment either holds 3 or recovers to 3 with its counts intact.
+  **Caution on the control box.** That build has no relay-answered gate. If it
+  does go silent overnight it will offer `follow all (N)` / `publish all (N)`
+  against a read of nothing — the exact trap `8c66b56` closes. Record the button,
+  do not press it.
+
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
   reconcile heard tracks vs ndisc's catalogue) and the Nostr publisher/poller.
