@@ -97,6 +97,17 @@ export default function App() {
   // set, fall back to reading the suite owner's published set.
   const [identity, setIdentity] = useState<Identity | null>(null);
   const ownerHex = identity?.pk ?? OWNER_PUBKEY;
+  /** Has the keychain answered yet — with a key or with "there is none"?
+   *
+   *  Not the same question as `!!identity`, and the difference is a whole
+   *  published list. `ownerHex` falls back to the suite owner while the answer is
+   *  outstanding, so subscribing before it lands reads SOMEONE ELSE'S follows and
+   *  paints them as yours until the swap. That window used to be invisible because
+   *  a synchronous `get_identity` froze the webview behind the macOS keychain
+   *  prompt (see the note on the command in src-tauri/src/lib.rs); making it async
+   *  fixed the freeze and, in doing so, made the window live. So: no relay read,
+   *  and no claim about what is published, until we know whose relays to ask. */
+  const [identityResolved, setIdentityResolved] = useState(false);
 
   // U1: the station list is that pubkey's published `station.v1` (31241) events
   // off the relays. The Rust seed is the first-run fallback until any exist.
@@ -106,7 +117,7 @@ export default function App() {
     loading: relayLoading,
     superseded,
     refresh: refreshFollows,
-  } = useFollows(ownerHex, true);
+  } = useFollows(ownerHex, identityResolved);
   // The local, no-key station store (stations.json) — the always-available base
   // list. Seeded from the Rust seed set on first run; user adds/removes persist
   // to disk. The Nostr station.v1 list (relayStations) is an optional overlay.
@@ -239,7 +250,10 @@ export default function App() {
     initSettings().catch((e) => console.error("initSettings failed", e));
     getIdentity()
       .then(setIdentity)
-      .catch((e) => console.error("get_identity failed", e));
+      .catch((e) => console.error("get_identity failed", e))
+      // Resolved either way: no key is an answer, and a keychain that errored is
+      // one too. Leaving this false on failure would mean never reading a relay.
+      .finally(() => setIdentityResolved(true));
     getVersion().then(setVersion).catch(() => setVersion(""));
     getProxyPort()
       .then(setProxyPort)

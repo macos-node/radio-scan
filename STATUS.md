@@ -1278,6 +1278,30 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   answered; make the four Keychain commands `async`. The same absence-vs-zero
   reading that produced a false regression report on the relay capture, now in
   the surface a user acts on.
+  **Method correction (2026-08-22, same day).** The `lsof` evidence quoted above
+  is void, and the claim it supported is now hypothesis rather than measurement.
+  Relay sockets are held by **`com.apple.WebKit.Networking`**, the XPC service
+  WKWebView does its networking in — NOT by the `ntune` process. The snapshot was
+  scoped `lsof -p <ntune pid>`, which by construction can never show one. What it
+  actually counted was the Rust-side feed prefetch over reqwest, which is why it
+  appeared to flap 0→1→2→0. Measured correctly — poll the relay IPs across all
+  processes and name the holder — a healthy launch holds **3 relay sockets,
+  steady from 02s**, while `ntune` itself holds none.
+  What survives unchanged is the symptom, which never depended on `lsof`: the UI
+  read `0 published` on both tabs while the relays demonstrably served 24 follows
+  and 11 stations, and corrected on the very next launch. What is NOT established
+  is the mechanism — that a synchronous Keychain command froze the WKWebView. It
+  is well-founded on Tauri's threading model (a sync command runs on the main
+  thread) and the fix is justified on that basis, but the matched control has not
+  been run: the UNFIXED binary under an unanswered prompt, measured with the
+  corrected harness. Two ways to get it, neither yet done — rebuild an unfixed
+  binary (a fresh ad-hoc signature re-triggers the prompt by construction), or
+  `security lock-keychain login.keychain` against the shipped one, which is the
+  shipped-build failure mode this is claimed to matter for.
+  *Two bad measurements in one day, both the shape this file already records —
+  hashing PNGs that ImageMagick restamped, `dict.get(url, 0)` reading absent as
+  emptied. Check that the thing being counted is the thing being claimed, before
+  the count is quoted at anyone.*
 
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +

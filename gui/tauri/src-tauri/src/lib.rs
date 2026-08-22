@@ -590,8 +590,21 @@ fn owner_keys() -> Result<Keys, String> {
     keys_from_nsec(&nsec)
 }
 
+// The four Keychain commands below are `async` for one reason, and it is not
+// concurrency: Tauri runs a SYNC command on the main thread, which is the thread
+// driving the WKWebView. macOS puts an authorization prompt in front of
+// `get_password` whenever the caller is not the binary the Keychain item's ACL
+// trusts — routinely in development, since an unsigned app is re-signed on every
+// rebuild, and in a shipped build any time the login keychain is locked. Blocking
+// the main thread there freezes ALL JavaScript, so the relay subscription never
+// opens a socket and the UI settles into `0 published` with a button offering to
+// publish everything. Measured on macOS 2026-08-22: zero connections to any relay
+// while the prompt sat unanswered, and correct counts on the very next launch.
+// `async` moves them onto the async runtime, so the prompt blocks the identity
+// call and nothing else. Every other nsec-touching command was already async,
+// which is why publishing never showed this.
 #[tauri::command]
-fn get_identity() -> Result<Option<Identity>, String> {
+async fn get_identity() -> Result<Option<Identity>, String> {
     let Some(nsec) = load_nsec()? else {
         return Ok(None);
     };
@@ -599,7 +612,7 @@ fn get_identity() -> Result<Option<Identity>, String> {
 }
 
 #[tauri::command]
-fn generate_identity() -> Result<GeneratedIdentity, String> {
+async fn generate_identity() -> Result<GeneratedIdentity, String> {
     let keys = Keys::generate();
     let nsec = keys.secret_key().to_bech32().map_err(|e| e.to_string())?;
     let id = identity_from_keys(&keys)?;
@@ -612,7 +625,7 @@ fn generate_identity() -> Result<GeneratedIdentity, String> {
 }
 
 #[tauri::command]
-fn import_identity(nsec: String) -> Result<Identity, String> {
+async fn import_identity(nsec: String) -> Result<Identity, String> {
     let nsec = nsec.trim().to_owned();
     let id = identity_from_keys(&keys_from_nsec(&nsec)?)?;
     store_nsec(&nsec)?;
@@ -620,7 +633,7 @@ fn import_identity(nsec: String) -> Result<Identity, String> {
 }
 
 #[tauri::command]
-fn clear_identity() -> Result<(), String> {
+async fn clear_identity() -> Result<(), String> {
     match keyring_entry()?.delete_credential() {
         Ok(_) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),
