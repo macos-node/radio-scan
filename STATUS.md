@@ -1229,6 +1229,56 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   same arithmetic). Refreshing what is on screen is the defensible behaviour; it is
   the wording that undersells it.
 
+- **The sync line + state column — macOS pass, VERIFIED (2026-08-22). Closes
+  `Needs-verify: macos` on all seven code commits of the parity wave
+  (`20efad4` … `cdca394`).** Release bundle built here (aarch64, v0.1.1-beta.4)
+  and installed to `/Applications`. 159/159 tests green, `tsc && vite build`
+  clean. Launching the new build touched **only** `harvest.fetchedAt` / `latestAt`
+  on podcasts and the ICY `harvest.*` slice on stations — 25 subs and 6 stations
+  in, 25 and 6 out, nothing added, nothing removed, no subscription rewritten.
+  **The two lines, read off the running app:** `26 shows · 25 here · 24 published`
+  with `add all (1)` + `follow all (2)`, and `11 stations · 6 here · 11 published`
+  with `add all (5)` and no `publish all`. Both arithmetics close
+  (`26 = 25+1 = 24+2`, `11 = 6+5 = 11+0`), and both machines independently report
+  **24 published shows and 11 published stations** — Linux reads the same relay
+  set as `11 stations · 9 here`, this box as `11 · 6 here`.
+  *The line corrected the prediction rather than confirming it.* `b69645e`
+  expected `25 shows · 25 here · 24 published` with `follow all (1)` — one
+  subscription made here and never published. The truth is 26/25/24: **two** subs
+  here were never published, **and** one published follow is not here at all. The
+  guess assumed this device's 25 subs were a superset of the relays' 24; they
+  overlap at 23. That is the line doing the job claimed for it — stating a
+  different number from the assumption, and the new one being the true one.
+
+- **Absence is not zero, in the UI this time — `0 published` when no relay
+  answered (found 2026-08-22, NOT fixed).** The first launch of the new build
+  read `25 shows · 25 here · 0 published` + `follow all (25)` and `6 stations ·
+  6 here · 0 published` + `publish all (6)`. Nothing was wrong with the relays:
+  `lsof` showed the process holding **zero** connections to any of the three
+  relay IPs while `useFollows(ownerHex, true)` was unconditionally active. Cause:
+  the four Keychain commands (`get_identity`, `generate_identity`,
+  `import_identity`, `clear_identity`, `src-tauri/src/lib.rs:594-628`) are
+  **sync**, so Tauri runs them on the main thread — the thread driving the
+  WKWebView. A Keychain authorization prompt there freezes all JS, so the relay
+  subscription never opened a socket. Audio kept playing because the stream is
+  served by the Rust proxy on its own threads. Every other nsec-touching command
+  (`publish_station`, `unfollow_station`, `publish_show`, `unfollow_show`) is
+  already `async`. Relaunching and answering the prompt gave the correct counts
+  above, first try.
+  *Two things worth separating.* The prompt itself is a development artifact —
+  the app is unsigned, so each rebuild gets a fresh ad-hoc signature and the
+  Keychain item's ACL no longer recognises the caller. Not worth chasing. The
+  UI consequence is not dev-only: `syncCounts` cannot distinguish "the relays
+  serve nothing" from "no relay has answered", `useFollows` clears `loading`
+  after 5 s *specifically* so a silent relay does not hang the spinner
+  (`useFollows.ts:111`), and neither tab's status line consumes it anyway. Any
+  locked login keychain in a shipped build renders the same screen: a confident
+  `0 published` beside a button offering to publish 31 events. Suggested, in
+  order of size — gate the two bulk buttons on at least one relay having
+  answered; make the four Keychain commands `async`. The same absence-vs-zero
+  reading that produced a false regression report on the relay capture, now in
+  the surface a user acts on.
+
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
   reconcile heard tracks vs ndisc's catalogue) and the Nostr publisher/poller.
