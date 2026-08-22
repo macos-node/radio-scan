@@ -1344,6 +1344,34 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   reordering `20efad4` fixed on the Podcasts list. Worth landing in place rather
   than at the top next time that file is open.
 
+- **A heartbeat for the relay read, and a bug in `answered` (2026-08-22).** The
+  root cause behind the morning's `0 published` was never the keychain: a
+  subscription is not a standing guarantee, and a window left open drifts toward
+  silence. Measured baseline — after **10h33m, two of three relay sockets had
+  died** with nothing reconnecting them (`subscribeMany` was passed no
+  `onclose`, though nostr-tools offers one). `useFollows` now re-ASKS rather than
+  reconnects: the existing additive `refetchRef` querySync path folds into the
+  same map the subscription writes and never blanks the list, and `pool.querySync`
+  reaches relays through `ensureRelay`, which reopens a closed one. Three
+  triggers — a 5-minute interval, `visibilitychange` → visible, and `online` —
+  because the interval alone is the worst of them: a lid opened after hours
+  should not wait out the rest of a timer before telling the truth. `onclose` now
+  logs rather than dying quietly; the lists keep what they hold rather than
+  blanking, since the last thing read is still the last thing known.
+  **Bug fixed in the same pass, introduced by the gate itself.** `answered` was
+  being set on every `querySync` resolution — but querySync resolves with `[]` on
+  its `maxWait` whether every relay said "nothing" or *none of them connected*.
+  Resolution is not a reply. It now takes an actual event, and the subscription's
+  own `oneose` remains the safe signal for a genuine empty, since that fires only
+  when relays really EOSE. Left unfixed, the gate would have re-armed the publish
+  buttons against exactly the silent read it was built to catch.
+  *Measurement note, third of the day.* Counting relay sockets by IP across all
+  processes is wrong twice over: `104.26.x` / `172.67.x` are Cloudflare, shared
+  with everything else the machine talks to, and **primal connects over IPv6**
+  (`2606:4700:20::…`), which an IPv4 address list misses entirely. Count what
+  ntune's OWN `com.apple.WebKit.Networking` instance holds on 443 — 3
+  connections, one per relay, on a healthy launch.
+
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
   reconcile heard tracks vs ndisc's catalogue) and the Nostr publisher/poller.

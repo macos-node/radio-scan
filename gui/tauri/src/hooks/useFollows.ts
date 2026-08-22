@@ -109,6 +109,13 @@ export function useFollows(
         setAnswered(true);
         setLoading(false);
       },
+      // Every relay dropped. Nothing to do synchronously — the lists keep what
+      // they already hold rather than blanking, since what was read is still the
+      // last thing known — but say so, because this used to happen in complete
+      // silence and the next beat is what recovers it.
+      onclose(reasons) {
+        console.warn("follows subscription closed on every relay", reasons);
+      },
     });
 
     // A one-shot re-read on the same pool. Deliberately additive: it folds into the
@@ -121,7 +128,14 @@ export function useFollows(
           for (const ev of evs) {
             if (ingestEvent(byKey, ev, ADDRESSABLE)) changed = true;
           }
-          setAnswered(true);
+          // Only an EVENT is an answer here. querySync resolves with [] on its
+          // maxWait whether every relay said "nothing" or none of them connected
+          // at all — resolution is not a reply, and treating it as one would put
+          // the publish buttons back on screen against a silent read, which is
+          // the whole thing `answered` exists to prevent. The subscription's own
+          // oneose is the safe signal for a genuine empty: it fires only when
+          // relays actually EOSE.
+          if (evs.length > 0) setAnswered(true);
           if (changed) recompute();
         })
         .catch((e) => console.error("follows refresh failed", e));
@@ -130,8 +144,36 @@ export function useFollows(
     // Stop the spinner even if no relay answers.
     const t = setTimeout(() => setLoading(false), 5000);
 
+    /** Keep the read alive across a long-lived window.
+     *
+     *  A subscription is not a standing guarantee. Measured 2026-08-22: after
+     *  10h33m, two of three relay sockets had died and nothing had reconnected
+     *  them — a window left open drifts toward silence on its own, and silence
+     *  used to read as `0 published`.
+     *
+     *  Deliberately a re-ASK rather than reconnect logic. `refetchRef` is the
+     *  additive querySync path — it folds into the same map the subscription
+     *  writes and never blanks the list — and `pool.querySync` reaches relays
+     *  through `ensureRelay`, which reconnects a closed one. So the cheap thing
+     *  covers the expensive thing: no socket bookkeeping, no resubscribe dance,
+     *  and a dead relay is revived by the next beat.
+     *
+     *  Three triggers, because the interval alone is the worst of them: a lid
+     *  opened after hours should not wait out the remainder of a five-minute
+     *  timer to tell the truth. */
+    const beat = () => refetchRef.current();
+    const iv = setInterval(beat, 5 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") beat();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", beat);
+
     return () => {
       clearTimeout(t);
+      clearInterval(iv);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", beat);
       refetchRef.current = () => {};
       sub.close();
       pool.close(RELAYS);
