@@ -1329,6 +1329,21 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   safeguard's first real outing was the one press that would have been dangerous
   without it.
 
+- **Stations `add all` on the real profile — VERIFIED (2026-08-22).** From
+  `11 stations · 6 here · 11 published` + `add all (5)`, one press took the local
+  store 6 → 11 and the line to **`11 stations · 11 here · 11 published ✓ in
+  sync`**. Disk agrees: the five adopted rows are written with exactly the
+  persisted fields (`slug`, `name`, `url`, `fmt`, `bitrate`, `tags`,
+  `description`) and no `d` / `eventId` — correct, since those identify a relay
+  event rather than a station and mean nothing on another machine. No relay
+  writes: adopting publishes nothing. Both tabs on this device are now in sync,
+  which is the first time either machine has said so about a real profile.
+  *Confirmed in use, not by reading:* adopted stations arrive **prepended** —
+  top of the list, in reverse order of adoption — because `adoptStation` puts the
+  saved row at the head of `localStations`. Cosmetic, and the same family as the
+  reordering `20efad4` fixed on the Podcasts list. Worth landing in place rather
+  than at the top next time that file is open.
+
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
   reconcile heard tracks vs ndisc's catalogue) and the Nostr publisher/poller.
