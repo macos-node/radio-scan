@@ -1303,6 +1303,32 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   emptied. Check that the thing being counted is the thing being claimed, before
   the count is quoted at anyone.*
 
+- **Bulk publish exercised for the first time, on either machine — VERIFIED
+  (2026-08-22).** `cdca394` recorded `publish all` / `follow all` as never having
+  been pressed in anger: the Linux profile had nothing unpublished to press them
+  with. This one did. From `26 shows · 25 here · 24 published` + `add all (1)` +
+  `follow all (2)`: **`follow all` published two `show.v1` events** (sequential,
+  400 ms apart, then a relay re-read rather than trusting the click), taking
+  published 24 → 26; **`add all (1)` pulled the remaining relay-only follow onto
+  this device**, taking here 25 → 26. Result: **`26 shows · 26 here · 26
+  published ✓ in sync`**, both gaps closed. Disk agrees with the screen —
+  `podcasts.json` went 25 → 26 subscriptions, the addition being *Global News
+  Podcast*, with nothing removed and no existing sub rewritten. `in sync` here
+  means what the tooltip scopes it to: everything on THIS device is published and
+  everything published is here. It says nothing about the other machine, which is
+  in sync when it says so itself.
+  Worth noting what was NOT needed: no confirm on `add all` (local, publishes
+  nothing, undone per row by ✕), a confirm on `follow all` (public act). The line
+  `b69645e` drew between the two held up in use.
+
+- **The relay-answered gate was live for it, in the scenario it was built for.**
+  `follow all` renders only when a relay has answered (`8c66b56`), so the two
+  events could not have gone out against a silent read — the exact failure mode
+  that put a `follow all (25)` button on screen that morning. Three relay sockets
+  were connected and the app was 1m50s old when the button was pressed. The
+  safeguard's first real outing was the one press that would have been dangerous
+  without it.
+
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
   reconcile heard tracks vs ndisc's catalogue) and the Nostr publisher/poller.
