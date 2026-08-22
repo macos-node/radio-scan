@@ -1377,9 +1377,14 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   DIFFERENT builds, to settle whether the heartbeat in `122b1ef` actually recovers
   a read that has gone silent. This is the one question neither side can answer
   alone, and the window is tonight.
-  **Do NOT pull and rebuild before leaving it.** The Linux box holding the
-  pre-heartbeat build IS the control; macOS is running the treatment. Pulling
-  tonight throws the comparison away — pull in the morning, after the reading.
+  **Read this file, but do not rebuild.** `git fetch` and reading are harmless —
+  they do not touch the running binary, and this note is only reachable that way.
+  What destroys the control is rebuilding, reinstalling, or restarting ntune. The
+  Linux box holding the pre-heartbeat build IS the control; macOS is running the
+  treatment. Rebuild after the reading, not before.
+  **Do not touch the ntune WINDOW before measuring, either** — raising or focusing
+  it fires `visibilitychange`, which on the treatment build triggers a beat. Take
+  the socket trace first, read the status lines second.
   **In the morning, from the still-running app, record:**
   1. The two status lines verbatim, and whether `✓ in sync` is still shown. macOS
      went to bed on `26 shows · 26 here · 26 published ✓ in sync` and
@@ -1393,11 +1398,21 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
      Rust/reqwest side instead. Do not count by relay IP either: `104.26.x` /
      `172.67.x` are Cloudflare and shared with everything else on the machine, and
      **primal answers over IPv6**, which an IPv4 address list misses outright.
-     Healthy is 3, one per relay.
-  **Baseline to beat:** 10h33m on the pre-gate build left two of three sockets
-  dead with nothing reconnecting them. The prediction is that the control shows
-  the same decay (and, being pre-`8c66b56`, states it as `0 published`), while the
-  treatment either holds 3 or recovers to 3 with its counts intact.
+     **Do not take ONE sample.** Watch for 7 minutes at 10 s granularity — this is
+     the measurement that matters and a snapshot cannot make it. On the treatment
+     build a healthy app sits at **0 sockets and bursts to 3 every 5 minutes**,
+     because the heartbeat re-asks rather than holding a connection; sampled once,
+     a working heartbeat looks like a dead app. On the control build there is no
+     heartbeat, so the trace should be flat at whatever survived the night.
+  **macOS result, in hand 2026-08-23 06:47 (+07) — the treatment WORKS.** After
+  10h28m every relay socket was gone, and the 7-minute trace caught two beats,
+  **4m52s apart**, each reconnecting all three relays through `ensureRelay` and
+  releasing them again:
+  `06:40:56→06:42:36 n=0` · `06:42:46 n=3` · `06:42:57 n=3` · `06:43:07→06:47:28
+  n=0` · `06:47:38 n=1` · `06:47:48 n=3`. Predicted in advance, arrived on
+  schedule. What is still open is the CONTROL: does the pre-heartbeat build show
+  a flat trace, and — being pre-`8c66b56` — does it state its silence as
+  `0 published` with a live `follow all (N)` beside it?
   **Caution on the control box.** That build has no relay-answered gate. If it
   does go silent overnight it will offer `follow all (N)` / `publish all (N)`
   against a read of nothing — the exact trap `8c66b56` closes. Record the button,
