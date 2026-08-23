@@ -1410,9 +1410,50 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   releasing them again:
   `06:40:56→06:42:36 n=0` · `06:42:46 n=3` · `06:42:57 n=3` · `06:43:07→06:47:28
   n=0` · `06:47:38 n=1` · `06:47:48 n=3`. Predicted in advance, arrived on
-  schedule. What is still open is the CONTROL: does the pre-heartbeat build show
-  a flat trace, and — being pre-`8c66b56` — does it state its silence as
-  `0 published` with a live `follow all (N)` beside it?
+  schedule.
+  **Control result (Linux, 2026-08-23) — first half confirmed, second half was a
+  BAD PREDICTION.** 9h38m uptime, 42 samples flat at **n=1**, zero variance, no
+  bursts: no heartbeat, exactly as predicted, against a 3/3 baseline at 4 minutes
+  uptime. Decay was partial where macOS's was total — `relay.fizx.uk` survived
+  and was genuinely live (1.79 MB received, last activity 4.6 min before
+  sampling), so two of three died there against three of three here.
+  The `0 published` half never had a chance of reproducing, and not because of
+  the partial decay. **Socket death does not blank the lists.** `setStations([])`
+  / `setShows([])` appear in exactly ONE place, the top of the effect, in both
+  builds — so events read at startup survive every relay dying, and the line goes
+  on reporting them. Even at 0/3 sockets the control would have said
+  `26 published`. Reaching `0 published` requires blank-THEN-resubscribe-into-
+  silence, i.e. the `ownerHex` swap of `8c66b56`. The prediction was
+  unfalsifiable as written; the mechanism it was meant to test is confirmed by
+  why it failed.
+  Control line, verbatim: `26 shows · 24 here · 26 published` + `add all (2)`, no
+  `✓ in sync`, no `relays quiet`, no `follow all (N)`.
+  **Cross-machine confirmation, unplanned and the best result of the run:** that
+  `add all (2)` is precisely the two follows macOS published last night with
+  `follow all (2)`. Linux went to bed on `24 shows · 24 here · 24 published ✓ in
+  sync` and woke reading 26 published against 24 held. The device-to-device loop
+  the whole feature exists for is demonstrated end to end, by two machines that
+  were not coordinating.
+  **Method note, now measured rather than asserted:** ntune's own pid held **0**
+  sockets on Linux too. Anyone reading `lsof -p <ntune pid>` would have concluded
+  the app had no relay connections at all, on a box where one was live and
+  carrying 1.79 MB.
+
+- **`relay.primal.net` may not RETAIN our kinds — suite may be on two relays, not
+  three (found 2026-08-23, unconfirmed from macOS).** Linux measured primal
+  serving **2 shows and 0 stations** over four consecutive attempts — not
+  flakiness. It held 9 stations / 10 shows on 2026-08-20, and macOS reads 26 / 11
+  across the set. So this is retention decay, not write rejection: primal accepts
+  the events and prunes them later.
+  That failure mode is worse than refusal. A relay that rejects a write tells you
+  at publish time; one that accepts and silently forgets leaves a publish looking
+  successful and a third of the redundancy imaginary. It also reframes last
+  night's total decay on macOS: losing "three relays" was really losing two that
+  matter plus one that had already forgotten us.
+  Not yet confirmed from this side — macOS cannot query relays headlessly (node
+  WebSockets are blocked by the local filters). Next step is a second reading from
+  Linux, then a decision on whether primal earns its place in `lib/relays.ts` or
+  should be replaced with a relay that keeps addressable events.
   **Caution on the control box.** That build has no relay-answered gate. If it
   does go silent overnight it will offer `follow all (N)` / `publish all (N)`
   against a read of nothing — the exact trap `8c66b56` closes. Record the button,
