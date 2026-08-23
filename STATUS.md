@@ -1439,6 +1439,23 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   the app had no relay connections at all, on a box where one was live and
   carrying 1.79 MB.
 
+- **Treatment result, final — 26h23m and still correct (2026-08-23 22:35 +07).**
+  ntune started Sat 20:12:33 and has not been restarted since. Both tabs read
+  **`26 shows · 26 here · 26 published ✓ in sync`** and **`11 stations · 11 here ·
+  11 published ✓ in sync`** — the same numbers it went to bed on, held for over a
+  day on nothing but heartbeats, after every relay socket had died. At the moment
+  of reading: 3 connections on the webview's network process, **0 on ntune's own
+  pid**. The 7-minute trace at the 10h28m mark is the proof of mechanism (two
+  beats, 4m52s apart, each reconnecting all three relays through `ensureRelay`);
+  this is the proof that it matters — the counts a user actually reads stayed
+  true across 26 hours of a connection lifecycle that, uncorrected, decays to
+  nothing.
+  **The experiment is closed.** Treatment recovers and stays correct; control
+  (Linux, 9h38m, 42 samples flat at n=1) never reconnects. Both halves measured,
+  on two machines, against predictions written down in advance — including the
+  one that turned out to be unfalsifiable, which is recorded above rather than
+  quietly dropped.
+
 - **`relay.primal.net` may not RETAIN our kinds — suite may be on two relays, not
   three (found 2026-08-23, unconfirmed from macOS).** Linux measured primal
   serving **2 shows and 0 stations** over four consecutive attempts — not
