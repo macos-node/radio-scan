@@ -627,17 +627,24 @@ export default function App() {
   );
 
   // Transport keys: space toggles, arrows jog the playhead. Ignored while typing,
-  // while a dialog is up, and when a focused control already owns the key (a
-  // button consumes space, a range input owns the arrows) so nothing double-fires.
+  // while a dialog is up, and when a focused control already owns the key — but
+  // per key, not wholesale. A range input owns the arrows (caught by the INPUT
+  // guard) and a button activates on space, so space alone stands down for a
+  // focused button or link. Blocking the arrows there too killed them after any
+  // click: every row and every transport control is a <button>, and on Linux a
+  // click leaves focus on it, so `⟳30` then `→` did nothing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement | null;
       const tag = el?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (tag === "BUTTON" || tag === "A" || el?.isContentEditable) return;
+      if (el?.isContentEditable) return;
       if (document.querySelector('[role="dialog"]')) return;
       if (e.key === " ") {
+        // The focused control activates on space — let it, rather than toggling
+        // playback behind it.
+        if (tag === "BUTTON" || tag === "A") return;
         e.preventDefault();
         togglePlay();
       } else if (e.key === "ArrowLeft") {
