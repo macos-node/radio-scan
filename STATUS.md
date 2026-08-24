@@ -1,6 +1,6 @@
 # radio-scan — project status
 
-_Last updated: 2026-08-17_
+_Last updated: 2026-08-24_
 
 A snapshot of where this project stands, for picking it back up (in Claude Code
 or elsewhere). Grew from a personal playlist logger into the seed of an
@@ -1475,6 +1475,33 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   does go silent overnight it will offer `follow all (N)` / `publish all (N)`
   against a read of nothing — the exact trap `8c66b56` closes. Record the button,
   do not press it.
+
+- **Episode skip (`⟲15` / `⟳30`, `←` / `→`) — VERIFIED (2026-08-24).** Measured on
+  the running dev build against a real Acast/art19 episode, by watching the
+  persisted playhead rather than the screen: `70 → 100 → 130 → 160 → 145 → 130`,
+  i.e. exactly `+30, +30, +30, −15, −15`. The episode was **paused** throughout,
+  which is what makes the reading a measurement instead of an anecdote — not one
+  `+4s` `timeupdate` write appears in the 43 seconds spanning those five jumps, so
+  nothing but the skip could have moved the number. It also confirms the case that
+  is otherwise hard to reach: skipping works while paused.
+  Each jump landed inside a 0.5s sample rather than on the next 4-second throttle
+  tick, which is the whole point of `skip()` writing the position itself — a skip
+  taken and then quit on does not resurrect the old position.
+  Resume state for a *different* part-played episode sat untouched at 132s across
+  the run, so the fresh start at 7s was correct rather than a cleared position.
+  **Not covered by this run:** neither clamp. Nothing reached 0 or the end, so
+  `back-from-the-first-seconds → 0` and `forward-near-the-end → end` rest on
+  `nextPosition`'s unit tests alone.
+  *Method, and it is the reusable part.* macOS cannot see or drive ntune's native
+  window from a shell — `screencapture` returns `could not create image from
+  display` without Screen Recording, and synthetic keystrokes need Accessibility.
+  The way in was the app's own durable state: `savePosition` writes to the
+  webview's localStorage, on disk at
+  `~/Library/WebKit/ntune/WebsiteData/Default/*/*/LocalStorage/localstorage.sqlite3`.
+  Copy it (WAL, live writer) and decode — WebKit stores the values as **UTF-16LE
+  blobs**, so a plain `cast(value as text)` truncates at the first byte and reads
+  as an empty result rather than as an encoding problem. Any ntune behaviour that
+  touches durable state is measurable this way while the GUI stays opaque.
 
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
