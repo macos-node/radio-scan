@@ -6,10 +6,12 @@ import {
   Pause,
   Play,
   Radio,
+  RotateCcw,
+  RotateCw,
   Volume2,
 } from "lucide-react";
 import type { NowPlaying } from "../lib/tauri";
-import type { Playing } from "../lib/player";
+import { SKIP_BACK, SKIP_FORWARD, type Playing } from "../lib/player";
 import { cn } from "../lib/cn";
 
 function fmtTime(secs: number): string {
@@ -32,6 +34,7 @@ export function PlayerBar({
   duration,
   onToggle,
   onSeek,
+  onSkip,
   onVolume,
   onFavorite,
   isFavorited,
@@ -45,34 +48,64 @@ export function PlayerBar({
   duration: number;
   onToggle: () => void;
   onSeek: (secs: number) => void;
+  onSkip: (delta: number) => void;
   onVolume: (v: number) => void;
   onFavorite?: () => void;
   isFavorited?: boolean;
 }) {
   const isEpisode = current?.kind === "episode";
+  const canSkip = !!current?.seekable;
 
-  return (
-    <footer className="flex items-center gap-4 border-t border-surface bg-panel px-4 py-3">
+  /** A ⟲15 / ⟳30 jog button — the glyph with its step count inside it. Disabled
+   *  for a live station, which has no timeline to move through. */
+  const skipButton = (delta: number) => {
+    const back = delta < 0;
+    const secs = Math.abs(delta);
+    return (
       <button
         type="button"
-        onClick={onToggle}
-        disabled={!current}
-        title={playing ? (isEpisode ? "Pause" : "Stop") : "Play"}
-        aria-label={playing ? (isEpisode ? "Pause" : "Stop") : "Play"}
+        onClick={() => onSkip(delta)}
+        disabled={!canSkip}
+        title={`${back ? "Back" : "Forward"} ${secs}s (${back ? "←" : "→"})`}
+        aria-label={`Skip ${back ? "back" : "forward"} ${secs} seconds`}
         className={cn(
-          "grid h-10 w-10 shrink-0 place-items-center rounded-full",
-          "bg-accent text-bg transition-opacity",
+          "relative grid h-8 w-8 shrink-0 place-items-center rounded-full",
+          "text-muted transition-colors hover:bg-surfaceHover hover:text-fg",
           "disabled:pointer-events-none disabled:opacity-30",
         )}
       >
-        {buffering ? (
-          <Loader2 size={18} className="animate-spin" />
-        ) : playing ? (
-          <Pause size={18} />
-        ) : (
-          <Play size={18} className="translate-x-px" />
-        )}
+        {back ? <RotateCcw size={18} /> : <RotateCw size={18} />}
+        <span className="absolute font-mono text-[8px] leading-none">{secs}</span>
       </button>
+    );
+  };
+
+  return (
+    <footer className="flex items-center gap-4 border-t border-surface bg-panel px-4 py-3">
+      <div className="flex shrink-0 items-center gap-1.5">
+        {skipButton(-SKIP_BACK)}
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={!current}
+          title={playing ? (isEpisode ? "Pause" : "Stop") : "Play"}
+          aria-label={playing ? (isEpisode ? "Pause" : "Stop") : "Play"}
+          className={cn(
+            "grid h-10 w-10 shrink-0 place-items-center rounded-full",
+            "bg-accent text-bg transition-opacity",
+            "disabled:pointer-events-none disabled:opacity-30",
+          )}
+        >
+          {buffering ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : playing ? (
+            <Pause size={18} />
+          ) : (
+            <Play size={18} className="translate-x-px" />
+          )}
+        </button>
+        {skipButton(SKIP_FORWARD)}
+      </div>
 
       <div className="min-w-0 flex-1">
         {current ? (

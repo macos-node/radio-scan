@@ -57,7 +57,14 @@ import {
   THEME_KEY,
   VOLUME_KEY,
 } from "./lib/settings";
-import { resumePosition, savePosition, type Playing } from "./lib/player";
+import {
+  nextPosition,
+  resumePosition,
+  savePosition,
+  SKIP_BACK,
+  SKIP_FORWARD,
+  type Playing,
+} from "./lib/player";
 import { describeOutcome, publishSequentially } from "./lib/publishAll";
 import { OWNER_PUBKEY, parseStationsJson, toExportStation } from "./lib/station";
 import { canonicalUrl } from "./lib/address";
@@ -604,6 +611,47 @@ export default function App() {
     }
   }, []);
 
+  /** Jog the playhead by `delta` seconds, clamped to the episode. Only a seekable
+   *  source moves — a live station has no timeline to skip through. */
+  const skip = useCallback(
+    (delta: number) => {
+      const a = audioRef.current;
+      if (!a || !current?.seekable) return;
+      const dur = Number.isFinite(a.duration) ? a.duration : 0;
+      const next = nextPosition(a.currentTime, delta, dur);
+      a.currentTime = next;
+      setPosition(next);
+      savePosition(current.url, next, dur || undefined);
+    },
+    [current],
+  );
+
+  // Transport keys: space toggles, arrows jog the playhead. Ignored while typing,
+  // while a dialog is up, and when a focused control already owns the key (a
+  // button consumes space, a range input owns the arrows) so nothing double-fires.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (tag === "BUTTON" || tag === "A" || el?.isContentEditable) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      if (e.key === " ") {
+        e.preventDefault();
+        togglePlay();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        skip(-SKIP_BACK);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        skip(SKIP_FORWARD);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [togglePlay, skip]);
+
   const changeVolume = useCallback((v: number) => {
     setVolume(v);
     setSetting(VOLUME_KEY, String(v));
@@ -914,6 +962,7 @@ export default function App() {
         duration={duration}
         onToggle={togglePlay}
         onSeek={seek}
+        onSkip={skip}
         onVolume={changeVolume}
         onFavorite={toggleFavorite}
         isFavorited={isFavorited}

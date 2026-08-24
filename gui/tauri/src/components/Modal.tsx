@@ -28,6 +28,8 @@ export function Modal({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
         className="w-full max-w-md rounded-md border border-surface bg-panel shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >

@@ -100,6 +100,21 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   wash, in both the list and card views.
 
 ### Added
+- **Skip forward and back through an episode.** A podcast had one seek bar and no
+  step: catching a line you missed meant aiming a 600-second bar at a 15-second
+  correction, and stepping over an ad break meant the same aim in reverse. Two jog
+  buttons now flank the transport — `⟲15` back, `⟳30` forward, the podcast
+  convention and asymmetric for the reason the convention is: back is for a line,
+  forward is for a break. `←` and `→` do the same from the keyboard, and `␣`
+  toggles play — ntune's first key bindings. Both clamp to the episode: back from
+  the first seconds rewinds to 0 rather than underflowing, forward near the end
+  lands on the end. The jog writes the resume position immediately instead of
+  waiting for the 4-second throttle, so a skip survives a quit taken right after
+  it. Live stations leave the buttons disabled and the keys inert — a stream has
+  no timeline to move through, which is the same `seekable` flag the seek bar
+  already reads. The keys stand down while you're typing, while a dialog is up,
+  and when a focused control already owns them (a button consumes `␣`, a range
+  input owns the arrows), so nothing double-fires.
 - **Unpublishing a relay-only station leaves a ghost too.** The twin of the Podcasts
   ghost, and the hole was worse here: a station published from another machine lives
   only on the relays, so retracting it took its STREAM URL with it — and a stream URL
