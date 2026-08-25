@@ -83,16 +83,22 @@ one feature with three bugs, they are **two subsystems with different coverage**
 
 ## 4. Open / unconfirmed — needs a real cross-platform pass
 
-- ⚠️ **Which stations actually show track data on macOS.** Reported from a brief
-  real-time look: SomaFM appeared to work, **Lush did not**. Not conclusively tested,
-  and the reporter says so. The plausible reading is that the logger covers only the
-  stations in that box's `config.json` (the shipped example lists exactly one), but
-  **that is a hypothesis, not a finding.** Someone should check that machine's
-  `config.json` against what the UI shows before anyone acts on it.
-- ⚠️ **Linux track coverage** — assumed working, not tested this session.
-- ❔ **Does ntune's own player bar ever show tracks for `https://` stations on
-  mac/Linux?** By code it should not (proxy is `http://`-only). If it does, there is a
-  path none of us has mapped, and that would be worth knowing.
+- ~~⚠️ **Which stations actually show track data on macOS.**~~ ✅ **ANSWERED** by
+  [`../gui/tauri/docs/macos-track-data-2026-08-25.md`](../gui/tauri/docs/macos-track-data-2026-08-25.md)
+  (`1d3034f`). The hypothesis was close but the shape was wrong: that Mac has **no
+  `config.json` at all** — its logger runs a single station passed as `--url` on the
+  launchd plist, and it is the **http** acidjazz mount. So the macOS column reads
+  **"capable of https track data, currently covering none"** — the difference between
+  the source existing and the source covering that station. Lush showing nothing is
+  therefore expected, not a fault.
+- ⚠️ **Linux track coverage** — still untested (that box is unavailable: same machine
+  as Windows).
+- ~~❔ **Does ntune's own player bar show tracks for `https://` stations?**~~ ✅
+  **MEASURED — no, and Windows' model holds.** macOS A/B'd it on one box: https →
+  93 s, no track text; http → populated within seconds. The http leg is the control
+  that makes it a finding rather than an absence. It also holds by construction: the
+  only call site setting `nowPlaying` to a value is the `onNowPlaying` subscription,
+  emitted from one place in `proxy.rs`, which is in the path for `http://` only.
 - ~~❔ **Windows: Credential Manager `nsec` round-trip.**~~ ✅ **VERIFIED 2026-08-25** —
   see §9. **Windows now has no open §5 matrix cell.**
 

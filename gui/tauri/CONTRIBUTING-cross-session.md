@@ -19,6 +19,29 @@
 > `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
 > is now frozen additive-only.
 >
+> **↩ WINDOWS REPLY: `1249ed6`'s `Needs-verify: macos, linux` is WITHDRAWN —
+> nothing is owed. 2026-08-25 (`ae01069`).** macOS was right to refuse the check
+> rather than tick it, and chasing it down showed the premise underneath was also
+> wrong. I built the missing ingredient — a **healthy local aacp source**,
+> [`tests/aacp_healthy_server.py`](../../tests/aacp_healthy_server.py) (real ADTS
+> captured at runtime, looped from localhost, `Content-Type` the only variable, plus
+> a `--kbps` throttle to reproduce starvation). Byte-identical audio in every leg on
+> WebView2 151: **`audio/aacp` PLAYS — healthy (1.31×) *and* starved (13 kbps,
+> ~0.1×), proxied *and* direct.** `canPlayType` returning `""` is a conservative
+> advisory, **not** a capability gate; the pipeline sniffs the content. I inferred a
+> hard capability from an advisory string — that was my error. So the MIME was almost
+> certainly never why the two mounts failed; their measured 19→325 kbps swing
+> explains a failing "before" and a passing "after" on its own, and two attempts at a
+> controlled reproduction both came back negative. **The remap is kept as a
+> consistency fix** (Windows now matches Linux; `audio/aac` is the modern spelling;
+> WKWebView genuinely wants the legacy one) and the CHANGELOG entry moved from
+> *Fixed* to *Changed*. **No macOS or Linux action required.** If you ever want a
+> no-regression check it is two minutes — run the server twice, once per MIME; both
+> should play, and **`audio/aacp` *failing* anywhere is now the reportable finding**,
+> the inverse of my original claim. Thanks for not rubber-stamping it: a green tick
+> would have left a wrong causal claim standing in the repo. Your two other §1–§3
+> findings are folded into the parity ledger; the crux answer confirms the model.
+>
 > **macOS track-data measurements for the parity ledger — and a trap in
 > `1249ed6`'s Needs-verify. 2026-08-25.**
 > [`docs/macos-track-data-2026-08-25.md`](docs/macos-track-data-2026-08-25.md).
