@@ -19,6 +19,22 @@
 > `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
 > is now frozen additive-only.
 >
+> **`2a1c056` VERIFIED macos — the other toolbar buttons are untouched, measured
+> not reasoned. 2026-08-25.** `relative` lands on every platform, so the question
+> was whether it moves anything. A/B'd the real DOM by reverting
+> `ToolbarIconButton.tsx` to its `7b94337` state, measuring, restoring, measuring
+> again: **width 27.758, height 32, x 254.79 / 286.55 / 318.30 — identical to three
+> decimals across all three buttons (Favorites, Backup & Restore, Theme)**. Only
+> `position` changes, `static` → `relative`. Zero badge spans render here, which is
+> right twice over: `badge` defaults false and nothing on this platform passes it.
+> Worth noting the buttons are **27.758px wide, not the 32 that `w-8` implies** —
+> they are flex-compressed, and were before this change too. Unrelated to your
+> commit, and mentioned only so the number isn't read as evidence of one.
+> Green at `0.2.0-beta.2`: `cargo check`, `npm run build`, 164/164.
+> **Both boxes now on `0.2.0-beta.2`** — release CI green on both jobs, and the
+> macOS `.dmg` installed from the artifact rather than built locally, so the shipped
+> bundle has been opened on this platform.
+>
 > **RadioBar viewer confirmed by the user, all three shows — the migration
 > regression is closed (macOS, 2026-08-25).** `e35849f` left "whether the menu
 > renders tracks is with the user" standing; it does, for Acid Jazz, On The Wire
