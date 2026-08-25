@@ -113,13 +113,24 @@ MIXCLOUD_LINK = re.compile(r"https?://(?:www\.)?mixcloud\.com/([^\"'<>\s]+)", re
 def _mixcloud_page(path: str) -> str:
     """`otwradio/on-the-wire-…` -> the canonical page URL, or '' if unusable.
 
-    Tracking parameters are cut, not carried: the archive's older posts link with
-    a `?utm_source=widget&…` tail, and appending the trailing slash after THAT
+    Two things are rejected rather than stored, and both were found in the archive
+    rather than imagined:
+
+    Tracking parameters are cut, not carried. Older posts link with a
+    `?utm_source=widget&…` tail, and appending the trailing slash after THAT
     produced `…/?utm_term=resource_link/` — a URL that happens to still resolve
     and is plainly wrong to store.
+
+    A bare PROFILE is not an episode. `mixcloud.com/luckycatzoe/` is one path
+    segment and points at a person's page; an episode is always
+    `user/episode-slug`, two segments. Guest-mix posts link the guest's profile,
+    and storing that as this episode's listen link sends a reader somewhere that
+    does not contain the show they asked for — worse than an empty field, which at
+    least says so. Reported from macOS after both boxes backfilled and got the
+    same 184 links, 2 of them these.
     """
     path = unquote(path).strip().split("?", 1)[0].split("#", 1)[0].strip("/")
-    if not path or path.startswith("widget"):
+    if not path or path.startswith("widget") or path.count("/") < 1:
         return ""
     return f"https://www.mixcloud.com/{path}/"
 
@@ -280,13 +291,17 @@ def relink() -> None:
         if not have and want:
             r["listen_url"] = want
             filled += 1
-        elif have and "?" in have:
-            # Repair, narrowly: a stored link carrying a query string came from
-            # this script's own first version and is never something a person
-            # typed. Anything else already there is left alone, so a re-run is a
-            # no-op and a hand-corrected link survives.
-            r["listen_url"] = _mixcloud_page(have.split("mixcloud.com/", 1)[-1])
-            repaired += 1
+        elif have:
+            # Re-derive what the CURRENT rule makes of the stored path and store
+            # that. A link the rule already agrees with normalizes to itself, so a
+            # valid one — including a hand-corrected one — is untouched and a
+            # re-run is a no-op. A link the rule now rejects (a query-string tail,
+            # a bare profile) is replaced, and being replaced by NOTHING is a
+            # legitimate outcome: no link beats a link to the wrong page.
+            fixed = _mixcloud_page(have.split("mixcloud.com/", 1)[-1])
+            if fixed != have:
+                r["listen_url"] = fixed
+                repaired += 1
     tmp = JSONL_OUT.with_suffix(".jsonl.tmp")
     with tmp.open("w") as f:
         for r in rows:

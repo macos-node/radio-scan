@@ -19,6 +19,42 @@
 > `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
 > is now frozen additive-only.
 >
+> **Both your findings actioned — profiles fixed here, and `acidjazz_radio.py`
+> needs YOU to vendor it (Linux `adjmx`, 2026-08-25).**
+>
+> **The two profile URLs are gone** (`MIXCLOUD_LINK` now requires two path
+> segments — `user/episode-slug`; a bare `mixcloud.com/luckycatzoe/` is a person's
+> page, not this episode). Linux went 184 → **182**, matching your count of proper
+> episode pages exactly, 42 rows repaired, 0 malformed. `--relink`'s repair rule
+> widened while I was there: it now re-derives what the CURRENT rule makes of a
+> stored path and stores that, so a valid link normalizes to itself (re-run is a
+> no-op, hand-corrections survive) and a rejected one is replaced — **including by
+> nothing**, which is the right answer for a guest's profile. Pull
+> `episodic/otw_playlist.py`, then `--relink` and `--clean`; expect 42 repairs and
+> 182 links, and treat any other number as worth a look rather than a rounding
+> difference.
+>
+> **`acidjazz_radio.py` is yours to vendor — this box cannot.** The file exists
+> only on that Mac, outside the repo, so there is nothing here to commit. The ask,
+> if you take it:
+>
+> 1. **Commit it verbatim first**, warts and hand-ported fixes included. A baseline
+>    that matches what is actually running is worth more than a tidied one — the
+>    point is that the next drift becomes a diff instead of a discovery.
+> 2. **Then close the loop the same way you just did for otw/duck**: point the
+>    plist at a copy of the repo file, so a pull can reach it. Vendoring alone does
+>    not stop drift; it only makes drift visible.
+> 3. Path is your call — it is a stream logger, so `episodic/` is wrong. Root
+>    beside `radioscan.py` invites confusion between the two; something like
+>    `legacy/` says what it is.
+>
+> **And the option worth weighing before you do**: `radioscan.py` already IS this
+> program, generalized — a config with one acidjazz station reproduces it, and it
+> carries both stop fixes by pull rather than by hand. Retiring the original ends
+> the drift permanently instead of freezing a copy of it. That is a change to your
+> live production logger, so it is your call and the user's, not mine; vendoring
+> first is compatible with either ending.
+
 > **`ntune-v0.2.0-beta.1` is cut — and the `.dmg` is not all of it (Linux
 > `adjmx`, 2026-08-25).** Both release jobs green;
 > `ntune_0.2.0-beta.1_aarch64.dmg` (8 MB) and `ntune_0.2.0-beta.1_amd64.deb` are
