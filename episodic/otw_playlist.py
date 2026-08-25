@@ -39,6 +39,7 @@ import argparse, csv, html, json, re, sys, urllib.request
 from collections import Counter
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from urllib.parse import unquote
 import os
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -99,6 +100,46 @@ def fetch(url: str) -> bytes:
         return r.read()
 
 
+# The show is a BLOG, not a podcast: the Blogger feed carries tracklists and no
+# audio at all — 0 <enclosure>, 0 <media:content>, no .mp3/.m4a anywhere in it
+# (checked against the live feed 2026-08-25). The audio lives on Mixcloud, embedded
+# as a player iframe, and Mixcloud publishes no stream URL by design — their API
+# returns name/page/audio_length and nothing to hand an <audio> element. So the most
+# an honest logger can carry is WHERE TO LISTEN, and that is what this captures.
+MIXCLOUD_EMBED = re.compile(r"player-widget\.mixcloud\.com/widget/iframe/\?[^\"'<>]*?feed=([^\"'&<>]+)", re.I)
+MIXCLOUD_LINK = re.compile(r"https?://(?:www\.)?mixcloud\.com/([^\"'<>\s]+)", re.I)
+
+
+def _mixcloud_page(path: str) -> str:
+    """`otwradio/on-the-wire-…` -> the canonical page URL, or '' if unusable.
+
+    Tracking parameters are cut, not carried: the archive's older posts link with
+    a `?utm_source=widget&…` tail, and appending the trailing slash after THAT
+    produced `…/?utm_term=resource_link/` — a URL that happens to still resolve
+    and is plainly wrong to store.
+    """
+    path = unquote(path).strip().split("?", 1)[0].split("#", 1)[0].strip("/")
+    if not path or path.startswith("widget"):
+        return ""
+    return f"https://www.mixcloud.com/{path}/"
+
+
+def listen_url(body: str) -> str:
+    """The Mixcloud page for an episode, from the post body. '' when there isn't one.
+
+    Two shapes, because both appear in the archive: the embedded player (whose
+    `feed=` parameter is the URL-encoded page path) and a plain link. Returns the
+    canonical page URL either way — never a stream URL, because there isn't one.
+    """
+    for rx in (MIXCLOUD_EMBED, MIXCLOUD_LINK):
+        m = rx.search(body)
+        if m:
+            url = _mixcloud_page(m.group(1))
+            if url:
+                return url
+    return ""
+
+
 def parse_track(line: str) -> dict | None:
     """One playlist line -> {artist,title,label,album,raw} or None if not a track."""
     raw = line.strip()
@@ -140,7 +181,8 @@ def parse_episode(item: ET.Element) -> dict:
             t["pos"] = len(tracks) + 1
             tracks.append(t)
     return {"episode": title, "episode_date": ep_date,
-            "episode_utc": ep_utc, "tracks": tracks}
+            "episode_utc": ep_utc, "listen_url": listen_url(body),
+            "tracks": tracks}
 
 
 def episodes_from_feed(url: str, want_all: bool) -> list[dict]:
@@ -156,6 +198,30 @@ def episodes_from_feed(url: str, want_all: bool) -> list[dict]:
             break
         start += 25
     return out
+
+
+# `listen_url` joined the schema on 2026-08-25. Appending a wider row to a CSV
+# still carrying the old header would silently misalign every later column, so the
+# file is upgraded in place the first time it matters.
+COLUMNS = ["episode", "episode_date", "pos", "artist", "title", "label", "album",
+           "raw", "listen_url"]
+
+
+def _upgrade_csv_schema(path, cols) -> None:
+    if not path.exists():
+        return
+    with path.open(newline="") as f:
+        rows = list(csv.DictReader(f))
+    if rows and set(rows[0]) == set(cols):
+        return
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
+        w.writeheader()
+        for r in rows:
+            w.writerow({c: r.get(c, "") for c in cols})
+    tmp.replace(path)
+    print(f"upgraded {path.name} to the {len(cols)}-column schema", file=sys.stderr)
 
 
 def write_logs(eps: list[dict]) -> None:
@@ -176,11 +242,13 @@ def write_logs(eps: list[dict]) -> None:
                              "episode_date": ep["episode_date"],
                              "pos": t["pos"], "artist": t["artist"],
                              "title": t["title"], "label": t["label"],
-                             "album": t["album"], "raw": t["raw"]})
+                             "album": t["album"], "raw": t["raw"],
+                             "listen_url": ep.get("listen_url", "")})
     if not new_rows:
         print("(nothing new to log)", file=sys.stderr)
         return
-    cols = ["episode", "episode_date", "pos", "artist", "title", "label", "album", "raw"]
+    cols = COLUMNS
+    _upgrade_csv_schema(CSV_OUT, cols)
     write_header = not CSV_OUT.exists()
     with CSV_OUT.open("a", newline="") as f:
         w = csv.DictWriter(f, fieldnames=cols)
@@ -192,6 +260,47 @@ def write_logs(eps: list[dict]) -> None:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     print(f"logged {len(new_rows)} tracks from "
           f"{len({r['episode'] for r in new_rows})} new episode(s)", file=sys.stderr)
+
+
+def relink() -> None:
+    """Fill `listen_url` on episodes already in the raw log. Adds nothing else.
+
+    Needed because the log predates the field and `write_logs` skips episodes it
+    has already seen — without this, only FUTURE episodes would ever carry a link,
+    and the recent ones somebody actually wants to listen to would not.
+    """
+    if not JSONL_OUT.exists():
+        sys.exit(f"no raw log at {JSONL_OUT} — run a capture first")
+    links = {ep["episode"]: ep.get("listen_url", "")
+             for ep in episodes_from_feed(FEED, True)}
+    rows = [json.loads(ln) for ln in JSONL_OUT.open() if ln.strip()]
+    filled = repaired = 0
+    for r in rows:
+        have, want = r.get("listen_url") or "", links.get(r.get("episode")) or ""
+        if not have and want:
+            r["listen_url"] = want
+            filled += 1
+        elif have and "?" in have:
+            # Repair, narrowly: a stored link carrying a query string came from
+            # this script's own first version and is never something a person
+            # typed. Anything else already there is left alone, so a re-run is a
+            # no-op and a hand-corrected link survives.
+            r["listen_url"] = _mixcloud_page(have.split("mixcloud.com/", 1)[-1])
+            repaired += 1
+    tmp = JSONL_OUT.with_suffix(".jsonl.tmp")
+    with tmp.open("w") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    tmp.replace(JSONL_OUT)
+    _upgrade_csv_schema(CSV_OUT, COLUMNS)
+    with CSV_OUT.open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction="ignore")
+        w.writeheader()
+        w.writerows({c: r.get(c, "") for c in COLUMNS} for r in rows)
+    episodes = len({r["episode"] for r in rows if r.get("listen_url")})
+    print(f"relink: filled {filled} rows, repaired {repaired}; {episodes} episode(s) "
+          f"now carry a link out of {len({r['episode'] for r in rows})}", file=sys.stderr)
+    print("run --clean to carry it into the clean log", file=sys.stderr)
 
 
 def clean_log() -> None:
@@ -206,7 +315,7 @@ def clean_log() -> None:
             dropped[reason] += 1
         else:
             kept.append(r)
-    cols = ["episode", "episode_date", "pos", "artist", "title", "label", "album", "raw"]
+    cols = COLUMNS
     with JSONL_CLEAN.open("w") as f:
         for r in kept:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -225,6 +334,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Parse On The Wire playlists from the Blogger feed.")
     ap.add_argument("--all", action="store_true", help="every episode in the feed, not just latest")
     ap.add_argument("--no-write", action="store_true", help="print only; don't append to logs")
+    ap.add_argument("--relink", action="store_true",
+                    help="fill listen_url on episodes already logged, then exit")
     ap.add_argument("--clean", action="store_true",
                     help="filter the raw log into otw_log.clean.{jsonl,csv} and exit (no fetch)")
     ap.add_argument("--data-dir", default=DEFAULT_DATA_DIR,
@@ -234,6 +345,10 @@ def main() -> None:
 
     if args.clean:
         clean_log()
+        return
+
+    if args.relink:
+        relink()
         return
 
     eps = episodes_from_feed(FEED, args.all)
