@@ -64,6 +64,11 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         MenuItem::with_id(app, "favorite", "\u{2665} Favorite current track", false, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit ntune", true, None::<&str>)?;
 
+    // Only the Linux-gated logger section below reassigns this, so on every other
+    // platform the `mut` is genuinely unused. Scoped to non-Linux rather than a
+    // blanket allow, so a real unused_mut still surfaces on the platform that
+    // mutates it.
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
     let mut builder = MenuBuilder::new(app)
         .item(&now_playing)
         .separator()
