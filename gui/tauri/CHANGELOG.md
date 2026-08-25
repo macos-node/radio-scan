@@ -402,6 +402,27 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   feed plainly states. An episode's `<guid>` is never mistaken for the show's.
 
 ### Fixed
+- **The transport no longer loses track of what the player is doing.** Play state
+  was assembled from events — `playing` was set true by the `playing` event and
+  nothing else — so a dropped or reordered event left the app believing something
+  other than the truth, with no way back until the next track. On Linux
+  (WebKitGTK) that was reachable in three clicks: pause an episode, skip, press
+  play, and the app still thought nothing was playing, so the pause button no
+  longer paused and `␣` did nothing while audio kept going. The spinner had the
+  mirror-image bug — `waiting` raised it and only `playing` lowered it, so any
+  seek while paused (including the automatic seek that restores your position on
+  load) left it spinning over a stopped player, forever. Both now read the
+  element itself: `playing` is "not paused", re-asked on every transport event
+  and on every playhead move; the spinner is raised only by `waiting`/`stalled`
+  and lowered by evidence of progress, so it means "stuck", not "recently
+  seeked". Measured in the installed Linux app across pause → skip → resume →
+  pause, which used to wedge and now holds.
+- **Pausing during load no longer restarts the episode.** Resuming ran
+  `a.play().catch(() => reload)`, and pausing while that play is still pending
+  rejects it with `AbortError` — so the pause was read as a failed resume and
+  answered by reloading the episode from the top and re-buffering it. The catch
+  now ignores `AbortError`, which is the user pausing, not a failure. Latent
+  before, and reachable the moment play state stopped lagging behind the element.
 - **A retraction now names the address the event actually occupies.** Both unfollow
   paths re-derived the `d` from the item's URL/guid, which is only correct while the
   `d` format never changes — and decision #11 changed it. Measured on macOS with two

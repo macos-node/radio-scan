@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SyntheticEvent,
+} from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import {
   Archive,
@@ -493,7 +500,10 @@ export default function App() {
           ? streamUrl(proxyPort, p.url)
           : p.url;
       a.volume = volume;
-      a.play().catch((e) => {
+      a.play().catch((e: unknown) => {
+        // Superseded, not failed: something newer (a pause, another track) took
+        // the element over, and whatever did that owns the state now.
+        if ((e as DOMException)?.name === "AbortError") return;
         console.error("play failed", e);
         setBuffering(false);
         setPlaying(false);
@@ -597,7 +607,14 @@ export default function App() {
       }
     } else if (current.kind === "episode" && a && a.getAttribute("src")) {
       // Resume a paused episode where it left off, without reloading.
-      a.play().catch(() => play(current));
+      a.play().catch((e: unknown) => {
+        // Pausing while a resume is still pending rejects that resume with
+        // AbortError. That is the user pausing, not a resume that failed —
+        // reloading there restarts the episode from the top and re-buffers it.
+        // Only a real failure earns the reload.
+        if ((e as DOMException)?.name === "AbortError") return;
+        play(current);
+      });
     } else {
       play(current);
     }
@@ -625,6 +642,26 @@ export default function App() {
     },
     [current],
   );
+
+  /** `playing` is "the element is not paused" — ask the element, don't
+   *  reassemble it from events. Every transport event re-asks, so a dropped or
+   *  reordered one costs a stale frame instead of wedging the state until the
+   *  next track. (WebKitGTK does drop them: skipping while paused and then
+   *  resuming used to leave the app believing nothing was playing, so the pause
+   *  button no longer paused.) */
+  const syncPlaying = useCallback((e: SyntheticEvent<HTMLAudioElement>) => {
+    setPlaying(!e.currentTarget.paused);
+  }, []);
+
+  /** `buffering` is "trying to play, and not getting anywhere". Only `waiting`
+   *  and `stalled` raise it, and any evidence of progress lowers it — a paused
+   *  element isn't buffering, it's stopped. Deliberately NOT derived from
+   *  `readyState`: on WebKitGTK it sits below HAVE_FUTURE_DATA through long
+   *  stretches of perfectly healthy playback, which spins the transport for no
+   *  reason. A playhead that moves is the honest signal. */
+  const stalled = useCallback((e: SyntheticEvent<HTMLAudioElement>) => {
+    setBuffering(!e.currentTarget.paused);
+  }, []);
 
   // Transport keys: space toggles, arrows jog the playhead. Ignored while typing,
   // while a dialog is up, and when a focused control already owns the key — but
@@ -976,16 +1013,24 @@ export default function App() {
       />
 
       {/* Hidden transport. Events keep React state in step with the element, and
-          drive episode seek/resume (loadedmetadata / timeupdate / ended). */}
+          drive episode seek/resume (loadedmetadata / timeupdate / ended). Play
+          state is re-read from the element on every event that could change it;
+          the spinner is raised only by waiting/stalled and lowered by progress. */}
       <audio
         ref={audioRef}
         preload="none"
-        onPlaying={() => {
-          setPlaying(true);
+        onPlay={syncPlaying}
+        onPlaying={(e) => {
+          syncPlaying(e);
           setBuffering(false);
         }}
-        onWaiting={() => setBuffering(true)}
-        onPause={() => setPlaying(false)}
+        onPause={(e) => {
+          syncPlaying(e);
+          setBuffering(false);
+        }}
+        onCanPlay={() => setBuffering(false)}
+        onWaiting={stalled}
+        onStalled={stalled}
         onError={() => {
           setBuffering(false);
           setPlaying(false);
@@ -1000,6 +1045,12 @@ export default function App() {
         }}
         onTimeUpdate={(e) => {
           const a = e.currentTarget;
+          // This event only fires because the playhead moved, which settles
+          // both questions: something is playing, and it isn't stuck. Re-asking
+          // here is what makes a dropped event self-correct within a frame or
+          // two, and it costs nothing when the state already matches.
+          syncPlaying(e);
+          setBuffering(false);
           setPosition(a.currentTime);
           if (current?.kind === "episode") {
             const now = Date.now();
@@ -1012,6 +1063,7 @@ export default function App() {
         onEnded={() => {
           if (current?.kind === "episode") savePosition(current.url, 0);
           setPlaying(false);
+          setBuffering(false);
         }}
       />
 
