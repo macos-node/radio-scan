@@ -6,12 +6,26 @@ A snapshot of where this project stands, for picking it back up (in Claude Code
 or elsewhere). Grew from a personal playlist logger into the seed of an
 **n-suite** airplay feature.
 
-## 1. The live logger (running)
+## 1. The live logger (running — now on BOTH boxes)
 A dependency-free Python logger reads the ICY `StreamTitle` metadata from the
 acidjazz stream (`http://79.111.14.76:8000/acidjazz`) and records every track
 change. Installed on the Mac as a launchd service **`com.tigger.acidjazz`** in
 `~/RadioTuner`, running 24/7 with auto-restart on reboot. Writes a raw
 JSONL/CSV log, per-day/-week/all-time summaries, and `station_info.txt`.
+
+**Two-box logging (2026-08-25).** The Linux box now logs the acidjazz stream too.
+**Same stream, different coverage** — each box is shut down at different times, so
+neither log is complete and the two are expected to diverge. That divergence is
+the point rather than a fault to reconcile: together they cover hours that either
+alone would miss. Two consequences worth stating before anything consumes this
+data. Play counts are **per box, not per station** — summing them double-counts
+every hour both were awake, and airplay figures quoted from one box are a floor,
+not a total. And a gap in one log is not evidence the station was silent; it is
+evidence that box was off, which the other log may well contradict.
+**Collation of the two datasets is wanted later but NOT built** — nothing merges
+them today, and doing it properly needs a dedup key (timestamp + artist/title,
+allowing for clock skew between boxes) rather than a concatenation. The episodic
+show logs are a separate matter and self-heal per box since `0feed94`.
 
 **Data so far (2026-07-28 → 2026-08-01):** ~1,161 plays, ~1,141 unique tracks,
 ~417 unique artist names (~400 after merging spelling variants). Station is
