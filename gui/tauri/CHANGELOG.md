@@ -108,6 +108,18 @@ Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../../docs/r
   wash, in both the list and card views.
 
 ### Added
+- **See the latest episode of a logged show (Linux).** The read half of the logger
+  surface, and the mirror of the control gap: RadioBar has read these tracklist
+  logs on macOS from the start, while on Linux the weekly parsers wrote to
+  `~/radio-scan-data` and nothing could show it. A toolbar button — present only
+  when logs exist — opens the latest episode per show: title, date, track count,
+  the tracklist in running order, and **Listen on Mixcloud** where the parser
+  captured a link. Read-only: it cannot fetch and cannot write, so a stale view
+  means the weekly timer hasn't run, which is what the tray's LOGGER section is
+  for. Reads the clean log by preference and falls back to the raw one, so a log
+  that has never been cleaned still shows rather than looking empty. A show with
+  no link says so rather than offering a dead button — On The Wire has no audio to
+  play, and A Duck in a Tree needs none, being a podcast you play in ntune itself.
 - **The tray can pause the logger (Linux).** RadioBar has been two surfaces in one
   menubar on macOS — a viewer over the logs, and a controller for the logging jobs
   — and Linux only ever got the viewer: pausing meant `systemctl --user` in a

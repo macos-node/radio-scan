@@ -158,6 +158,36 @@ SIGKILLed. The generator now checks the stop event every metaint block: a stop
 takes **0.16s** and lands `inactive`, not `failed`. That fix is in the shared
 Python, so launchd's `unload` on macOS gets it too.
 
+### The read half, built the same day — and a distinction the framing above blurs
+
+This document says the tray "delivered a cross-platform answer for (1) only",
+counting the viewer as done. That is true of the tray's NOW-PLAYING readout and
+not of the thing (1) actually describes: RadioBar's viewer reads *the logger's
+JSONL*, while the tray reads `nowplaying.json`, which is ntune's own playback.
+They are different sources answering different questions, and on Linux the
+logger's data had no reader at all.
+
+So there is now an episodic viewer in ntune (`logger::latest_episodes()` +
+`components/EpisodicDialog.tsx`, behind a toolbar button that appears only when
+logs exist): latest episode per weekly show, its tracklist, and a **Listen on
+Mixcloud** link-out where the parser captured one. Read-only — it cannot fetch and
+cannot write, so a stale view means the timer hasn't run, which is what the tray's
+LOGGER section is for.
+
+Two decisions worth recording. It reads the CLEAN log by preference and falls back
+to the raw one, because `--clean` runs as ExecStartPost on every scheduled fetch
+and is therefore current, while a log that has never been cleaned still shows
+rather than appearing empty. And a show with no captured link says so instead of
+offering a dead button — On The Wire publishes no audio, so a link-out is the only
+honest action there is, and Duck legitimately has none because it is a real
+podcast you play in ntune itself.
+
+**Still Linux-only, and now in both directions** (§8.1: intended, recorded here).
+macOS reads these logs in RadioBar. What RadioBar does NOT yet have is the
+link-out: its `Track` decoder has a fixed field list, so `listen_url` is invisible
+to it even after pulling the parser — its only open action is `openDataFolder()`.
+macOS's call whether that is worth closing.
+
 Still not built, and still deliberately: cross-box awareness (below).
 
 ## Also open — version chip + a parity gate

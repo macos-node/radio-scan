@@ -1858,6 +1858,26 @@ fn remove_favorite(app: tauri::AppHandle, id: String) -> Result<(), String> {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// The latest episode of each episodic show the local logger has captured, with
+/// its tracklist and — where the parser found one — the page to listen on.
+///
+/// LINUX ONLY, and empty elsewhere: macOS reads these same logs in RadioBar,
+/// which is the recorded divergence in
+/// docs/logger-control-surface-2026-08-25.md, and Windows runs no logger at all.
+/// Returning an empty list rather than erroring lets the UI simply not offer the
+/// view, with no platform check in the frontend.
+#[tauri::command]
+fn episodic_shows() -> serde_json::Value {
+    #[cfg(target_os = "linux")]
+    {
+        serde_json::json!(logger::latest_episodes())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        serde_json::json!([])
+    }
+}
+
 pub fn run() {
     // ONE INSTANCE PER USER — release builds only.
     //
@@ -1928,6 +1948,7 @@ pub fn run() {
             fetch_podcast,
             cached_podcasts,
             station_icy,
+            episodic_shows,
             add_favorite,
             list_favorites,
             remove_favorite,

@@ -38,14 +38,18 @@ pub struct Job {
     /// What the menu calls it.
     pub label: &'static str,
     pub kind: Kind,
+    /// The log directory under the data dir — also the log's filename stem, and
+    /// the id the frontend uses. Episodic shows only; a stream has a log too but
+    /// nothing here reads it (the tray's now-playing comes from the bridge file).
+    pub log: &'static str,
 }
 
 /// The jobs `service/install-linux.sh` + `install-linux-episodic.sh` create. A job
 /// whose unit isn't installed is dropped at startup rather than shown dead.
 pub const JOBS: &[Job] = &[
-    Job { unit: "radio-scan.service", label: "Acid Jazz", kind: Kind::Stream },
-    Job { unit: "otw-playlist.timer", label: "On The Wire", kind: Kind::Episodic },
-    Job { unit: "duck-playlist.timer", label: "A Duck in a Tree", kind: Kind::Episodic },
+    Job { unit: "radio-scan.service", label: "Acid Jazz", kind: Kind::Stream, log: "acidjazz" },
+    Job { unit: "otw-playlist.timer", label: "On The Wire", kind: Kind::Episodic, log: "otw" },
+    Job { unit: "duck-playlist.timer", label: "A Duck in a Tree", kind: Kind::Episodic, log: "duck" },
 ];
 
 /// Both facts, plus whether the unit exists at all.
@@ -167,6 +171,153 @@ pub fn run(args: &[String]) -> bool {
         .unwrap_or(false)
 }
 
+// --- the episodic viewer ------------------------------------------------------
+// RadioBar has read these logs on macOS from the start; Linux had no way to see
+// them at all, which is the mirror of the control gap option A closed. This is
+// the read half: latest episode per show, its tracklist, and the Mixcloud link
+// when the parser captured one.
+//
+// READ-ONLY, and deliberately a separate concern from the job control above: this
+// touches the logs, that touches the units, and nothing here can change either.
+
+use serde::Serialize;
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct EpisodicTrack {
+    /// As printed — `1` for On The Wire, `"00"`/`"++"` for A Duck in a Tree.
+    pub pos: String,
+    pub artist: String,
+    pub title: String,
+    /// Label / album, where the feed carries them. Empty rather than absent, so
+    /// the row renders the same shape for both shows.
+    pub detail: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct EpisodicShow {
+    pub id: String,
+    pub label: String,
+    pub episode: String,
+    pub date: String,
+    /// The Mixcloud page for this episode, or empty. NEVER a stream URL — On The
+    /// Wire publishes no audio, which is the whole reason this field exists.
+    pub listen_url: String,
+    pub tracks: Vec<EpisodicTrack>,
+    /// How many episodes the log holds, so the view can say what it is a slice of.
+    pub episodes: usize,
+}
+
+/// `~/radio-scan-data`, or wherever `RADIOSCAN_DATA` points — the same resolution
+/// order the Python loggers use, so the viewer cannot end up reading a different
+/// directory from the one being written.
+fn data_dir() -> Option<std::path::PathBuf> {
+    if let Ok(d) = std::env::var("RADIOSCAN_DATA") {
+        if !d.is_empty() {
+            return Some(std::path::PathBuf::from(d));
+        }
+    }
+    std::env::var("HOME").ok().map(|h| std::path::Path::new(&h).join("radio-scan-data"))
+}
+
+/// Sort key for a position that is an int in one log and a string in the other.
+/// A non-numeric marker (Duck's `"++"`) sorts last rather than being dropped.
+///
+/// No zero-stripping: `"00".parse()` is already 0, and stripping first made an
+/// empty string that failed to parse — which sorted Duck's OPENING track last.
+/// Caught by the test, which is why it names the case rather than the function.
+fn pos_key(pos: &str) -> u32 {
+    let t = pos.trim();
+    if t.is_empty() {
+        return 0;
+    }
+    t.parse().unwrap_or(u32::MAX)
+}
+
+fn as_str(v: Option<&serde_json::Value>) -> String {
+    match v {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(serde_json::Value::Number(n)) => n.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// The newest episode in one log, by `episode_date`.
+///
+/// Reads the CLEAN log by preference and falls back to the raw one: `--clean`
+/// drops the prose, embeds and intro/outro markers that both feeds carry, and it
+/// runs as ExecStartPost on every scheduled fetch, so it is the current one. A
+/// log that has never been cleaned still shows, with its noise.
+pub fn latest_episode(job: &Job) -> Option<EpisodicShow> {
+    let dir = data_dir()?.join(job.log);
+    let text = [
+        dir.join(format!("{}_log.clean.jsonl", job.log)),
+        dir.join(format!("{}_log.jsonl", job.log)),
+    ]
+    .iter()
+    .find_map(|p| std::fs::read_to_string(p).ok())?;
+
+    let rows: Vec<serde_json::Value> = text
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect();
+
+    let dates: std::collections::BTreeSet<String> = rows
+        .iter()
+        .map(|r| as_str(r.get("episode_date")))
+        .filter(|d| !d.is_empty())
+        .collect();
+    let newest = dates.iter().next_back()?.clone();
+
+    let mut tracks: Vec<(u32, EpisodicTrack)> = rows
+        .iter()
+        .filter(|r| as_str(r.get("episode_date")) == newest)
+        .map(|r| {
+            let pos = as_str(r.get("pos"));
+            let label = as_str(r.get("label"));
+            let album = as_str(r.get("album"));
+            let detail = match (label.is_empty(), album.is_empty()) {
+                (true, true) => String::new(),
+                (false, true) => label,
+                (true, false) => album,
+                (false, false) => format!("{label} \u{00B7} {album}"),
+            };
+            (
+                pos_key(&pos),
+                EpisodicTrack { pos, artist: as_str(r.get("artist")), title: as_str(r.get("title")), detail },
+            )
+        })
+        .collect();
+    tracks.sort_by_key(|(k, _)| *k);
+
+    let of_episode = |key: &str| {
+        rows.iter()
+            .find(|r| as_str(r.get("episode_date")) == newest && !as_str(r.get(key)).is_empty())
+            .map(|r| as_str(r.get(key)))
+            .unwrap_or_default()
+    };
+
+    let (episode, listen) = (of_episode("episode"), of_episode("listen_url"));
+    Some(EpisodicShow {
+        id: job.log.to_string(),
+        label: job.label.to_string(),
+        episode,
+        date: newest,
+        listen_url: listen,
+        tracks: tracks.into_iter().map(|(_, t)| t).collect(),
+        episodes: dates.len(),
+    })
+}
+
+/// Every episodic show that has a log to read. A show with no log is absent, not
+/// empty — same rule as the tray's job section.
+pub fn latest_episodes() -> Vec<EpisodicShow> {
+    JOBS.iter()
+        .filter(|j| j.kind == Kind::Episodic)
+        .filter_map(latest_episode)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,6 +389,26 @@ mod tests {
         assert!(!is_on(Kind::Stream, paused));
         // For a timer the same reading is the opposite way round: still armed.
         assert!(is_on(Kind::Episodic, paused));
+    }
+
+    #[test]
+    fn a_marker_position_sorts_last_rather_than_vanishing() {
+        // Duck's tracklists carry "++" rows among "00".."12". Dropping them would
+        // silently shorten a tracklist; sorting them last keeps the count honest.
+        assert_eq!(pos_key("00"), 0);
+        assert_eq!(pos_key("07"), 7);
+        assert_eq!(pos_key("12"), 12);
+        assert_eq!(pos_key("++"), u32::MAX);
+        assert!(pos_key("++") > pos_key("99"));
+    }
+
+    #[test]
+    fn a_position_reads_the_same_from_either_log_shape() {
+        // On The Wire logs `pos` as a JSON number, Duck as a zero-padded string.
+        assert_eq!(as_str(Some(&serde_json::json!(3))), "3");
+        assert_eq!(as_str(Some(&serde_json::json!("03"))), "03");
+        assert_eq!(as_str(Some(&serde_json::json!(null))), "");
+        assert_eq!(as_str(None), "");
     }
 
     #[test]

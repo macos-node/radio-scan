@@ -451,3 +451,33 @@ export function listFavorites(): Promise<Favorite[]> {
 export function removeFavorite(id: string): Promise<void> {
   return invoke("remove_favorite", { id });
 }
+
+// --- the episodic viewer (Linux) --------------------------------------------
+// The read half of the logger surface: what the weekly parsers captured, which
+// on macOS is RadioBar's job. Empty off Linux, so the UI just doesn't offer it.
+
+export interface EpisodicTrack {
+  /** As printed — `1` for On The Wire, `00`/`++` for A Duck in a Tree. */
+  pos: string;
+  artist: string;
+  title: string;
+  /** Label / album where the feed carries them; "" otherwise. */
+  detail: string;
+}
+
+export interface EpisodicShow {
+  id: string;
+  label: string;
+  episode: string;
+  date: string;
+  /** The Mixcloud page, or "". Never a stream URL — On The Wire has no audio. */
+  listen_url: string;
+  tracks: EpisodicTrack[];
+  /** Episodes in the whole log, so the view can say what it's a slice of. */
+  episodes: number;
+}
+
+/** Latest episode per show. Empty when there's no logger on this box. */
+export function episodicShows(): Promise<EpisodicShow[]> {
+  return invoke<EpisodicShow[]>("episodic_shows");
+}

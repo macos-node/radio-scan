@@ -13,12 +13,14 @@ import {
   Headphones,
   Heart,
   KeyRound,
+  ListMusic,
   Palette,
   Plus,
   Radio,
   Upload,
 } from "lucide-react";
 import { ToolbarIconButton } from "./components/ToolbarIconButton";
+import { EpisodicDialog } from "./components/EpisodicDialog";
 import { StationList } from "./components/StationList";
 import { PodcastTab } from "./components/PodcastTab";
 import { PlayerBar } from "./components/PlayerBar";
@@ -30,6 +32,7 @@ import { Modal } from "./components/Modal";
 import {
   addFavorite,
   addLocalStation,
+  episodicShows,
   exportJson,
   getIdentity,
   getProxyPort,
@@ -49,6 +52,7 @@ import {
   unfollowStation,
   writeNowPlaying,
   type Episode,
+  type EpisodicShow,
   type Favorite,
   type Identity,
   type IcyInfo,
@@ -141,6 +145,10 @@ export default function App() {
   const [stationMsg, setStationMsg] = useState<string | null>(null);
   // Publishing the whole list is a bulk public act, so it asks first.
   const [confirmPublishAll, setConfirmPublishAll] = useState(false);
+  // The local logger's captured episodes (Linux; empty elsewhere, which is what
+  // hides the toolbar entry point without a platform check up here).
+  const [episodic, setEpisodic] = useState<EpisodicShow[]>([]);
+  const [showEpisodic, setShowEpisodic] = useState(false);
   const [tab, setTab] = useState<Tab>("stations");
   // Unified "what's playing" — a live station or a seekable episode (U4).
   const [current, setCurrent] = useState<Playing | null>(null);
@@ -696,6 +704,18 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [togglePlay, skip]);
 
+  /** Re-read the episode logs. Cheap (two small files) and always on demand, so
+   *  the view can't show a fetch that finished after the app started. */
+  const loadEpisodic = useCallback(() => {
+    episodicShows()
+      .then(setEpisodic)
+      .catch(() => setEpisodic([]));
+  }, []);
+
+  useEffect(() => {
+    loadEpisodic();
+  }, [loadEpisodic]);
+
   const changeVolume = useCallback((v: number) => {
     setVolume(v);
     setSetting(VOLUME_KEY, String(v));
@@ -832,6 +852,16 @@ export default function App() {
               {identity ? `${identity.npub.slice(0, 12)}…` : "no key"}
             </span>
           </button>
+          {episodic.length > 0 && (
+            <ToolbarIconButton
+              icon={<ListMusic size={15} />}
+              title="Latest episodes (logged shows)"
+              onClick={() => {
+                loadEpisodic();
+                setShowEpisodic(true);
+              }}
+            />
+          )}
           <ToolbarIconButton
             icon={
               <Heart
@@ -1072,6 +1102,13 @@ export default function App() {
           identity={identity}
           onClose={() => setShowIdentity(false)}
           onChange={setIdentity}
+        />
+      )}
+      {showEpisodic && (
+        <EpisodicDialog
+          shows={episodic}
+          onClose={() => setShowEpisodic(false)}
+          onRefresh={loadEpisodic}
         />
       )}
       {showFavorites && (
