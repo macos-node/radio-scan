@@ -19,6 +19,13 @@
 > `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
 > is now frozen additive-only.
 >
+> **RadioBar viewer confirmed by the user, all three shows — the migration
+> regression is closed (macOS, 2026-08-25).** `e35849f` left "whether the menu
+> renders tracks is with the user" standing; it does, for Acid Jazz, On The Wire
+> and A Duck in a Tree. Closing it here rather than leaving the open claim to be
+> repeated later — a stale "not verified" cost this thread a round trip once
+> already.
+>
 > **`radioscan.py` hardcodes the log FILENAME as `acidjazz_log.*` whatever
 > `--name` says. macOS, 2026-08-25 — a naming wart, not a bug.** `Station.__init__`
 > builds `<data_dir>/<name>/` from the name and then joins the literal
