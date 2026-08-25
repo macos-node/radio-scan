@@ -3,6 +3,57 @@
 radio-scan's L4 desktop tuner/player. Notable changes per release. Dates are the
 tag date; unreleased work sits under the top heading until tagged.
 
+## 0.2.0-beta.2 — 2026-08-25
+
+The logger's READ half on Linux, and the On The Wire link-out that gives it
+something to point at. Second beta of the 0.2.0 line, cut the same day as the
+first: `beta.1` closed the control gap (pause/resume/fetch from the tray), and
+this closes the viewing one, which was the same asymmetry pointing the other way.
+
+Both platforms have run this tree. macOS confirms the Linux-only surfaces stay
+hidden there — RadioBar remains that box's reader — and Linux drove every new
+control against the real logs.
+
+### Added
+- **A dot when a logged show has a new episode (Linux).** The tray can't show a
+  tracklist on Linux the way RadioBar's menubar does, so the window carries the
+  signal instead: the episodes button takes a dot when a show's newest episode
+  hasn't been looked at, and its tooltip names which show. Marked per show when
+  you actually display it — not when the dialog opens — so a show you never
+  switched to keeps its dot, and the dialog opens on whichever show the dot was
+  pointing at rather than always the first. Compared by episode DATE, so a
+  scheduled re-parse that rewrites rows without finding a new episode can't light
+  it. The seen state lives in the durable settings store, so it survives a restart
+  and a non-graceful exit.
+  The dot is a **status** colour, not `--c-mauve`: index.css states the rule for
+  the mono theme — chrome goes greyscale, meaning keeps its colour — and a dot
+  whose whole job is hue is meaning. Built with mauve first and it rendered grey
+  on grey, signalling nothing.
+- **See the latest episode of a logged show (Linux).** The read half of the logger
+  surface, and the mirror of the control gap: RadioBar has read these tracklist
+  logs on macOS from the start, while on Linux the weekly parsers wrote to
+  `~/radio-scan-data` and nothing could show it. A toolbar button — present only
+  when logs exist — opens the latest episode per show: title, date, track count,
+  the tracklist in running order, and **Listen on Mixcloud** where the parser
+  captured a link. Read-only: it cannot fetch and cannot write, so a stale view
+  means the weekly timer hasn't run, which is what the tray's LOGGER section is
+  for. Reads the clean log by preference and falls back to the raw one, so a log
+  that has never been cleaned still shows rather than looking empty. A show with
+  no link says so rather than offering a dead button — On The Wire has no audio to
+  play, and A Duck in a Tree needs none, being a podcast you play in ntune itself.
+
+### Fixed
+- **On The Wire records where to listen, and the link is an episode rather than a
+  person.** Its Blogger feed carries tracklists and no audio at all — 0
+  `<enclosure>`, 0 `<media:content>`, measured against the live feed — so the show
+  cannot be played and that is a property of how it is published, not a gap here.
+  The audio is on Mixcloud, which publishes no stream URL by design, so the log
+  now records the episode PAGE: 184 episodes backfilled, 1987-07-05 to 2026-08-22.
+  Two of those first landed as bare Mixcloud profiles (a guest-mix post links the
+  guest, not the episode), found by macOS after both boxes backfilled independently
+  and compared counts; an episode is always `user/episode-slug`, two path segments,
+  and one segment is now rejected. 184 → **182**, both boxes agreeing.
+
 ## 0.2.0-beta.1 — 2026-08-25
 
 First beta of the 0.2.0 line, and the first tag since `0.1.1-beta.3` — the
@@ -108,32 +159,6 @@ Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../../docs/r
   wash, in both the list and card views.
 
 ### Added
-- **A dot when a logged show has a new episode (Linux).** The tray can't show a
-  tracklist on Linux the way RadioBar's menubar does, so the window carries the
-  signal instead: the episodes button takes a dot when a show's newest episode
-  hasn't been looked at, and its tooltip names which show. Marked per show when
-  you actually display it — not when the dialog opens — so a show you never
-  switched to keeps its dot, and the dialog opens on whichever show the dot was
-  pointing at rather than always the first. Compared by episode DATE, so a
-  scheduled re-parse that rewrites rows without finding a new episode can't light
-  it. The seen state lives in the durable settings store, so it survives a restart
-  and a non-graceful exit.
-  The dot is a **status** colour, not `--c-mauve`: index.css states the rule for
-  the mono theme — chrome goes greyscale, meaning keeps its colour — and a dot
-  whose whole job is hue is meaning. Built with mauve first and it rendered grey
-  on grey, signalling nothing.
-- **See the latest episode of a logged show (Linux).** The read half of the logger
-  surface, and the mirror of the control gap: RadioBar has read these tracklist
-  logs on macOS from the start, while on Linux the weekly parsers wrote to
-  `~/radio-scan-data` and nothing could show it. A toolbar button — present only
-  when logs exist — opens the latest episode per show: title, date, track count,
-  the tracklist in running order, and **Listen on Mixcloud** where the parser
-  captured a link. Read-only: it cannot fetch and cannot write, so a stale view
-  means the weekly timer hasn't run, which is what the tray's LOGGER section is
-  for. Reads the clean log by preference and falls back to the raw one, so a log
-  that has never been cleaned still shows rather than looking empty. A show with
-  no link says so rather than offering a dead button — On The Wire has no audio to
-  play, and A Duck in a Tree needs none, being a podcast you play in ntune itself.
 - **The tray can pause the logger (Linux).** RadioBar has been two surfaces in one
   menubar on macOS — a viewer over the logs, and a controller for the logging jobs
   — and Linux only ever got the viewer: pausing meant `systemctl --user` in a
