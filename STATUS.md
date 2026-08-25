@@ -1,6 +1,6 @@
 # radio-scan — project status
 
-_Last updated: 2026-08-24_
+_Last updated: 2026-08-25_
 
 A snapshot of where this project stands, for picking it back up (in Claude Code
 or elsewhere). Grew from a personal playlist logger into the seed of an
@@ -1502,6 +1502,60 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   blobs**, so a plain `cast(value as text)` truncates at the first byte and reads
   as an empty result rather than as an encoding problem. Any ntune behaviour that
   touches durable state is measurable this way while the GUI stays opaque.
+
+- **The same skip, verified on Linux — and the native window IS drivable here
+  (2026-08-25).** The macOS run could measure the seek math but never the app;
+  this one drove the installed release build directly. The keys move a real
+  playhead: `0:31 → 1:01 → 0:46 → 0:31` (`+30, −15, −15`) while paused, and
+  `6:25 → 6:58` while playing, each read off the player bar in a window capture.
+  Three defects came out of it, all invisible to a unit test and none reachable
+  from the browser frontend.
+  **The arrows were dead after any click** (`7612c1e`). The keydown guard bailed
+  wholesale on a focused `BUTTON`/`A`, which is right for `␣` — the control
+  activates on it — and wrong for the arrows, which a button consumes nothing
+  from. Every list row and every transport control is a `<button>`, and WebKitGTK
+  focuses a button on click where WebKit on macOS does not, so `⟳30` then `→` did
+  nothing and neither did `→` after clicking an episode to start it. The keys
+  worked exactly until you used the app, which is why the macOS run never saw it.
+  Guard is now per key, not per element.
+  **The transport lost track of what the player was doing** (`d04bf8d`). `playing`
+  was set true by the `playing` event and nothing else, so a dropped or reordered
+  event left the app believing otherwise with no route back: pause → skip → play
+  left it thinking nothing played, and the pause button stopped pausing —
+  measured, `3:56 → 4:00` across a click on pause. The spinner had the mirror
+  image — `waiting` raised it and only `playing` lowered it, so any seek while
+  PAUSED (including the automatic one restoring your position on load) span
+  forever over a stopped player, because `playing` cannot arrive for a player that
+  isn't going to play. Both now read the element: `playing` is `!a.paused`,
+  re-asked on every transport event and every `timeupdate`; the spinner is raised
+  by `waiting`/`stalled` and lowered by progress.
+  **Not `readyState`** — that was the first attempt and it was wrong here.
+  WebKitGTK sits below `HAVE_FUTURE_DATA` through long stretches of healthy
+  playback (caught spinning at `10:28` of an episode playing perfectly), so a
+  spinner keyed to it spins during normal listening. A playhead that moves is the
+  honest signal.
+  **Pausing during load restarted the episode**, the second bug and only reachable
+  once the first was fixed. Resume ran `a.play().catch(() => play(current))`, and
+  pausing while that play is pending rejects it with `AbortError` — read as a
+  failed resume, answered by reloading from the top: seen jumping `8:37 → 0:00`.
+  `AbortError` is now ignored on both play paths.
+  *Method, and it is the reusable part — the counterpart to the macOS note above.*
+  This box is X11 (`XDG_SESSION_TYPE=x11`), so the window can be both watched and
+  driven, which is exactly what macOS could not do. Screenshots need nothing:
+  `import -window 0x<id> out.png` (ImageMagick), `-crop 700x60+0+655` for the
+  player bar alone. Key and click injection has no CLI here — `xdotool`, `xte`,
+  `xvkbd`, `ydotool` are all absent and `sudo` wants a password — so the way in is
+  `python-xlib` + the XTEST extension, pip-installed into a throwaway venv:
+  `xtest.fake_input()` produces real events that WebKitGTK accepts, where
+  `XSendEvent`-style synthetic ones (what `xdotool key --window` sends) are
+  ignored. Two traps worth writing down: match the window by WM_CLASS and take the
+  class match, not the biggest — mutter wraps each toplevel in a slightly larger
+  `mutter-x11-frames` window carrying the same WM_NAME, and there is a 10x10 decoy
+  besides; and `pkill -f <path>` kills the calling shell, whose own command line
+  contains the pattern, so use `pkill -x ntune`. Any ntune behaviour that reaches
+  the screen is measurable this way, which on the evidence above is a different
+  and larger set than the durable-state route can reach.
+
 
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
