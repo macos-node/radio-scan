@@ -3,6 +3,24 @@
 radio-scan's L4 desktop tuner/player. Notable changes per release. Dates are the
 tag date; unreleased work sits under the top heading until tagged.
 
+## Unreleased
+
+### Fixed
+- **Windows: no `https://` station would play.** Every `https://` stream failed with
+  `MEDIA_ERR_SRC_NOT_SUPPORTED`, which read like the standing "AAC+ in WebView2"
+  question but was neither codec- nor AAC-specific — MP3 failed identically, and AAC
+  played fine through the `http://` proxy path. Windows serves the app from the real
+  origin `http://tauri.localhost` (macOS/Linux use the opaque `tauri://localhost`),
+  so a direct media request carried `Referer: http://tauri.localhost/` and SomaFM,
+  which refuses hotlinked requests, answered **403** — surfaced by the media element
+  as "source not supported". Fixed with a document-level
+  `<meta name="referrer" content="no-referrer">`; the per-element `referrerpolicy`
+  attribute does **not** work, as Chromium ignores it for media loads. 4/4 stations
+  play where 3/4 failed, and HE-AAC decodes natively in WebView2 — closing the
+  "AAC+ plays" cell of the §5 matrix for Windows. Inert on macOS/Linux (they never
+  sent a `Referer`), but it is a shared file — Needs-verify: macos, linux.
+  Full measurement: [`docs/windows-playback-2026-08-25.md`](docs/windows-playback-2026-08-25.md).
+
 ## 0.2.0-beta.2 — 2026-08-25
 
 The logger's READ half on Linux, and the On The Wire link-out that gives it

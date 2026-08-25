@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Send no Referer on any outbound request. Load-bearing on WINDOWS, where
+         Tauri serves the app from the real origin `http://tauri.localhost` (mac
+         and Linux use the opaque `tauri://localhost`, which never sends one). A
+         direct https:// stream therefore carried `Referer: http://tauri.localhost/`,
+         and SomaFM — which refuses hotlinked requests — answered 403, so EVERY
+         https station failed with MEDIA_ERR_SRC_NOT_SUPPORTED while the http://
+         ones (routed through our proxy, which sends no Referer) played fine.
+         The per-element `referrerpolicy` attribute does NOT fix this: Chromium
+         ignores it for media loads, and the document policy is what media
+         requests actually honour — measured both ways on WebView2 151.
+         Also just correct: a desktop app has no business leaking its internal
+         origin to a third-party stream host. See docs/windows-playback-2026-08-25.md. -->
+    <meta name="referrer" content="no-referrer" />
     <title>ntune</title>
     <script>
       // Theme applied BEFORE React renders, so a launch never flashes the
