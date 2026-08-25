@@ -1,14 +1,26 @@
-// ntune — logger control (LINUX ONLY).
+// ntune — logger control (LINUX) + episodic log READING (Linux and Windows).
 //
-// The half RadioBar has and Linux never did: pause/resume the radio-scan logging
-// jobs, and fetch an episodic show now. Decision + the confirmed systemd mapping:
-// ../../docs/logger-control-surface-2026-08-25.md (option A, 2026-08-25).
+// TWO HALVES, and the split is the point:
 //
-// macOS drives the same jobs from RadioBar's menubar via launchctl, so this is
-// deliberately not cross-platform — a sanctioned divergence in the §8.1 sense,
-// recorded in that document.
+//  • CONTROL — pause/resume a radio-scan job, fetch an episodic show now. Shells
+//    `systemctl --user`, so it is **Linux-only** and each item below carries a
+//    `cfg`. macOS drives the same jobs from RadioBar's menubar via launchctl — a
+//    sanctioned divergence in the §8.1 sense. Decision + the confirmed systemd
+//    mapping: ../../docs/logger-control-surface-2026-08-25.md (option A).
+//  • READ — `latest_episode(s)`, `data_dir` and the row types. Pure file + JSON
+//    with nothing OS-specific in it, so it compiles and runs anywhere the logs
+//    exist. **Windows was un-gated onto this half (stage 1 of the port, see
+//    ../../../docs/platform-parity-2026-08-25.md §8)**, which lights up the
+//    episodic viewer and the new-episode dot there with no frontend change:
+//    `episodic_shows()` already drives the UI off whatever the command returns.
+//    Windows has no logger SERVICE yet, so the view stays empty until something
+//    writes those logs — `python radioscan.py run --config config.json` does, and
+//    a Task Scheduler installer is stage 2.
 //
-// Two rules the doc pins down, and both are load-bearing:
+// macOS is deliberately NOT un-gated: RadioBar is its viewer, and giving it a
+// second one is a product decision that session owns, not a side effect of this.
+//
+// Two rules the doc pins down for the CONTROL half, and both are load-bearing:
 //
 //  1. TWO FACTS PER JOB. `is-active` and `is-enabled` answer different questions
 //     and inactive-but-ENABLED is reachable in normal use (it is what pausing the
@@ -20,7 +32,9 @@
 //     exact systemd equivalent. Mapping both to one verb would look identical in
 //     a menu and be a regression.
 
+#[cfg(target_os = "linux")]
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
 use std::process::Command;
 
 /// Which durability a pause gets. See rule 2 above.
@@ -34,6 +48,9 @@ pub enum Kind {
 
 pub struct Job {
     /// The systemd user unit. Timers for episodic shows, the service for the stream.
+    /// Read only by the CONTROL half, so off Linux it is carried but never used —
+    /// the table stays one list rather than forking per platform.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub unit: &'static str,
     /// What the menu calls it.
     pub label: &'static str,
@@ -53,6 +70,7 @@ pub const JOBS: &[Job] = &[
 ];
 
 /// Both facts, plus whether the unit exists at all.
+#[cfg(target_os = "linux")]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct State {
     pub present: bool,
@@ -67,6 +85,7 @@ pub struct State {
 /// `UnitFileState` is empty for a transient or unlinked unit, and a unit that isn't
 /// installed comes back `LoadState=not-found` — so absence is detected from the
 /// output, never from a non-zero exit.
+#[cfg(target_os = "linux")]
 pub fn parse_show(out: &str) -> HashMap<String, State> {
     let mut map = HashMap::new();
     for block in out.split("\n\n") {
@@ -100,6 +119,7 @@ pub fn parse_show(out: &str) -> HashMap<String, State> {
 }
 
 /// Ask systemd about every job at once.
+#[cfg(target_os = "linux")]
 pub fn query() -> HashMap<String, State> {
     let out = Command::new("systemctl")
         .arg("--user")
@@ -116,6 +136,7 @@ pub fn query() -> HashMap<String, State> {
 /// The status phrase for a job — ALWAYS both facts, never a single word that
 /// collapses them. The second clause is what `is-enabled` adds: whether this
 /// survives a logout, which is the whole difference between the two pause verbs.
+#[cfg(target_os = "linux")]
 pub fn describe(kind: Kind, s: State) -> &'static str {
     match (kind, s.active, s.enabled) {
         (Kind::Stream, true, true) => "logging",
@@ -132,6 +153,7 @@ pub fn describe(kind: Kind, s: State) -> &'static str {
 /// Is this job on, for the purpose of choosing pause vs resume? The question is
 /// per kind, because the two kinds are turned off by different verbs: a stream is
 /// off when it isn't running, a timer is off when it won't run again.
+#[cfg(target_os = "linux")]
 pub fn is_on(kind: Kind, s: State) -> bool {
     match kind {
         Kind::Stream => s.active,
@@ -142,6 +164,7 @@ pub fn is_on(kind: Kind, s: State) -> bool {
 /// The `systemctl --user …` arguments for the pause/resume toggle. Rule 2 lives
 /// here: `stop`/`start` for a stream (session-only), `disable`/`enable --now` for
 /// an episodic timer (persistent).
+#[cfg(target_os = "linux")]
 pub fn toggle_args(kind: Kind, unit: &str, currently_on: bool) -> Vec<String> {
     let verb = match (kind, currently_on) {
         (Kind::Stream, true) => vec!["stop"],
@@ -154,6 +177,7 @@ pub fn toggle_args(kind: Kind, unit: &str, currently_on: bool) -> Vec<String> {
 
 /// Fetch-now runs the SERVICE, not the timer — starting a timer only re-arms it.
 /// Episodic only; a stream logger has nothing to fetch.
+#[cfg(target_os = "linux")]
 pub fn fetch_args(unit: &str) -> Vec<String> {
     let service = unit.strip_suffix(".timer").map(|s| format!("{s}.service"));
     vec!["start".to_string(), service.unwrap_or_else(|| unit.to_string())]
@@ -162,6 +186,7 @@ pub fn fetch_args(unit: &str) -> Vec<String> {
 /// Run one `systemctl --user …` and report whether it succeeded. Errors are
 /// swallowed into `false` — the poller re-reads the real state a moment later, so
 /// the menu corrects itself rather than trusting this return value.
+#[cfg(target_os = "linux")]
 pub fn run(args: &[String]) -> bool {
     Command::new("systemctl")
         .arg("--user")
@@ -210,13 +235,40 @@ pub struct EpisodicShow {
 /// `~/radio-scan-data`, or wherever `RADIOSCAN_DATA` points — the same resolution
 /// order the Python loggers use, so the viewer cannot end up reading a different
 /// directory from the one being written.
+///
+/// The home lookup is per-OS on purpose. Python's `expanduser("~")` resolves to
+/// `%USERPROFILE%` on Windows, and **`HOME` is not set there** for a GUI-launched
+/// app (Git Bash sets it; Explorer does not). Reading `HOME` alone would have made
+/// this return `None` on Windows while `radioscan.py` happily wrote to
+/// `C:\Users\<you>\radio-scan-data` — reader and writer silently pointed at
+/// different directories, which is exactly what the paragraph above forbids.
+/// Measured, not assumed: the Python side was run here and its output landed under
+/// `%USERPROFILE%` (docs/platform-parity-2026-08-25.md §9, "trap 1").
+fn home_dir() -> Option<String> {
+    #[cfg(windows)]
+    {
+        std::env::var("USERPROFILE").ok().filter(|h| !h.is_empty()).or_else(|| {
+            // The pair NT sets even when USERPROFILE is absent (a service account,
+            // say). Joined the same way expanduser does.
+            match (std::env::var("HOMEDRIVE"), std::env::var("HOMEPATH")) {
+                (Ok(d), Ok(p)) if !d.is_empty() && !p.is_empty() => Some(format!("{d}{p}")),
+                _ => std::env::var("HOME").ok().filter(|h| !h.is_empty()),
+            }
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var("HOME").ok().filter(|h| !h.is_empty())
+    }
+}
+
 fn data_dir() -> Option<std::path::PathBuf> {
     if let Ok(d) = std::env::var("RADIOSCAN_DATA") {
         if !d.is_empty() {
             return Some(std::path::PathBuf::from(d));
         }
     }
-    std::env::var("HOME").ok().map(|h| std::path::Path::new(&h).join("radio-scan-data"))
+    home_dir().map(|h| std::path::Path::new(&h).join("radio-scan-data"))
 }
 
 /// Sort key for a position that is an int in one log and a string in the other.
@@ -322,8 +374,12 @@ pub fn latest_episodes() -> Vec<EpisodicShow> {
 mod tests {
     use super::*;
 
+    /// Fixture for the `systemctl show` parser — so Linux-only, like the tests it
+    /// feeds. Off Linux it would just be an unread constant.
+    #[cfg(target_os = "linux")]
     const SHOW: &str = "Id=radio-scan.service\nLoadState=loaded\nActiveState=active\nUnitFileState=enabled\n\nId=otw-playlist.timer\nLoadState=loaded\nActiveState=inactive\nUnitFileState=disabled\n\nId=ghost.timer\nLoadState=not-found\nActiveState=inactive\nUnitFileState=\n";
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn parses_every_unit_from_one_show_call() {
         let m = parse_show(SHOW);
@@ -337,6 +393,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn an_uninstalled_unit_is_absent_not_off() {
         // The distinction matters: "off" belongs in the menu, "not installed"
@@ -345,12 +402,14 @@ mod tests {
         assert!(!m["ghost.timer"].present);
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn transitional_states_do_not_read_as_running() {
         let m = parse_show("Id=x.service\nLoadState=loaded\nActiveState=activating\nUnitFileState=enabled\n");
         assert!(!m["x.service"].active, "activating is not yet active");
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn every_label_carries_both_facts() {
         // The pair that a checkbox would collapse, and the reason this is a menu of
@@ -365,6 +424,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn pause_durability_follows_the_kind_not_the_menu_item() {
         let on = true;
@@ -381,6 +441,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn a_paused_stream_is_off_even_though_it_is_still_enabled() {
         // The state pausing a stream actually produces. If `is_on` read `enabled`
@@ -411,6 +472,7 @@ mod tests {
         assert_eq!(as_str(None), "");
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn fetch_now_starts_the_service_behind_the_timer() {
         // Starting the TIMER would only re-arm it; the fetch would never run.

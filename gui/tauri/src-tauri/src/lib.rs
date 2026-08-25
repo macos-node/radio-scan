@@ -23,9 +23,12 @@ use nostr_sdk::Client;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
-// Logger control is Linux-only: macOS drives the same radio-scan jobs from
-// RadioBar's menubar (docs/logger-control-surface-2026-08-25.md).
-#[cfg(target_os = "linux")]
+// Logger CONTROL is Linux-only — macOS drives the same radio-scan jobs from
+// RadioBar's menubar (docs/logger-control-surface-2026-08-25.md). The module's
+// READ half (episodic logs) is portable, so Windows compiles it too; the control
+// items carry their own `cfg` inside. macOS stays out entirely: RadioBar is its
+// viewer, and a second one there is that session's call, not a side effect.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 mod logger;
 mod proxy;
 mod tray;
@@ -1861,18 +1864,20 @@ fn remove_favorite(app: tauri::AppHandle, id: String) -> Result<(), String> {
 /// The latest episode of each episodic show the local logger has captured, with
 /// its tracklist and — where the parser found one — the page to listen on.
 ///
-/// LINUX ONLY, and empty elsewhere: macOS reads these same logs in RadioBar,
-/// which is the recorded divergence in
-/// docs/logger-control-surface-2026-08-25.md, and Windows runs no logger at all.
-/// Returning an empty list rather than erroring lets the UI simply not offer the
-/// view, with no platform check in the frontend.
+/// Linux AND Windows; empty on macOS, which reads these same logs in RadioBar —
+/// the recorded divergence in docs/logger-control-surface-2026-08-25.md. Windows
+/// joined by reading the logs only (stage 1); its logger has no service yet, so
+/// this returns `[]` there until something writes them, which is the same shape as
+/// a Linux box with no jobs installed. Returning an empty list rather than erroring
+/// is what lets the UI simply not offer the view, with no platform check in the
+/// frontend — and is why un-gating needed no frontend change at all.
 #[tauri::command]
 fn episodic_shows() -> serde_json::Value {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
         serde_json::json!(logger::latest_episodes())
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         serde_json::json!([])
     }
