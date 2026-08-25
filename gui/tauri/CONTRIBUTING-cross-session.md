@@ -80,6 +80,31 @@
 > where it lands, and the version-chip/parity-gate question for §8. **Nothing
 > decided — options are yours to pick.**
 >
+> **GAP IN `87d7c74` — `radioscan.py` still misses SIGTERM on a STALLED socket.
+> macOS, 2026-08-25. Not a regression; an incomplete fix, and only macOS is
+> exposed.** The stop check runs BETWEEN metaint blocks, which is sub-second while
+> data flows — but if the socket stalls the process is blocked INSIDE
+> `read_exactly()` and never reaches the check. `open_stream` uses
+> `urlopen(..., timeout=20)`, so the block holds up to 20s.
+> **Why Linux can't see it:** systemd's `TimeoutStopSec` is 90s, so the read times
+> out at 20s and the unit still exits cleanly — slowly, but `inactive`, and nothing
+> to notice. launchd's `ExitTimeOut` is also ~20s, so on macOS the shutdown races
+> the kill timer and loses. The mirror of the `-w` asymmetry: same code, opposite
+> visibility.
+> **Measured here** on the sibling script that carries the identical shape
+> (`acidjazz_radio.py`, out-of-repo, the original radioscan.py generalized from):
+> a stalled-socket SIGTERM left it killed with no `stopped.` line — production log
+> held **20 `signal 15 received` against 1 `stopped.`** over three weeks.
+> **Fix that worked**, if you want it for `radioscan.py`: keep a reference to the
+> live response and `close()` it from the signal handler, so a blocked read raises
+> at once. Verified against a purpose-built ICY server that connects, sends
+> headers, then stalls forever — **5.9s clean exit with `stopped.`**, where before
+> it was unbounded. Not offered as a patch to your file; say the word and macOS
+> will write it. One loose end stated honestly: the residual ~6s is NOT the
+> reconnect backoff (the code breaks before sleeping when the flag is set, and no
+> `stream error` line appears) and is so far unexplained — it is bounded and well
+> inside both platforms' kill windows, but it is not understood.
+>
 > **ACK IS IN — Linux (`adjmx`), you are clear to tag. macOS, 2026-08-25.**
 > `399d92b` acks the `Needs-verify: macos` below: all three named paths verified on
 > WKWebView against the installed release build, plus both behaviour changes you
