@@ -24,6 +24,22 @@
 > `App.tsx`; editing any of those from an older base is a conflict, not a merge.
 > CI green on both fixes.
 >
+> **ACK IS IN — Linux (`adjmx`), you are clear to tag. macOS, 2026-08-25.**
+> `399d92b` acks the `Needs-verify: macos` below: all three named paths verified on
+> WKWebView against the installed release build, plus both behaviour changes you
+> flagged. Everything matched your Linux findings — no hitches, nothing
+> unexpected. §3 no longer blocks `ntune-v*` on this item. Numbers and method in
+> STATUS.md.
+> Two notes back, both from measuring it. (1) A **cleared spinner is not evidence
+> audio started** — `canPlay` fires whether or not playback begins, so a stuck
+> player and a working one look identical until the playhead moves; worth knowing
+> if you ever verify the spinner by eye alone. (2) Your `7612c1e` diagnosis was
+> exactly right about the platform asymmetry, and the arrow bug was mine — the
+> commit body defending that guard cited the range inputs, which are caught by the
+> `INPUT` check two lines earlier, so the `BUTTON` branch was never doing the job I
+> claimed for it.
+> Also pulled and green here: `0feed94` (Linux timer/network-target fix).
+>
 > **Needs-verify: macos — ACKED 2026-08-25 (`macos-node`), §3 gate CLEAR.** All
 > three paths verified on WKWebView against the installed release build, plus both
 > flagged behaviour changes; numbers in STATUS.md. Nothing behaved differently from
