@@ -1,8 +1,13 @@
-# ntune — cross-session change contract v1.1
+# ntune — cross-session change contract v1.2 (proposed)
 
 > Status: **v1.1 ACCEPTED 2026-08-05 (macOS + Linux)** — adds §7 (CI hygiene) + §8
 > (release cadence) on top of v1.0 (accepted 2026-08-04). Adapted from
 > `xjmzx/pong`. Amend in place; major changes get a new version header.
+>
+> **v1.2 PROPOSED 2026-08-25 (macOS `macos-node`) — pending Linux acceptance.**
+> Adds §8's *parity gate on the stable promotion* + what the version number
+> asserts. **v1.1 remains binding until `adjmx` acks**; nothing below changes
+> today's behaviour except the new §8 subsection, which is marked proposed.
 >
 > **Note 2026-08-11 (macOS `macos-node`).** (1) A **Windows** build is prototyping —
 > §5 matrix Windows row added. (2) The **now-playing bridge** is a §2
@@ -182,6 +187,49 @@ release).
   version bumped across the manifests + a `CHANGELOG.md` entry · each platform has run
   the plays-on-my-platform check (§4 / §5).
 
+### 8.1 Parity gate on the stable promotion (PROPOSED v1.2 — pending `adjmx` ack)
+
+**What the version asserts.** A stable `0.x.0` asserts *"both platforms do this and
+it works"*, not *"code changed"*. The number is user-facing — it is rendered in
+ntune's header chip (`src/App.tsx`) and read by someone deciding whether to
+upgrade — so it is a claim made to a person, and should be true.
+
+**The gate applies to the stable promotion ONLY, never to `-beta.N`.** This is not
+a softening: gating betas would deadlock the whole scheme, because a beta is how
+each platform *gets an installable artifact to test parity with*. No artifact, no
+verification; no verification, no parity; no parity, no artifact. Betas stay cheap
+and frequent exactly as §8 says, and they carry no parity claim.
+
+**Parity does NOT mean identical.** Sanctioned divergences already exist and are
+correct: the Linux installed app defaults to `--tray` while macOS is opt-in; the
+`audio/aacp`→`audio/aac` remap is Linux-only because WKWebView is the opposite way
+round; RadioBar is macOS-only outright. Parity means:
+
+> For every user-facing capability in the batch, either it works on **both**
+> platforms, or the divergence is **intended and written down** — in this contract,
+> a `docs/` note, or `STATUS.md`.
+
+An *unrecorded* divergence is the thing that blocks. Writing one down is a
+legitimate way to clear the gate, and is often the honest outcome.
+
+**"No bugs detected" made falsifiable.** Unbounded, that can never be satisfied.
+It means, at tag time: no **known** open defect on a release-critical path (§3),
+and **both** sessions have run the current beta on their own platform and said so.
+Silence is not an ack (§1's rule, applied to releases).
+
+**Declaring it.** Each session posts a `verified: <os> —` commit against the beta
+being promoted, as §3 already requires for `Needs-verify`. The promoting session
+names both in the tag annotation. No new ceremony — the same ack mechanism, aimed
+at a release instead of a path.
+
+**The failure mode to watch, and the escape hatch.** A parity gate can stall stable
+releases indefinitely when one platform lags, which would push everyone onto betas
+and quietly make `-beta.N` the real release channel — the rot §8 exists to prevent,
+reintroduced by its own safeguard. The escape hatch is deliberate: **ship stable
+with a recorded, intended divergence** rather than blocking forever. If a
+capability is not going to reach one platform soon, write the divergence down and
+promote. Blocking is for *unknown* state, never for known-and-accepted asymmetry.
+
 ## Acceptance log
 - **v1.0** (macOS `macos-node`, 2026-08-04) — initial proposal, adapted from
   `xjmzx/pong` CONTRIBUTING-cross-session v1.0. Pending Linux (`adjmx`)
@@ -193,6 +241,15 @@ release).
   `main` invariant, no tag on red) and §8 (release cadence: `-beta.N` per phase),
   after the 0.1.1-beta.1 convergence exposed a long-red CI (RadioBar Swift-6 vs
   macos-14; ntune had no CI). Pending macOS acceptance.
+- **v1.2 proposed** (macOS `macos-node`, 2026-08-25) — adds §8.1: a parity gate on
+  the **stable promotion only** (never on `-beta.N`, which would deadlock), a
+  definition of parity that admits recorded divergences rather than demanding
+  identical platforms, a falsifiable reading of "no bugs detected", and an escape
+  hatch so the gate cannot quietly turn betas into the real release channel.
+  Prompted by the user's call (2026-08-25) that the version should mean both
+  platforms are comfortable, plus the observation that ntune's header chip already
+  shows the number to a human. **Pending Linux (`adjmx`) acceptance — amend or
+  reject freely; nothing binds until you ack.**
 - **v1.1 accepted** (macOS `macos-node`, 2026-08-05) — reviewed §7 (green-`main`
   invariant; you-red-it-you-fix-it; no `ntune-v*` tag on red) and §8 (a `-beta.N`
   per phase + the pre-tag checklist). Both directly address failures we hit this
