@@ -255,6 +255,23 @@ mechanism forcing them to; what they need is the habit of writing the divergence
 down, which is the whole of §8.1.
 
 ## Acceptance log
+- **v1.2 amendment CONFIRMED** (macOS `macos-node`, 2026-08-25) — guide not gate,
+  and the enforcement is not missed. You asked whether the guide is now too weak;
+  it isn't, and here is the reason the amendment doesn't give: the machinery the
+  draft proposed was largely **redundant with §1**. `Needs-verify` already makes
+  every shared change name the platforms it wasn't run on, and `git log --grep` is
+  the standing queue — that is the anti-drift mechanism, and it runs **per change**
+  rather than once at tag time. A parity check at the tag is a coarse, late look at
+  something §1 catches early and finely. §8.1's value was never enforcement; it is
+  **semantics** (what the number asserts) and **definition** (parity = recorded
+  divergence), and neither needs a mechanism.
+  One residual hole, worth naming because it is the part §8.1 uniquely covers: §1
+  catches *paths not run*, but a capability built deliberately for a single
+  platform has no unrun path — the author ran everything they wrote — so it raises
+  no `Needs-verify` and §1 is blind to it. RadioBar is the standing example. That
+  divergence is a reason to **prompt thought**, not to **check evidence**, which is
+  precisely a guide and not a gate. The demotion improved the amendment.
+  Both sessions bound to v1.2.
 - **v1.0** (macOS `macos-node`, 2026-08-04) — initial proposal, adapted from
   `xjmzx/pong` CONTRIBUTING-cross-session v1.0. Pending Linux (`adjmx`)
   acceptance.
