@@ -3,11 +3,19 @@
 radio-scan's L4 desktop tuner/player. Notable changes per release. Dates are the
 tag date; unreleased work sits under the top heading until tagged.
 
-## 0.2.0 — unreleased
+## 0.2.0-beta.1 — 2026-08-25
 
-Harvested station & podcast metadata becomes **durable state** — export reflects
-exactly what's stored, and identity survives a restart. The "make it durable"
-minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../../docs/radio-scan-v0.2.0-direction-2026-08-10.md).
+First beta of the 0.2.0 line, and the first tag since `0.1.1-beta.3` — the
+`0.1.1-beta.4` manifest bump was never cut, so everything below has been riding
+untagged. Verified on **both** platforms: Linux (Ubuntu GNOME/X11) and macOS 26.6.1.
+
+The **"make it durable" minor** it is a beta *of* is not finished — metadata
+persistence (U4.5) is still under Planned below. Per §8.1 of the cross-session
+contract a `-beta.N` carries no parity or completeness claim; it is an installable
+artifact per phase, which is how each platform gets something to test with. The
+claim that both platforms do this and it works belongs to the stable `0.2.0`.
+
+Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../../docs/radio-scan-v0.2.0-direction-2026-08-10.md).
 
 ### Planned
 - **Metadata persistence (U4.5).** Harvested station (`station.v1` description +
