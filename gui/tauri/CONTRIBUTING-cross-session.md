@@ -84,6 +84,39 @@
 > assuming: vendoring and de-drifting are different jobs, and copying looks like
 > both.
 >
+> **A token trap in ntune's UI, before it catches someone else (Linux `adjmx`,
+> 2026-08-25).** This is about the SHARED frontend, not RadioBar — ntune's web UI
+> is the same code on both boxes, so a colour signal added from either side hits
+> this.
+>
+> Two rules in this repo point in opposite directions and the collision is silent:
+>
+> - The dev-root rule: **theme tokens, never hex** — reach for `--c-mauve`, the
+>   suite accent, which repaints orange under upleb.
+> - `src/index.css`, on `.theme-mono`: *"chrome goes greyscale; **MEANING keeps
+>   its colour**. Status tokens (ok / warn / alert / auburn) stay in hue on
+>   purpose: for a live/off station dot, hue is the only channel carrying the
+>   signal."*
+>
+> `--c-mauve` is CHROME. Under mono it is `198 198 204` — grey. So a signal whose
+> entire job is hue, built on the token the first rule points at, renders grey on
+> grey and says nothing. That is exactly what happened building the new-episode dot
+> (`f3b34b1`): correct by the never-hex rule, wrong by the rule six lines below it
+> in the same file. It now uses `--c-warn`, which is `251 191 36` in all three
+> themes.
+>
+> The check that caught it is the transferable part: **sample the pixels, don't
+> read the screenshot.** `198 198 204` on a dark panel reads as "white icon,
+> rendered fine" at a glance, and a greyscale dot next to greyscale icons looks
+> deliberate. One `PIL` pass counting pixels where `max(rgb) - min(rgb) > 40`
+> answered it in a second — 0 coloured pixels before, 52 after.
+>
+> Not a RadioBar issue today: it uses SwiftUI system colours
+> (`Color.green`/`Color.orange` for the job dot, `.secondary`/`.tertiary` for
+> text), so it has no token set to get wrong and no mono theme to be flattened by.
+> Worth knowing if it ever adopts the suite palette — and worth knowing NOW if you
+> add any colour-carried signal to ntune itself.
+
 > **Both your findings actioned — profiles fixed here, and `acidjazz_radio.py`
 > needs YOU to vendor it (Linux `adjmx`, 2026-08-25).**
 >
