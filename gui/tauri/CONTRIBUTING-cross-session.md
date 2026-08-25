@@ -19,6 +19,48 @@
 > `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
 > is now frozen additive-only.
 >
+> **`ntune-v0.2.0-beta.1` is cut — and the `.dmg` is not all of it (Linux
+> `adjmx`, 2026-08-25).** Both release jobs green;
+> `ntune_0.2.0-beta.1_aarch64.dmg` (8 MB) and `ntune_0.2.0-beta.1_amd64.deb` are
+> published as a pre-release. First tag since `0.1.1-beta.3` — the
+> `0.1.1-beta.4` bump was never cut, so this carries a phase and a half.
+>
+> **Install the `.dmg` for the app**: the skip transport, the play/buffer state
+> rewrite you verified in `399d92b`, the focus-guard fix, and the earlier relay
+> and publish-gate work. Logger control is in there too but `cfg`-gated to Linux,
+> so it is absent by design, not missing.
+>
+> **The `.dmg` carries NO Python.** Checked rather than assumed: `bundle.resources`
+> and `bundle.externalBin` are both null in `tauri.conf.json`, so nothing under
+> `radioscan.py` or `episodic/` ships inside the app on any platform. Two things
+> therefore reach you only by `git pull`, and both need the copy-into-place step —
+> the same seam that had the first stop-fix verification testing a file nothing was
+> running:
+>
+> - **`radioscan.py`** (`87d7c74` + `2f9551c`). You already ported both by hand
+>   into `acidjazz_radio.py`, which is what actually runs there, so this is
+>   informational — the installer will not do it and never would have.
+> - **`episodic/otw_playlist.py`** (`e140a1a`), which landed AFTER the tag. New
+>   `listen_url` per episode, a `--relink` backfill, and a CSV schema upgrade.
+>   Copy it to wherever your launchd job runs it from, then `--relink` once and
+>   `--clean`.
+>
+> On the tag being incomplete: deliberate, not an oversight. `e140a1a` touches a
+> parser the app does not contain, so rebuilding the bundle for it would ship an
+> artifact identical to this one. Shared-Python work travels by pull, never by
+> installer, on both boxes.
+>
+> **Why `otw_playlist.py` gained a link at all**, since it changes what the OTW log
+> means: the show cannot be played, and that is a property of how it is published,
+> not a gap at our end. Its Blogger feed carries tracklists and no audio —
+> 0 `<enclosure>`, 0 `<media:content>`, no `.mp3`/`.m4a` anywhere, measured against
+> the live feed. The audio is on Mixcloud, embedded as a player iframe, and
+> Mixcloud publishes no stream URL by design (their API returns name, page and
+> `audio_length`). So the log now records WHERE TO LISTEN and claims nothing more.
+> Backfilled here: 184 episodes linked, 1987-07-05 to 2026-08-22, out of 1,277.
+> A Duck in a Tree is unaffected — it is a real podcast feed with enclosures, which
+> is exactly why one is playable and the other never will be.
+
 > **For macOS: please verify the `radioscan.py` stop fix (Linux `adjmx`,
 > 2026-08-25, `87d7c74`).** It is the one part of that commit that isn't
 > Linux-only — the tray work is `cfg`-gated, the Python is shared with your
