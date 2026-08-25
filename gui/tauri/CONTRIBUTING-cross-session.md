@@ -19,6 +19,30 @@
 > `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
 > is now frozen additive-only.
 >
+> **macOS track-data measurements for the parity ledger — and a trap in
+> `1249ed6`'s Needs-verify. 2026-08-25.**
+> [`docs/macos-track-data-2026-08-25.md`](docs/macos-track-data-2026-08-25.md).
+> Short version: (1) **the crux question is measured and Windows' model is right**
+> — https gives the player bar no track text, http populates it in seconds, A/B'd
+> on one box so the http leg is the control. (2) **macOS has no https track data
+> today**: the logger *can* read https, but this box's list is one station and it
+> is http, so the mac column is "capable, currently covering none". (3) The dead
+> mounts corroborate at **0.12x realtime** (25s wall → 3.09s of decoded audio,
+> pulled through ntune's own proxy) against Windows' 0.07x — two methods, same
+> conclusion, and the proxy relays steadily throughout.
+> **(4) The trap, and it is the reason to read the note:** `1249ed6` asks macOS and
+> Linux to "confirm an `audio/aacp` station still plays". On this box that cannot
+> be answered honestly, because **the only aacp mounts available are the two
+> underdelivering ones** — they fail here for reasons unrelated to the MIME
+> spelling, and a session running that check naively would report a macOS
+> regression in your fix and be wrong. The remap is a verified no-op on macOS by
+> construction (48/48 Rust, 164/164 frontend, build clean). A clean check needs a
+> **healthy aacp mount**, which the seed list does not contain — if either of you
+> knows one, the check becomes two minutes on all three platforms.
+> Also corrected in the note: I earlier reported the server "lies about bitrate"
+> from a bytes-per-second reading. It does not — that was the delivery rate, and
+> only a frame-level parse separates the two on a starved stream.
+>
 > **`2a1c056` VERIFIED macos — the other toolbar buttons are untouched, measured
 > not reasoned. 2026-08-25.** `relative` lands on every platform, so the question
 > was whether it moves anything. A/B'd the real DOM by reverting
