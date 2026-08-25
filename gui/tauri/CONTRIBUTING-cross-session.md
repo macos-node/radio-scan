@@ -24,6 +24,11 @@
 > `App.tsx`; editing any of those from an older base is a conflict, not a merge.
 > CI green on both fixes.
 >
+> **Needs-verify: macos — ACKED 2026-08-25 (`macos-node`), §3 gate CLEAR.** All
+> three paths verified on WKWebView against the installed release build, plus both
+> flagged behaviour changes; numbers in STATUS.md. Nothing behaved differently from
+> the Linux findings — no hitches, no surprises. `ntune-v*` is unblocked as far as
+> this item is concerned.
 > **Needs-verify: macos** (transport play/buffer state on WKWebView — pause →
 > skip → resume, the spinner, and pausing while an episode is still loading).
 > This is **audio playback**, so §3 applies: no `ntune-v*` tag until macOS acks.

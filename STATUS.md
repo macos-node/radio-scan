@@ -1496,12 +1496,21 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   window from a shell — `screencapture` returns `could not create image from
   display` without Screen Recording, and synthetic keystrokes need Accessibility.
   The way in was the app's own durable state: `savePosition` writes to the
-  webview's localStorage, on disk at
-  `~/Library/WebKit/ntune/WebsiteData/Default/*/*/LocalStorage/localstorage.sqlite3`.
-  Copy it (WAL, live writer) and decode — WebKit stores the values as **UTF-16LE
-  blobs**, so a plain `cast(value as text)` truncates at the first byte and reads
-  as an empty result rather than as an encoding problem. Any ntune behaviour that
-  touches durable state is measurable this way while the GUI stays opaque.
+  webview's localStorage, on disk under `~/Library/WebKit/`. Copy it (WAL, live
+  writer) and decode — WebKit stores the values as **UTF-16LE blobs**, so a plain
+  `cast(value as text)` truncates at the first byte and reads as an empty result
+  rather than as an encoding problem. Any ntune behaviour that touches durable
+  state is measurable this way while the GUI stays opaque.
+  **Corrected 2026-08-25** — this entry originally named
+  `~/Library/WebKit/ntune/…` as *the* path. That is the **dev-build** store only.
+  WebKit keys the directory by **bundle identifier** for a bundled app and by
+  **process name** for a bare binary, so the installed app writes to
+  `~/Library/WebKit/uk.fizx.ntune/…` and `scripts/dev.sh` to
+  `~/Library/WebKit/ntune/…` — two stores, and reading the wrong one shows a
+  believable-but-stale snapshot rather than an error. Glob `*ntune` and rank by
+  the **`-wal`** mtime, not the `.sqlite3` mtime: writes land in the WAL, so the
+  main file can look untouched for a day on a store being written to right now.
+  Both traps cost a repeated test run before they were spotted.
 
 - **The same skip, verified on Linux — and the native window IS drivable here
   (2026-08-25).** The macOS run could measure the seek math but never the app;
@@ -1556,6 +1565,44 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   the screen is measurable this way, which on the evidence above is a different
   and larger set than the durable-state route can reach.
 
+
+- **Transport play/buffer state on WKWebView — VERIFIED (2026-08-25), clearing the
+  Linux `Needs-verify: macos`.** `7612c1e` + `d04bf8d` were written and measured on
+  WebKitGTK; none of it had run on WKWebView. All three named paths now have, plus
+  both behaviour changes the contract flagged for a deliberate look. Method as
+  above — the persisted playhead read on a 0.5s loop, with the operator reporting
+  the glyph and the audio, which the trace cannot see.
+  - **pause → skip → resume → pause.** The sequence that broke on Linux, where the
+    app kept believing nothing was playing and the pause button stopped pausing.
+    Here: `69s` pause, `+30` skip while stopped, resume to `103 → 107 → 109`, then
+    pause — and **22 seconds of silence**, five missed throttle intervals. Playing
+    audio cannot produce that gap. Both pauses left the short partial write (`+1`,
+    `+2`) that is `savePosition` recording an exact stop point.
+  - **The spinner.** Manual seek while paused (`+30, +30, −15` in three seconds,
+    no playback ticks anywhere near them): no spinner. The load-time variant —
+    quit, reopen, resume — restored `154s` (`2:34` on screen, exactly), cleared the
+    spinner, and then wrote `255 → 259 → … → 279` steadily. That last part matters:
+    the spinner is cleared by `canPlay`, which fires whether or not playback
+    actually begins, so a cleared spinner alone cannot distinguish a working player
+    from a stuck one. The advancing playhead is what does.
+  - **Pausing mid-load — the `AbortError` path.** Frozen at `0:03` and **nothing
+    written**, which is the pass: positions under 5s are never stored, so a
+    successful mid-load pause is invisible by design and the *failure* is what
+    shows — the old code read it as a failed resume and reloaded from the top.
+  - **Same-row click while still buffering.** Stopped, nothing written — again the
+    absence is the evidence. Verified separately when loaded (stops at `11s`), but
+    only the sub-5s run discriminates: once an episode is properly playing, old and
+    new code both stop it.
+  - **The arrows and `␣`** (`7612c1e`): five clean `+30`s after a mouse click and
+    after Tab focus; `␣` pauses and resumes with nothing focused; `␣` on a focused
+    `⟳30` **skips instead of toggling**, which is the guard kept on purpose.
+  *Reading note, and it bit twice in one session.* On this channel **absence is a
+  measurement**, and it is the one easiest to misread. Silence means "no position
+  was written", which is the pass for every sub-5s test here and the failure signal
+  for a pause that did not take — the surrounding timing is what tells them apart.
+  Both misreads were the same mistake in different clothes: assuming the newest
+  line in the trace belonged to the test just described, rather than checking which
+  episode it named.
 
 ## Outstanding
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
