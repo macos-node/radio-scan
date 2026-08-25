@@ -146,3 +146,64 @@ ntune's live readout, the logger feeds history/tallies.** They are not substitut
 3. **Then decide** §6 (in-app https ICY — benefits all three) and §5 (Windows logger —
    benefits Windows only). §6 is the wider win; §5 is the parity win.
 4. **Windows `nsec` round-trip** whenever a key is to hand.
+
+## 8. Picking this up — concrete groundwork (surveyed 2026-08-25, nothing built)
+
+### Which to start with
+
+**Start with the track-data pass (§7.2), and not because it blocks the build.** The
+Windows logger is additive and well-defined — Windows has no logger, so nothing has to
+be understood first to add one. The reason to measure first is that it may **redirect
+the effort**: if what is actually missed day to day is ntune's **player-bar readout**,
+then §6 (in-app https ICY) is the higher-value job — it fixes **all three** platforms,
+where the Windows logger fixes one. The pass is an hour and could save a week of
+building the less useful thing.
+
+### If/when the Windows logger is the choice: the port is naturally staged
+
+✅ **`logger.rs` (419 lines) splits cleanly in two**, so this does not have to be
+all-or-nothing:
+
+| Half | Functions | Portable? |
+|---|---|---|
+| **Read** | `data_dir`, `pos_key`, `as_str`, `latest_episode`, `latest_episodes`, `EpisodicShow/Track` | ✅ pure file + JSON — ports as-is (bar the trap below) |
+| **Control** | `parse_show`, `query`, `describe`, `is_on`, `toggle_args`, `fetch_args`, `run`, the `Job`/`Kind` unit table | ❌ **systemd-only** — shells `systemctl --user` and parses `systemctl show` |
+
+So **stage 1** is the read half: un-gate it, and the episodic viewer + "new episode" dot
+light up on Windows with **no frontend change** (`episodic_shows()` already drives the UI
+off the command's return, and returns `[]` where there is nothing). **Stage 2** — the
+pause/resume/fetch-now controls — is the real work, because Task Scheduler's model is
+nothing like systemd's and the `Job` table is a hardcoded list of units. Stage 2 is
+optional: a viewer with no controls is still useful, and the user can manage the task.
+
+### Two portability traps found by inspection (fix these first, they are cheap)
+
+1. **`data_dir()` will silently find nothing on Windows.** `logger.rs` resolves
+   `std::env::var("HOME")`, and **`HOME` is not set on Windows** for a GUI-launched app
+   (Git Bash sets it; Explorer does not). Meanwhile `radioscan.py` uses
+   `os.path.expanduser(os.environ.get("RADIOSCAN_DATA", "~/radio-scan-data"))`, and
+   `expanduser("~")` on Windows resolves to **`%USERPROFILE%`**. So the writer would use
+   `C:\Users\<you>\radio-scan-data` while the reader returned `None` — the exact
+   divergence the comment above `data_dir()` says must not happen. Fix: fall back to
+   `USERPROFILE` on Windows (keep `RADIOSCAN_DATA` first, so the override still wins).
+2. **Graceful shutdown does not port.** `radioscan.py` installs
+   `signal.signal(SIGTERM/SIGINT, _handle)` for a clean stop. On Windows a SIGTERM is
+   not delivered the way Unix delivers it — `os.kill(pid, SIGTERM)` maps to an immediate
+   `TerminateProcess`, so the handler never runs. The logger **appends JSONL**, so a hard
+   kill can land mid-line. Worth deciding how a Windows task is stopped (a CTRL_BREAK
+   console event, or a stop-file the loop polls) before running one 24/7.
+
+### The cheapest possible first move, whenever
+
+Run the logger on Windows for real — not the `test` probe, the actual `run`:
+
+```bash
+python radioscan.py run --config config.json
+```
+
+with a `config.json` copied from `config.example.json`. ✅ `test` already works here
+(it pulled live ICY off SomaFM Lush and Groove Salad over **https**), but `run` is what
+exercises the write path, the data-dir layout, and the stop behaviour — i.e. traps 1
+and 2 above. It writes only into its data dir and needs no service, no install, and no
+code change, so it is a genuinely free experiment and the honest prerequisite for
+everything in stage 1.
