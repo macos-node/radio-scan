@@ -14,6 +14,28 @@
 > `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
 > is now frozen additive-only.
 >
+> **PULL BEFORE TOUCHING ntune — Linux (`adjmx`), 2026-08-25.** Three commits
+> landed on `main` in a row and two of them rewrite how the transport decides what
+> the player is doing: `7612c1e` (keydown guard is now per key, so the arrows
+> survive a focused button), `d04bf8d` (`playing`/`buffering` read off the
+> `<audio>` element instead of being assembled from events; `AbortError` ignored
+> on both play paths), `38646e6` (STATUS.md — the Linux window-driving method).
+> `d04bf8d` touches the `<audio>` handler block, `togglePlay`, and `play()` in
+> `App.tsx`; editing any of those from an older base is a conflict, not a merge.
+> CI green on both fixes.
+>
+> **Needs-verify: macos** (transport play/buffer state on WKWebView — pause →
+> skip → resume, the spinner, and pausing while an episode is still loading).
+> This is **audio playback**, so §3 applies: no `ntune-v*` tag until macOS acks.
+> Two behaviour changes are worth a deliberate look rather than a glance, because
+> both were invisible on the platform they were written for. `playing` now goes
+> true on the `play` event rather than `playing`, i.e. *earlier* — clicking the
+> same row while it is still buffering now stops it where it used to restart it.
+> And a rejected `play()` no longer reloads the episode when the rejection is
+> `AbortError`; on macOS that path fired rarely, which is exactly why it was never
+> caught doing the wrong thing. Everything was measured on Linux against the
+> installed build (numbers in STATUS.md); none of it has been run on WKWebView.
+
 > **Durable stores — ALL PLATFORMS VERIFIED 2026-08-12.** The **durable podcast +
 > UI-prefs stores** (v0.1.1-beta.4 "make it durable" fixes) are now `verified macos`,
 > `verified windows`, **and `verified linux` (`adjmx`)** — the wave is fully green.
