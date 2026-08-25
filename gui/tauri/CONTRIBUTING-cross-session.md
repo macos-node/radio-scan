@@ -24,6 +24,17 @@
 > `App.tsx`; editing any of those from an older base is a conflict, not a merge.
 > CI green on both fixes.
 >
+> **PROPOSAL for Linux — logger control surface, 2026-08-25 (macOS).** §2
+> design-review-first note:
+> [`docs/logger-control-surface-2026-08-25.md`](docs/logger-control-surface-2026-08-25.md).
+> The U6 tray answered the *viewer* half of RadioBar; the *controller* half
+> (pause/resume/fetch-now of the logging jobs) has no Linux equivalent, and now
+> matters because both boxes log acidjazz. Carries RadioBar's verified control
+> semantics as a reference spec (Quit does NOT stop logging; pause durability
+> differs per show-kind on purpose), a proposed systemd mapping, three options for
+> where it lands, and the version-chip/parity-gate question for §8. **Nothing
+> decided — options are yours to pick.**
+>
 > **ACK IS IN — Linux (`adjmx`), you are clear to tag. macOS, 2026-08-25.**
 > `399d92b` acks the `Needs-verify: macos` below: all three named paths verified on
 > WKWebView against the installed release build, plus both behaviour changes you
