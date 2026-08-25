@@ -20,18 +20,24 @@ tag date; unreleased work sits under the top heading until tagged.
   "AAC+ plays" cell of the §5 matrix for Windows. Inert on macOS/Linux (they never
   sent a `Referer`), but it is a shared file — Needs-verify: macos, linux.
   Full measurement: [`docs/windows-playback-2026-08-25.md`](docs/windows-playback-2026-08-25.md).
-- **Windows: stations advertising the legacy `audio/aacp` wouldn't play either.**
-  A second, unrelated cause with the same symptom, found once the Referer fix let the
-  rest of the playback pass run: `proxy.rs` modernised the Shoutcast-era `audio/aacp`
-  to `audio/aac` **only on Linux**, so on Windows it reached WebView2 verbatim —
-  where `canPlayType("audio/aacp")` is empty, i.e. unsupported. The rule was
-  backwards-scoped: **WKWebView (macOS) is the only webview that wants the legacy
-  spelling**, so the condition is inverted — macOS keeps it, everyone else gets
-  `audio/aac`. macOS and Linux behaviour is unchanged. Extracted as
+### Changed
+- **The proxy modernises the legacy `audio/aacp` for every webview but WKWebView.**
+  `proxy.rs` did this **only on Linux**, so Windows passed the Shoutcast-era spelling
+  through while Linux did not — a divergence by accident of a `cfg`, not by design.
+  The rule is inverted to match what is actually true: **WKWebView (macOS) is the only
+  webview that wants the legacy spelling**; macOS keeps it, everyone else gets
+  `audio/aac`. macOS and Linux behaviour is byte-for-byte unchanged. Extracted as
   `webview_content_type()` with proxy.rs's first unit tests, including a guard that
-  `audio/aac` is never rewritten backwards. Two 320k HE-AAC mounts that failed now
-  play, with no regression on the MP3/`audio/aac` stations.
-  Needs-verify: macos, linux.
+  `audio/aac` is never rewritten backwards.
+
+  **Correction:** this shipped claiming it was why two `audio/aacp` stations would not
+  play on Windows. **That claim does not hold.** A controlled local source
+  (`tests/aacp_healthy_server.py`) shows WebView2 plays `audio/aacp` fine — healthy
+  *and* starved to 0.1× realtime, proxied *and* direct. `canPlayType` returning `""`
+  is a conservative advisory, not a capability gate; the pipeline sniffs the content.
+  Those two mounts swing between 19 and 325 kbps, which explains a failing "before" and
+  a passing "after" without any MIME involvement. The change is kept as a **consistency
+  fix**, not as a playback fix, and its `Needs-verify` is withdrawn.
 
 ## 0.2.0-beta.2 — 2026-08-25
 

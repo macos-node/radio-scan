@@ -107,9 +107,9 @@ they were never ICY-probed; the bitrate is not the problem.
 
 Their `Content-Type` is the **legacy `audio/aacp`** — the Shoutcast-era spelling.
 `proxy.rs` remapped that to `audio/aac` **only under `cfg!(target_os = "linux")`**,
-so on Windows it reached WebView2 verbatim, and `canPlayType("audio/aacp")` there
-is **empty** — flatly unsupported. Same user-visible symptom as the Referer bug
-(`MEDIA_ERR_SRC_NOT_SUPPORTED`), completely different cause.
+so on Windows it reached WebView2 verbatim, where `canPlayType("audio/aacp")` is
+**empty**. I read that as "flatly unsupported". **That inference was wrong — see the
+correction below.**
 
 The rule the old code encoded was backwards-scoped. **WKWebView (macOS) is the only
 webview that wants the legacy spelling**; webkit2gtk and WebView2 both want
@@ -129,6 +129,56 @@ Measured after the fix, in the release build:
 | Groove Salad AAC | `audio/aac` | https, direct | ✅ | ✅ (no regression) |
 
 **User-confirmed audible 2026-08-25**: AAC and all 128k streams play, podcasts play.
+
+### ⚠️ CORRECTION 2026-08-25 — `1249ed6`'s causal claim does not hold
+
+Prompted by macOS refusing to rubber-stamp that commit's `Needs-verify`
+([`macos-track-data-2026-08-25.md`](macos-track-data-2026-08-25.md) §4): the only
+`audio/aacp` mounts anyone had were the two that underdeliver, so "confirm an aacp
+station still plays" could not be answered honestly. To remove the confound I built a
+**healthy local aacp source** ([`../../tests/aacp_healthy_server.py`](../../tests/aacp_healthy_server.py)) —
+real ADTS captured at runtime, looped from localhost, `Content-Type` as the only
+variable, with a `--kbps` throttle to reproduce starvation on demand.
+
+What it measured on WebView2 151, byte-identical audio in every row:
+
+| Delivery | MIME | Direct to element | Through the proxy |
+|---|---|---|---|
+| healthy (1.31× realtime) | `audio/aacp` | ✅ plays (3/3) | ✅ plays |
+| healthy | `audio/aac` | ✅ plays | ✅ plays |
+| **starved (13 kbps, ~0.1×)** | `audio/aacp` | ✅ **plays** | ✅ plays |
+| **starved** | `audio/aac` | ✅ plays | ✅ plays |
+
+**WebView2 plays `audio/aacp` fine — healthy or starved, proxied or not.**
+`canPlayType` returning `""` is a *conservative advisory*, not a gate: the media
+pipeline sniffs the content and ignores the unrecognised label. I inferred a hard
+capability from an advisory string, which was the error.
+
+So the honest position on those two mounts: **the MIME spelling was almost certainly
+never why they failed.** The before/after I recorded above is confounded — those mounts
+were independently measured swinging between **19 and 325 kbps**, so a failing "before"
+and a passing "after" is exactly what that variance produces on its own. I do not have a
+controlled reproduction of an aacp-caused failure, and two attempts to build one both
+came back negative.
+
+**The change itself stands, on different grounds.** `audio/aac` is the correct modern
+spelling, WKWebView is genuinely the only webview wanting the legacy one, and Windows
+now matches Linux instead of diverging from it by accident of a `cfg`. It is a
+consistency fix with 48/48 tests behind it — it is simply **not** the thing that made
+those two stations play.
+
+**The `Needs-verify: macos, linux` on `1249ed6` is withdrawn.** macOS was right that it
+could not be answered, and the premise it rested on turns out to be unsupported. What
+remains is an ordinary no-regression check, and the test server above makes it a
+two-minute job on any platform:
+
+```
+python3 tests/aacp_healthy_server.py                            # aacp on :8801
+python3 tests/aacp_healthy_server.py --content-type audio/aac --port 8802   # control
+```
+
+Both should play everywhere. On macOS both should play with the remap being a literal
+no-op; if `audio/aacp` ever *fails* somewhere, that is the finding worth reporting.
 
 ## Consequence for the §5 matrix
 
