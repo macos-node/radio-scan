@@ -281,8 +281,26 @@ agree when `name == "acidjazz"`, which is precisely the deployed stream logger, 
 mismatch has been **masked on macOS and Linux**. Any second stream station would write a
 log the reader cannot find.
 
-Not fixed here — it is a shared file and the logger runs 24/7 on two other machines, so
-it is the other sessions' call. Worth noting the likely fix (`f"{self.name}_log.jsonl"`)
-is **backward-compatible for existing acidjazz deployments**, since that path is
-unchanged for `name == "acidjazz"`. The episodic parsers are a separate code path and
-were not examined.
+**✅ FIXED 2026-08-25, after macOS corroborated it.** The macOS session did not take the
+Windows finding on trust — it **reproduced the bug on demand** on its own box, logging a
+scratch station (`--name somafm`) against the live stream and getting
+`somafm/acidjazz_log.jsonl`. Two independent platforms, one live reproduction each.
+
+macOS also supplied the distinction that makes the fix safe, and it is worth keeping:
+
+- Of the three shows that box logs, **only one is a `radioscan.py` station** (Acid Jazz,
+  an Icecast stream). **On The Wire and A Duck in a Tree are RSS episodic parsers**
+  (`episodic/otw_playlist.py`, `duck_playlist.py`) which **never touch `Station`** — they
+  derive filenames from their own `SOURCE` constant (`"otw"` → `otw_log.jsonl`). Verified
+  from Windows too. They are therefore **immune by not sharing the code, not by design** —
+  a distinction that matters if that hardcoding is ever revisited.
+- Nothing was mismatched in the wild on **either** box: the sole deployed radioscan
+  station is literally named `acidjazz`, the one case where the literal is accidentally
+  correct. Windows' only mismatching folder (`groovesalad/acidjazz_log.jsonl`) came from
+  today's experiment, and Windows runs no logger service at all. **This was a latent
+  fault waiting for station two, not damage to existing logs.**
+
+Fix: `f"{name}_log.jsonl"` / `.csv`, plus the module docstring, which had documented the
+literal. **Verified:** `acidjazz` → `acidjazz_log.jsonl` (**byte-identical to the deployed
+path — no migration, nothing to re-point**), `groovesalad` → `groovesalad_log.jsonl`, and a
+live re-run still logged a real track. `py_compile` clean (what the Python CI job runs).

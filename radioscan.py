@@ -16,8 +16,8 @@ QUICK USE
     python3 radioscan.py list                               # stations found in the config
 
 DATA LAYOUT (per station, under the data dir)
-    <data_dir>/<name>/acidjazz_log.jsonl   raw log, one line per track change (source of truth)
-    <data_dir>/<name>/acidjazz_log.csv     same data, spreadsheet-friendly
+    <data_dir>/<name>/<name>_log.jsonl     raw log, one line per track change (source of truth)
+    <data_dir>/<name>/<name>_log.csv       same data, spreadsheet-friendly
     <data_dir>/<name>/station_info.txt     what the stream advertises about itself
     <data_dir>/<name>/summaries/           daily / weekly / overall markdown + latest.txt
 
@@ -63,8 +63,19 @@ class Station:
         self.name = name
         self.url = url
         self.dir = os.path.join(os.path.expanduser(data_dir), name)
-        self.jsonl = os.path.join(self.dir, "acidjazz_log.jsonl")
-        self.csv = os.path.join(self.dir, "acidjazz_log.csv")
+        # Named for the station, not for the first station this ever logged. These
+        # were the literals "acidjazz_log.*", so EVERY station wrote a file called
+        # acidjazz_log.jsonl inside its own correctly-named folder — logging
+        # `groovesalad` produced groovesalad/acidjazz_log.jsonl. It stayed invisible
+        # because the one deployed radioscan station is itself called acidjazz, where
+        # the literal is accidentally right; reproduced on demand on both macOS and
+        # Windows by logging any second station. It also broke the reader: ntune's
+        # logger.rs builds <data_dir>/<log>/<log>_log.jsonl, so the two agreed only
+        # for acidjazz. Unchanged for name == "acidjazz", so deployed logs need no
+        # migration. (The episodic parsers never shared this code — they hardcode
+        # their own SOURCE, e.g. "otw" -> otw_log.jsonl — so they were never affected.)
+        self.jsonl = os.path.join(self.dir, f"{name}_log.jsonl")
+        self.csv = os.path.join(self.dir, f"{name}_log.csv")
         self.info = os.path.join(self.dir, "station_info.txt")
         self.sumdir = os.path.join(self.dir, "summaries")
         self.latest = os.path.join(self.sumdir, "latest.txt")
