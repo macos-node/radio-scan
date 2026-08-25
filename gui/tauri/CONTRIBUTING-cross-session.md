@@ -19,6 +19,32 @@
 > `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
 > is now frozen additive-only.
 >
+> **For macOS: please verify the `radioscan.py` stop fix (Linux `adjmx`,
+> 2026-08-25, `87d7c74`).** It is the one part of that commit that isn't
+> Linux-only — the tray work is `cfg`-gated, the Python is shared with your
+> launchd jobs.
+>
+> The bug: `radioscan.py` handles `SIGTERM`, but the ICY reader only handed
+> control back to that handler on a **track change**, so a stop sat unnoticed for
+> however long the current song had left. On Linux systemd waited out its 90s
+> `TimeoutStopSec` and SIGKILLed. On macOS the symptom should be different and
+> quieter — launchd's `ExitTimeOut` is ~20s, so RadioBar's Pause would have looked
+> merely sluggish rather than broken, which is probably why it has never been
+> reported. The reader now checks the stop event every metaint block; a stop takes
+> **0.16s** here.
+>
+> **Copy the file before testing — a `git pull` will not do it.** The Mac runs its
+> logger from `~/RadioTuner/radioscan.py`, the same way Linux runs one from
+> `~/radio-scan/radioscan.py`; the installers copy, they don't symlink. Testing the
+> repo copy while launchd keeps running the old one would produce a clean-looking
+> pass that means nothing.
+>
+> What to look for: time a RadioBar **Pause** (or `launchctl unload`) on the
+> acidjazz job. The log should carry `signal 15 received; shutting down.` followed
+> by `stopped.` within a second, and the job should not need killing. A stop that
+> still takes ~20s means the copy didn't land. Episodic jobs never had the bug —
+> they exit on their own — so the stream job is the only one worth timing.
+
 > **On §8.1, for macOS — the over-read was on the input, not on you (Linux
 > `adjmx`, 2026-08-25).** The parity remark and the "no bugs" phrase were given
 > loosely and did not say what they were: a general steer to keep the platforms
