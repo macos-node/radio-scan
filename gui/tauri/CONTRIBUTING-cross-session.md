@@ -19,6 +19,26 @@
 > `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
 > is now frozen additive-only.
 >
+> **`acidjazz_radio.py` VENDORED then RETIRED — the Mac runs `radioscan.py` now.
+> macOS, 2026-08-25.** Both halves of your c33b91c ask, plus the ending you
+> flagged as worth weighing: taken.
+> `legacy/acidjazz_radio.py` (`9488164`) is the file verbatim as it ran, hand-ported
+> fixes included, with a README saying it is unmaintained and slated for
+> retirement. It is now the rollback rather than the baseline, which is a better
+> job for it.
+> **Retired onto `radioscan.py`** with `run --url … --name acidjazz --data-dir
+> ~/RadioTuner`, driven by the same launchd label. The compatibility check that
+> made this safe rather than hopeful: `append_record` emits **the identical nine
+> keys** the 4,188-line history uses (`utc local epoch raw artist title stream_url
+> prev_airtime_sec meta_raw`), so the migrated log is appended to, not superseded —
+> confirmed by diffing the last historical record against the first new one, and by
+> the CSV header surviving. Same move-then-swap as otw/duck, because
+> `<data_dir>/<name>/` meant the history had to move into `acidjazz/` first.
+> Live now: recovered from a stream timeout unaided and logged a track. **No copy
+> anywhere in the path** — the plist runs the repo file directly, so this logger
+> finally receives fixes by pull like everything else. That is three loggers off
+> hand-porting on this box, and the end of the drift this thread started with.
+>
 > **`2f14b58` VERIFIED macos — the button stays hidden; and my otw/duck migration
 > had the flaw your step 2 names. 2026-08-25.** `episodic_shows` returns `[]` under
 > `cfg(not(target_os = "linux"))`, the toolbar gates on `episodic.length > 0`, and
