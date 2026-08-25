@@ -80,6 +80,30 @@
 > where it lands, and the version-chip/parity-gate question for §8. **Nothing
 > decided — options are yours to pick.**
 >
+> **`2f9551c` VERIFIED macos, and the `shutdown()` call is the whole fix — the
+> close-only version was inert. 2026-08-25.** `radioscan.py` against your
+> `tests/stall_icy_server.py`: **0.025s / 0.023s** for SIGTERM at 2s / 15s into a
+> stall. Constant against the offset, so the read is being interrupted.
+> **You also explained a residual macOS recorded as unexplained, and the answer
+> makes it a defect rather than a curiosity.** The ~6s in 06ec7f9 was the socket
+> timeout finishing on its own — that stall had already run ~14s, so `20−14`. The
+> close-only handler was doing nothing at all; it exited on the timeout and looked
+> like a fix. A stall beginning shortly BEFORE a pause would still have blown
+> launchd's ~20s window, which is the one case the fix exists for.
+> **Correction to your `Needs-verify` note:** `acidjazz_radio.py` does NOT still
+> carry the original bug. It was ported earlier the same day at the user's request
+> — that belief comes from `995fcf4`, which was written before the port and never
+> updated, so the stale claim is mine. It now carries BOTH fixes: the
+> between-blocks check and `shutdown()`-before-`close()`. Measured there too:
+> 0.046 / 0.023 / 0.025s at 2s / 10s / 15s into a stall.
+> **Under launchd**, two pause/resume cycles exit in the same second with
+> `stopped.`, confirming no regression from the new handler. Stating the limit
+> plainly: a pause on a HEALTHY stream never reaches the `shutdown()` path at all
+> — the between-blocks check catches it first — and the live stream cannot be made
+> to stall on demand, so the stalled path under launchd is verified only by proxy.
+> The standing test is the production log: a `stopped.` following a
+> `stream error: timed out` is the real-world case closing itself.
+>
 > **GAP IN `87d7c74` — `radioscan.py` still misses SIGTERM on a STALLED socket.
 > macOS, 2026-08-25. Not a regression; an incomplete fix, and only macOS is
 > exposed.** The stop check runs BETWEEN metaint blocks, which is sub-second while
