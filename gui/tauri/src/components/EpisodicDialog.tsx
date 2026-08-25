@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ExternalLink, RefreshCw } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Modal } from "./Modal";
@@ -18,15 +18,31 @@ import { cn } from "../lib/cn";
  *  says so rather than offering a dead button. */
 export function EpisodicDialog({
   shows,
+  unseen,
   onClose,
   onRefresh,
+  onSeen,
 }: {
   shows: EpisodicShow[];
+  /** Show ids whose newest episode hasn't been looked at yet. */
+  unseen: string[];
   onClose: () => void;
   onRefresh: () => void;
+  onSeen: (id: string, date: string) => void;
 }) {
-  const [active, setActive] = useState(shows[0]?.id ?? "");
+  // Open on something NEW when there is one, rather than always the first show:
+  // the badge is what brought you here, so the first thing shown should be what
+  // it was pointing at.
+  const [active, setActive] = useState(
+    shows.find((s) => unseen.includes(s.id))?.id ?? shows[0]?.id ?? "",
+  );
   const show = shows.find((s) => s.id === active) ?? shows[0];
+
+  // Displaying an episode is what marks it seen — not opening the dialog. A show
+  // you never switched to keeps its dot.
+  useEffect(() => {
+    if (show?.date) onSeen(show.id, show.date);
+  }, [show?.id, show?.date, onSeen]);
 
   if (!show) {
     return (
@@ -54,6 +70,12 @@ export function EpisodicDialog({
             )}
           >
             {s.label}
+            {unseen.includes(s.id) && (
+              <span
+                aria-hidden="true"
+                className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-warn align-middle"
+              />
+            )}
           </button>
         ))}
         <button

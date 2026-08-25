@@ -13,6 +13,11 @@ export const VOLUME_KEY = "ntune.volume";
 export const STATION_VIEW_KEY = "ntune.stationView";
 export const PODCAST_VIEW_KEY = "ntune.podcastView";
 export const PODCAST_SORT_KEY = "ntune.podcastSort";
+/** Which episode of each logged show has been LOOKED AT, so the toolbar can mark
+ *  a newer one. `{"otw":"2026-08-22","duck":"2026-08-15"}` — the episode date per
+ *  show id, which is the coarsest thing that can't false-positive: a re-parse of
+ *  the same episode changes rows, not the date. */
+export const EPISODIC_SEEN_KEY = "ntune.episodicSeen";
 
 /** The prefs migrated from localStorage on the first launch after this store. */
 const MIGRATE_KEYS = [
@@ -21,6 +26,7 @@ const MIGRATE_KEYS = [
   STATION_VIEW_KEY,
   PODCAST_VIEW_KEY,
   PODCAST_SORT_KEY,
+  EPISODIC_SEEN_KEY,
 ];
 
 /** Dispatched after initSettings() loads the durable store, so mounted components

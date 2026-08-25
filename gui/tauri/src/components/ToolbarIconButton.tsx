@@ -8,12 +8,24 @@ export function ToolbarIconButton({
   onClick,
   active = false,
   disabled = false,
+  badge = false,
 }: {
   icon: ReactNode;
   title: string;
   onClick?: () => void;
   active?: boolean;
   disabled?: boolean;
+  /** A dot in the corner: there is something new behind this button.
+   *
+   *  A STATUS token, not `--c-mauve`. index.css states the rule for the mono
+   *  theme — chrome goes greyscale, meaning keeps its colour — and a dot whose
+   *  whole job is hue is meaning. Built with mauve first and it rendered grey on
+   *  grey under mono, signalling nothing.
+   *
+   *  Its PRESENCE is the signal and hue only reinforces it, so it survives being
+   *  unseen; `title` names what is new, which is what hover and a screen reader
+   *  get. */
+  badge?: boolean;
 }) {
   return (
     <button
@@ -24,7 +36,7 @@ export function ToolbarIconButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "grid h-8 w-8 place-items-center rounded-sm border border-transparent",
+        "relative grid h-8 w-8 place-items-center rounded-sm border border-transparent",
         "text-muted transition-colors",
         "hover:bg-surfaceHover hover:text-fg",
         "disabled:pointer-events-none disabled:opacity-40",
@@ -32,6 +44,12 @@ export function ToolbarIconButton({
       )}
     >
       {icon}
+      {badge && (
+        <span
+          aria-hidden="true"
+          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-warn"
+        />
+      )}
     </button>
   );
 }

@@ -61,6 +61,7 @@ import {
 } from "./lib/tauri";
 import { absorbPodcast, initSubs, loadSubs } from "./lib/podcasts";
 import {
+  EPISODIC_SEEN_KEY,
   getSetting,
   initSettings,
   setSetting,
@@ -149,6 +150,14 @@ export default function App() {
   // hides the toolbar entry point without a platform check up here).
   const [episodic, setEpisodic] = useState<EpisodicShow[]>([]);
   const [showEpisodic, setShowEpisodic] = useState(false);
+  // Which episode of each show has been looked at, so a newer one can be marked.
+  const [episodicSeen, setEpisodicSeen] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(getSetting(EPISODIC_SEEN_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  });
   const [tab, setTab] = useState<Tab>("stations");
   // Unified "what's playing" — a live station or a seekable episode (U4).
   const [current, setCurrent] = useState<Playing | null>(null);
@@ -716,6 +725,26 @@ export default function App() {
     loadEpisodic();
   }, [loadEpisodic]);
 
+  /** Mark one show's current episode as looked at. Per show, not per open: the
+   *  dialog shows one at a time, and clearing the mark for a show you never
+   *  displayed would be a lie the badge can't take back. */
+  const markEpisodicSeen = useCallback((id: string, date: string) => {
+    setEpisodicSeen((prev) => {
+      if (prev[id] === date) return prev;
+      const next = { ...prev, [id]: date };
+      setSetting(EPISODIC_SEEN_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  /** Shows whose newest episode hasn't been looked at. Compared by DATE — a
+   *  re-parse of the same episode rewrites rows but not its date, so a scheduled
+   *  fetch that found nothing new cannot light the dot. */
+  const unseenEpisodic = useMemo(
+    () => episodic.filter((s) => s.date && episodicSeen[s.id] !== s.date),
+    [episodic, episodicSeen],
+  );
+
   const changeVolume = useCallback((v: number) => {
     setVolume(v);
     setSetting(VOLUME_KEY, String(v));
@@ -855,7 +884,12 @@ export default function App() {
           {episodic.length > 0 && (
             <ToolbarIconButton
               icon={<ListMusic size={15} />}
-              title="Latest episodes (logged shows)"
+              badge={unseenEpisodic.length > 0}
+              title={
+                unseenEpisodic.length
+                  ? `New episode: ${unseenEpisodic.map((s) => s.label).join(", ")}`
+                  : "Latest episodes (logged shows)"
+              }
               onClick={() => {
                 loadEpisodic();
                 setShowEpisodic(true);
@@ -1107,8 +1141,10 @@ export default function App() {
       {showEpisodic && (
         <EpisodicDialog
           shows={episodic}
+          unseen={unseenEpisodic.map((s) => s.id)}
           onClose={() => setShowEpisodic(false)}
           onRefresh={loadEpisodic}
+          onSeen={markEpisodicSeen}
         />
       )}
       {showFavorites && (
