@@ -23,6 +23,10 @@ use nostr_sdk::Client;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
+// Logger control is Linux-only: macOS drives the same radio-scan jobs from
+// RadioBar's menubar (docs/logger-control-surface-2026-08-25.md).
+#[cfg(target_os = "linux")]
+mod logger;
 mod proxy;
 mod tray;
 

@@ -20,6 +20,12 @@ use tauri::{
     AppHandle, Emitter, Manager, Wry,
 };
 
+// Logger control is Linux-only by design — macOS drives the same jobs from
+// RadioBar. See logger.rs and ../../docs/logger-control-surface-2026-08-25.md.
+#[cfg(target_os = "linux")]
+use crate::logger;
+
+
 const TRAY_ID: &str = "ntune-tray";
 const IDLE: &str = "Not playing";
 
@@ -58,14 +64,34 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         MenuItem::with_id(app, "favorite", "\u{2665} Favorite current track", false, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit ntune", true, None::<&str>)?;
 
-    let menu = MenuBuilder::new(app)
+    let mut builder = MenuBuilder::new(app)
         .item(&now_playing)
         .separator()
         .item(&show)
-        .item(&favorite)
-        .separator()
-        .item(&quit)
-        .build()?;
+        .item(&favorite);
+
+    // The logger section is kept behind its own separator and its own header, and
+    // its verbs always name the logger ("Pause logging", never a bare "Pause").
+    // ntune's playback and radio-scan's jobs are unrelated state that happen to
+    // share a menu; the decision doc makes that separation a requirement, because
+    // one merged Pause three items from another is how a reader gets it wrong.
+    #[cfg(target_os = "linux")]
+    let logger_ui = build_logger_jobs(app)?;
+    #[cfg(target_os = "linux")]
+    {
+        if !logger_ui.is_empty() {
+            let header = MenuItem::with_id(app, "logger_header", "LOGGER", false, None::<&str>)?;
+            builder = builder.separator().item(&header);
+            for job in &logger_ui {
+                builder = builder.item(&job.status).item(&job.toggle);
+                if let Some(fetch) = &job.fetch {
+                    builder = builder.item(fetch);
+                }
+            }
+        }
+    }
+
+    let menu = builder.separator().item(&quit).build()?;
 
     let _tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(
@@ -84,6 +110,8 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
                 let _ = app.emit("tray-favorite", ());
             }
             "quit" => app.exit(0),
+            #[cfg(target_os = "linux")]
+            id if id.starts_with(LOGGER_PREFIX) => on_logger_click(id),
             _ => {}
         })
         .build(app)?;
@@ -92,8 +120,150 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     // same `nowplaying.json` the producer writes and RadioBar reads. Cross-app by
     // construction, and the one now-playing source on every OS.
     spawn_bridge_poller(app.clone(), now_playing.clone(), favorite.clone());
+    #[cfg(target_os = "linux")]
+    if !logger_ui.is_empty() {
+        spawn_logger_poller(app.clone(), logger_ui);
+    }
 
     Ok(())
+}
+
+// --- logger control (Linux) --------------------------------------------------
+
+#[cfg(target_os = "linux")]
+const LOGGER_PREFIX: &str = "logger:";
+
+/// One job's menu entries: a disabled status line (the live readout, exactly like
+/// `now_playing` at the top of the menu) and the item that pauses or resumes it.
+///
+/// FLAT, not a submenu, and that is not a style choice. A submenu whose label
+/// carried the status read better and does not work: on Linux the tray is a
+/// StatusNotifierItem and the menu goes over DBusMenu, where `MenuItem::set_text`
+/// propagates and `Submenu::set_text` does NOT. Measured here — the item inside a
+/// submenu flipped to "Resume logging" while the submenu label above it still
+/// said "logging", i.e. the poller was right and the label was a dead end. A
+/// status that silently stops updating is worse than one that takes a row.
+#[cfg(target_os = "linux")]
+struct LoggerJob {
+    job: &'static logger::Job,
+    status: MenuItem<Wry>,
+    toggle: MenuItem<Wry>,
+    fetch: Option<MenuItem<Wry>>,
+}
+
+/// Build a submenu per INSTALLED job. A box without radio-scan gets no section at
+/// all rather than a menu full of dead entries — and since this runs once, a job
+/// installed later needs an ntune restart to appear, which is the right trade for
+/// not re-querying systemd to draw a menu that never changes shape.
+#[cfg(target_os = "linux")]
+fn build_logger_jobs(app: &AppHandle) -> tauri::Result<Vec<LoggerJob>> {
+    let state = logger::query();
+    let mut out = Vec::new();
+    for job in logger::JOBS {
+        let s = state.get(job.unit).copied().unwrap_or_default();
+        if !s.present {
+            continue;
+        }
+        let status = MenuItem::with_id(
+            app,
+            format!("{LOGGER_PREFIX}{}:status", job.unit),
+            status_label(job, s),
+            false,
+            None::<&str>,
+        )?;
+        let toggle = MenuItem::with_id(
+            app,
+            format!("{LOGGER_PREFIX}{}:toggle", job.unit),
+            toggle_label(job, s),
+            true,
+            None::<&str>,
+        )?;
+        let fetch = if job.kind == logger::Kind::Episodic {
+            Some(MenuItem::with_id(
+                app,
+                format!("{LOGGER_PREFIX}{}:fetch", job.unit),
+                format!("Fetch {} now", job.label),
+                true,
+                None::<&str>,
+            )?)
+        } else {
+            None
+        };
+        out.push(LoggerJob { job, status, toggle, fetch });
+    }
+    Ok(out)
+}
+
+/// `Acid Jazz \u{2014} stopped \u{00B7} returns at login`. Both facts on one line, the
+/// second clause being the one `is-enabled` adds.
+#[cfg(target_os = "linux")]
+fn status_label(job: &logger::Job, s: logger::State) -> String {
+    format!("{} \u{2014} {}", job.label, logger::describe(job.kind, s))
+}
+
+/// Every verb names its job AND says "logging". ntune's own playback lives four
+/// rows up in the same menu, so a bare "Pause" here would be ambiguous at exactly
+/// the moment someone is reaching for it in a hurry.
+#[cfg(target_os = "linux")]
+fn toggle_label(job: &logger::Job, s: logger::State) -> String {
+    let verb = if logger::is_on(job.kind, s) { "Pause" } else { "Resume" };
+    format!("{verb} {} logging", job.label)
+}
+
+/// Act on a click. State is re-read here rather than trusted from the last poll:
+/// the units are also driven from the shell and from the other box's habits, so
+/// the menu is a view of systemd, never the record of it.
+#[cfg(target_os = "linux")]
+fn on_logger_click(id: &str) {
+    let rest = &id[LOGGER_PREFIX.len()..];
+    let Some((unit, action)) = rest.rsplit_once(':') else {
+        return;
+    };
+    let Some(job) = logger::JOBS.iter().find(|j| j.unit == unit) else {
+        return;
+    };
+    let (kind, unit) = (job.kind, job.unit.to_string());
+    let action = action.to_string();
+    // Off the main thread: `enable --now` can take a beat, and blocking here would
+    // freeze the menu that is showing the result.
+    std::thread::spawn(move || {
+        let args = match action.as_str() {
+            "fetch" => logger::fetch_args(&unit),
+            "toggle" => {
+                let s = logger::query().get(&unit).copied().unwrap_or_default();
+                logger::toggle_args(kind, &unit, logger::is_on(kind, s))
+            }
+            _ => return,
+        };
+        logger::run(&args);
+    });
+}
+
+/// Re-read systemd every 4 s and push any change into the labels. Polling rather
+/// than subscribing on purpose: these units are also driven by `systemctl` in a
+/// terminal, by the timers firing on their own, and by a reboot — so the menu has
+/// to reflect systemd's state, not just the actions taken through it.
+#[cfg(target_os = "linux")]
+fn spawn_logger_poller(app: AppHandle, jobs: Vec<LoggerJob>) {
+    std::thread::spawn(move || {
+        let mut last = std::collections::HashMap::new();
+        loop {
+            let state = logger::query();
+            if state != last {
+                last = state.clone();
+                for j in &jobs {
+                    let s = state.get(j.job.unit).copied().unwrap_or_default();
+                    let (status, toggle) = (j.status.clone(), j.toggle.clone());
+                    let (label, verb) = (status_label(j.job, s), toggle_label(j.job, s));
+                    let _ = app.run_on_main_thread(move || {
+                        let _ = status.set_text(&label);
+                        let _ = toggle.set_text(&verb);
+                    });
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_secs(4));
+        }
+    });
 }
 
 /// Compose the tray label + ♥-enabled + tooltip from a bridge payload, matching

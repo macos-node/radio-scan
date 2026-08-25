@@ -100,6 +100,21 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   wash, in both the list and card views.
 
 ### Added
+- **The tray can pause the logger (Linux).** RadioBar has been two surfaces in one
+  menubar on macOS — a viewer over the logs, and a controller for the logging jobs
+  — and Linux only ever got the viewer: pausing meant `systemctl --user` in a
+  terminal. ntune's tray now carries a LOGGER section with a live status row per
+  job and the actions to pause, resume, and fetch an episodic show now. It is kept
+  behind its own separator and header, and every verb names its job and says
+  "logging", because ntune's own playback lives in the same menu.
+  The status rows say **two things, not one**: `Acid Jazz — logging`, `Acid Jazz —
+  stopped · returns at login`, `On The Wire — paused · stays off`. `is-active` and
+  `is-enabled` are different questions and stopped-but-enabled is what pausing a
+  24/7 logger produces, so a checkbox would have lied about it. Pausing a stream
+  logger is session-only and it comes back by itself; pausing a weekly show is
+  persistent and it stays down — the same asymmetry RadioBar gets from launchd's
+  `-w`, and mapping both to one verb would have looked identical in a menu and
+  been a regression. Jobs that aren't installed don't appear at all.
 - **Skip forward and back through an episode.** A podcast had one seek bar and no
   step: catching a line you missed meant aiming a 600-second bar at a 15-second
   correction, and stepping over an ad break meant the same aim in reverse. Two jog
@@ -402,6 +417,13 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   feed plainly states. An episode's `<guid>` is never mistaken for the show's.
 
 ### Fixed
+- **Stopping the live logger no longer takes 90 seconds and fails.** `radioscan.py`
+  handled `SIGTERM` correctly, but the ICY reader only handed control back to that
+  handler on a **track change** — so a stop sat unnoticed for however long the
+  current song had left, systemd waited out its full `TimeoutStopSec`, SIGKILLed,
+  and left the unit `failed`. Found by building the tray's Pause on top of it. The
+  reader now checks the stop event every metaint block: a stop takes **0.16s** and
+  lands `inactive`. Shared Python, so launchd's `unload` on macOS gets it too.
 - **The transport no longer loses track of what the player is doing.** Play state
   was assembled from events — `playing` was set true by the `playing` event and
   nothing else — so a dropped or reordered event left the app believing something

@@ -159,10 +159,17 @@ def write_station_info(headers, path):
         pass
 
 
-def icy_meta_generator(url, info_path=None):
+def icy_meta_generator(url, info_path=None, stop_event=None):
     """
     Yield {"title","url","meta_raw"} each time the StreamTitle changes.
     Raises RuntimeError if the server sends no icy-metaint (no inline metadata).
+
+    `stop_event` is checked every metaint block (a fraction of a second) so a
+    shutdown does not have to wait for the next TRACK CHANGE to be noticed. The
+    consumer only regains control on a yield, and this generator yields once per
+    track — so without this, SIGTERM sat unhandled for however long the current
+    song had left. Measured on Linux before the fix: systemd waited out its full
+    90s TimeoutStopSec and then SIGKILLed, which leaves the unit `failed`.
     """
     resp = open_stream(url)
     if info_path:
@@ -173,7 +180,7 @@ def icy_meta_generator(url, info_path=None):
         raise RuntimeError("no icy-metaint (stream has no inline metadata)")
     metaint = int(metaint)
 
-    while True:
+    while not (stop_event is not None and stop_event.is_set()):
         audio = read_exactly(resp, metaint)
         if len(audio) < metaint:
             break
@@ -383,7 +390,8 @@ def run_station(station, stop_event):
     while not stop_event.is_set():
         try:
             try:
-                gen = icy_meta_generator(station.url, info_path=station.info)
+                gen = icy_meta_generator(station.url, info_path=station.info,
+                                         stop_event=stop_event)
                 mode = "icy"
             except Exception as e:
                 gen, mode = None, "status"

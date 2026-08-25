@@ -1,10 +1,10 @@
 # Logger control on Linux — the half the tray arc never covered (proposal)
 
-> **Status: DECIDED 2026-08-25 (Linux `adjmx`) — option A, ntune's tray grows
-> logger control, with hard separation in the menu.** Not started; the decision is
-> made, the build is not. Written from macOS after verifying RadioBar's actual
-> control semantics against its source; **the systemd mapping below is now
-> confirmed on Linux** — see the measurements in that section.
+> **Status: BUILT 2026-08-25 (Linux `adjmx`) — option A, shipped and driven
+> end-to-end in the installed app.** Written from macOS after verifying RadioBar's
+> actual control semantics against its source; the systemd mapping below is
+> confirmed on Linux, and the section at the bottom records what the build changed
+> about the plan.
 > Contract: [`../CONTRIBUTING-cross-session.md`](../CONTRIBUTING-cross-session.md).
 > Companion to [`menubar-companion-2026-08-04.md`](menubar-companion-2026-08-04.md),
 > which this sharpens rather than replaces.
@@ -128,8 +128,37 @@ Two constraints on the build, both from the confirmed mapping above:
    look identical in a menu and be a regression — a 24/7 logger that stays dead
    after a pause, or a weekly show that quietly restarts.
 
-Not building it in this pass. The CLI works and the timers self-heal since
-`0feed94`, so there is no outage waiting on this.
+### Built (Linux `adjmx`, 2026-08-25) — and two things the plan didn't know
+
+`src-tauri/src/logger.rs` (Linux-only) + a LOGGER section in `tray.rs`. Both
+constraints above are honoured, and both were worth having: the labels read
+`Acid Jazz — logging` / `— stopped · returns at login` / `On The Wire — paused ·
+stays off`, and every verb names its job and says "logging".
+
+Driven through the real tray on this box: stream pause left the unit **inactive +
+enabled** and episodic pause left it **inactive + disabled** — the same click,
+different durability, different words, which is the design's whole claim. Resume
+restored both, fetch-now ran `duck-playlist.service` to completion including its
+`--clean` step.
+
+**The status could not live in a submenu label.** The plan implied one row per
+job; the first build did that, with the status in the submenu's label. On Linux
+the tray is a StatusNotifierItem and the menu crosses DBusMenu, where
+`MenuItem::set_text` propagates and **`Submenu::set_text` does not** — caught
+because the item *inside* the submenu had flipped to "Resume logging" while the
+label above it still said "logging". So the section is flat: a disabled status row
+per job, exactly like the `now_playing` readout at the top of the same menu, plus
+its actions. Costs rows, keeps the status true.
+
+**Pause had to be made to work before it could be offered.** Clicking pause on the
+stream logger appeared to hang and then left the unit `failed`. `radioscan.py`
+handles SIGTERM correctly, but the ICY generator only returned control to that
+handler on a **track change**, so systemd waited out its 90s `TimeoutStopSec` and
+SIGKILLed. The generator now checks the stop event every metaint block: a stop
+takes **0.16s** and lands `inactive`, not `failed`. That fix is in the shared
+Python, so launchd's `unload` on macOS gets it too.
+
+Still not built, and still deliberately: cross-box awareness (below).
 
 ## Also open — version chip + a parity gate
 
