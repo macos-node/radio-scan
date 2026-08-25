@@ -93,8 +93,8 @@ one feature with three bugs, they are **two subsystems with different coverage**
 - ❔ **Does ntune's own player bar ever show tracks for `https://` stations on
   mac/Linux?** By code it should not (proxy is `http://`-only). If it does, there is a
   path none of us has mapped, and that would be worth knowing.
-- ❔ **Windows: Credential Manager `nsec` round-trip.** The one remaining §5 matrix
-  cell for Windows. Needs a real key, so it is the user's to drive.
+- ~~❔ **Windows: Credential Manager `nsec` round-trip.**~~ ✅ **VERIFIED 2026-08-25** —
+  see §9. **Windows now has no open §5 matrix cell.**
 
 ## 5. The open question: what is Windows' logger + viewer?
 
@@ -207,3 +207,82 @@ exercises the write path, the data-dir layout, and the stop behaviour — i.e. t
 and 2 above. It writes only into its data dir and needs no service, no install, and no
 code change, so it is a genuinely free experiment and the honest prerequisite for
 everything in stage 1.
+
+## 9. Windows session results — 2026-08-25 (identity, caches, and the §8 experiment)
+
+Run at the end of the session, with a real `nsec` entered into the app by the user.
+
+### ✅ Credential Manager `nsec` round-trip — the last Windows §5 cell, now closed
+
+- The credential exists: `cmdkey /list` shows target **`default.ntune`**, matching
+  `KEYRING_USER="default"` + `KEYRING_SERVICE_RELEASE="ntune"` (`lib.rs`). The
+  `windows-native` keyring backend writes where it should.
+- **Read-back proven on a cold process**: ntune was killed and relaunched, and
+  `get_identity` returned the correct npub/pk. Deriving the right public key requires
+  successfully reading *and* decoding the stored secret, so this exercises the whole
+  round-trip. The `nsec` itself never crosses the IPC boundary (only npub/pk come back)
+  and was never printed during testing.
+
+**With that, Windows has no open cell in the §5 matrix.**
+
+### ✅ Caches and U4.5 persistence are working on Windows
+
+- **Feed-body cache** (U4.5 slice 4): `%APPDATA%\uk.fizx.ntune\feed-cache\` holds many
+  cached feed documents (hundreds of KB each for the big ones).
+- **Harvest persistence**: `podcasts.json` grew 3.4 KB → 16.9 KB; of 31 subs, **21 carry
+  a `harvest` slice, 8 a `podcast:guid`, 14 a `latestAt`**.
+- **Relay sync reads**: with the identity loaded, **11 `station.v1` (31241)** and
+  **26 `show.v1` (31242)** were read back for that pubkey, from two relays.
+- Local vs published deliberately differ (5 local stations vs 11 published; 31 local
+  subs vs 26 published shows). That is decision #11 working as designed — publishing a
+  station is separate from keeping it — not drift.
+
+### ✅ The §8 experiment: `radioscan.py run` works on Windows
+
+`python radioscan.py run --config config.json` against **https** SomaFM Groove Salad:
+captured a live track (`BistroBoy - Forgive`), and wrote `*_log.jsonl`, `*_log.csv`,
+`station_info.txt` and `summaries/` (daily + weekly + overall). **Stream logging works
+on Windows, over https.**
+
+### ⚠️ Trap #1 CONFIRMED empirically (was inspection-only)
+
+Python resolved `~` to **`%USERPROFILE%`** and wrote to
+`C:\Users\<you>\radio-scan-data\`. `logger.rs::data_dir()` reads `HOME`, which is unset
+for a GUI-launched app on Windows — so writer and reader **would** diverge exactly as
+predicted. Fix it before any stage-1 port.
+
+### ⚠️ Trap #2 CONFIRMED — but milder than feared
+
+`taskkill /PID <pid>` (the polite path) is **refused**: *"This process can only be
+terminated forcefully"* — a console process has no window to receive `WM_CLOSE`. Only
+`/F` works, and that is `TerminateProcess`, so the `SIGTERM` handler never runs and
+`close_live_streams()` + the final summary write are skipped. **However, the JSONL
+survived intact** (every line still valid JSON, no truncated tail) in this run, so the
+practical risk is "no clean shutdown", not demonstrated corruption. A Windows service
+still wants a real stop mechanism (a `CTRL_BREAK` console event, or a stop-file the loop
+polls).
+
+### 🐛 NEW BUG, and it is NOT Windows-specific: the log filename is hardcoded
+
+`radioscan.py` lines 66-67:
+
+```python
+self.jsonl = os.path.join(self.dir, "acidjazz_log.jsonl")
+self.csv   = os.path.join(self.dir, "acidjazz_log.csv")
+```
+
+The **directory** is per-station (`<data_dir>/<name>/`) but the **filename is always
+`acidjazz_log.*`**, whatever the station is called. Logging `groovesalad` produced
+`radio-scan-data/groovesalad/acidjazz_log.jsonl`.
+
+This matters beyond cosmetics, because the Rust reader disagrees —
+`logger.rs::latest_episode` builds `<data_dir>/<log>/<log>_log.jsonl`. The two only
+agree when `name == "acidjazz"`, which is precisely the deployed stream logger, so the
+mismatch has been **masked on macOS and Linux**. Any second stream station would write a
+log the reader cannot find.
+
+Not fixed here — it is a shared file and the logger runs 24/7 on two other machines, so
+it is the other sessions' call. Worth noting the likely fix (`f"{self.name}_log.jsonl"`)
+is **backward-compatible for existing acidjazz deployments**, since that path is
+unchanged for `name == "acidjazz"`. The episodic parsers are a separate code path and
+were not examined.
