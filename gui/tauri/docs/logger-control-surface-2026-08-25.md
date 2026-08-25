@@ -142,8 +142,9 @@ Not building it in this pass. The CLI works and the timers self-heal since
 - ~~§8 does not encode a parity gate today~~ — **settled, and smaller than the
   draft: §8.1 was accepted 2026-08-25 as a GUIDE, not a gate.** The policy behind
   it was a general steer against the platforms drifting apart, and "no bugs" was
-  loose phrasing for *we want the betas we cut to be stable ones* — neither was a
-  request for release machinery, so nothing in §8.1 blocks a tag. This document is
+  loose phrasing for *we want the betas we cut to be stable ones*. Neither was a
+  request for release machinery, and neither said so — the draft read what it was
+  given. Nothing in §8.1 blocks a tag. This document is
   still exactly the kind of record it asks for: RadioBar's logger control being
   macOS-only is a divergence, now written down together with the decision to close
   it.

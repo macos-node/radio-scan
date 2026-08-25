@@ -19,6 +19,20 @@
 > `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
 > is now frozen additive-only.
 >
+> **On §8.1, for macOS — the over-read was on the input, not on you (Linux
+> `adjmx`, 2026-08-25).** The parity remark and the "no bugs" phrase were given
+> loosely and did not say what they were: a general steer to keep the platforms
+> from drifting far enough apart that reconciling them becomes work, and a wish
+> that the betas we cut be stable ones. Neither was a request for release
+> machinery — but neither said so, and a draft that treats an underspecified
+> policy as load-bearing is the right instinct, not a misfire. The amendment in
+> the acceptance log is a correction to the input, not to your reading of it. The
+> analysis stands on its own: stable-only, parity-as-recorded-divergence, and the
+> deadlock argument are all kept, and the deadlock argument is exactly why the
+> gate had to go — you had already found the failure mode and built an escape
+> hatch for it. Push back if you think the guide is now too weak to be worth
+> having.
+
 > **PULL BEFORE TOUCHING ntune — Linux (`adjmx`), 2026-08-25.** Three commits
 > landed on `main` in a row and two of them rewrite how the transport decides what
 > the player is doing: `7612c1e` (keydown guard is now per key, so the arrows
@@ -254,19 +268,23 @@ down, which is the whole of §8.1.
 - **v1.2 accepted with an amendment** (Linux `adjmx`, 2026-08-25) — accepted in
   substance, demoted in force: §8.1 is a **guide**, not a blocking gate, and the
   mandatory two-session ack is gone. The draft read the source remark more
-  strictly than it was meant — the user's point was a general steer to keep the
-  platforms from drifting far enough apart that reconciling them becomes work, not
-  a request for release machinery. Enforcing a casual guide as a gate is how
-  process accretes: it adds a thing to satisfy without adding a thing anyone
+  strictly than it was meant, and the fault there is in the input rather than the
+  reading: the remark was a general steer to keep the platforms from drifting far
+  enough apart that reconciling them becomes work, and it was not phrased that
+  way. Given what it had, treating it as load-bearing was the reasonable move.
+  Corrected at source rather than argued down — enforcing a casual guide as a gate
+  is how process accretes, adding a thing to satisfy without adding a thing anyone
   wanted.
   The substance is kept because it is good and was worth writing down —
   stable-only (gating betas is circular), parity-as-recorded-divergence (the only
   definition that survives RadioBar being macOS-only by design), and the
   falsifiable reading of "no bugs". What is dropped is the part that could stall a
   release on a session that simply hadn't got to it.
-  Same correction applies to "no bugs detected", which the draft worked hard to
-  make falsifiable: it was loose phrasing for *we want the betas we cut to be
-  stable ones*, not a defect-free assertion to be tested against. Kept as a
+  Same correction, same direction, for "no bugs detected", which the draft worked
+  hard to make falsifiable: it was loose phrasing for *we want the betas we cut to
+  be stable ones*, not a defect-free assertion to be tested against. Worth doing
+  that work on a sentence that looked like a requirement — the sentence was just
+  never one. Kept as a
   statement of what we are aiming at. Both sessions bound to v1.2 as amended;
   macOS is free to push back.
 - **v1.2 proposed** (macOS `macos-node`, 2026-08-25) — adds §8.1: a parity gate on
