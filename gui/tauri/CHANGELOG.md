@@ -20,6 +20,18 @@ tag date; unreleased work sits under the top heading until tagged.
   "AAC+ plays" cell of the §5 matrix for Windows. Inert on macOS/Linux (they never
   sent a `Referer`), but it is a shared file — Needs-verify: macos, linux.
   Full measurement: [`docs/windows-playback-2026-08-25.md`](docs/windows-playback-2026-08-25.md).
+- **Windows: stations advertising the legacy `audio/aacp` wouldn't play either.**
+  A second, unrelated cause with the same symptom, found once the Referer fix let the
+  rest of the playback pass run: `proxy.rs` modernised the Shoutcast-era `audio/aacp`
+  to `audio/aac` **only on Linux**, so on Windows it reached WebView2 verbatim —
+  where `canPlayType("audio/aacp")` is empty, i.e. unsupported. The rule was
+  backwards-scoped: **WKWebView (macOS) is the only webview that wants the legacy
+  spelling**, so the condition is inverted — macOS keeps it, everyone else gets
+  `audio/aac`. macOS and Linux behaviour is unchanged. Extracted as
+  `webview_content_type()` with proxy.rs's first unit tests, including a guard that
+  `audio/aac` is never rewritten backwards. Two 320k HE-AAC mounts that failed now
+  play, with no regression on the MP3/`audio/aac` stations.
+  Needs-verify: macos, linux.
 
 ## 0.2.0-beta.2 — 2026-08-25
 

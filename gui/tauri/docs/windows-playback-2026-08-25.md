@@ -97,6 +97,39 @@ Rebuilt and re-measured in the shipped build — `meta[name=referrer]` = `no-ref
 `readyState=4` — the decoder is producing frames, i.e. HE-AAC decodes natively in
 WebView2 with no GStreamer-style codec install.
 
+## Second defect, found by the same session's playback pass: legacy `audio/aacp`
+
+With the Referer fixed, every SomaFM station and every podcast played — but two
+stations still would not: **Acid Jazz** and **abstract hiphop**, both 320k HE-AAC
+mounts on one Icecast 2.4.0-kh4 server, both `http://` (so both *proxied*, a
+different path from the https ones above). They show as "0k" in the UI only because
+they were never ICY-probed; the bitrate is not the problem.
+
+Their `Content-Type` is the **legacy `audio/aacp`** — the Shoutcast-era spelling.
+`proxy.rs` remapped that to `audio/aac` **only under `cfg!(target_os = "linux")`**,
+so on Windows it reached WebView2 verbatim, and `canPlayType("audio/aacp")` there
+is **empty** — flatly unsupported. Same user-visible symptom as the Referer bug
+(`MEDIA_ERR_SRC_NOT_SUPPORTED`), completely different cause.
+
+The rule the old code encoded was backwards-scoped. **WKWebView (macOS) is the only
+webview that wants the legacy spelling**; webkit2gtk and WebView2 both want
+`audio/aac`. So the condition is now inverted — macOS keeps `audio/aacp`, everyone
+else gets `audio/aac` — which leaves macOS and Linux behaviour exactly as it was and
+fixes Windows. Extracted as `webview_content_type()` with three unit tests (the
+remap, its case-insensitivity, and that **`audio/aac` is never rewritten backwards**),
+proxy.rs's first tests.
+
+Measured after the fix, in the release build:
+
+| Station | MIME | Route | Before | After |
+|---|---|---|---|---|
+| Acid Jazz | `audio/aacp` | http, proxied | ❌ | ✅ PLAYING |
+| abstract hiphop | `audio/aacp` | http, proxied | ❌ | ✅ PLAYING |
+| Drone Zone | `audio/mpeg` | http, proxied | ✅ | ✅ (no regression) |
+| Groove Salad AAC | `audio/aac` | https, direct | ✅ | ✅ (no regression) |
+
+**User-confirmed audible 2026-08-25**: AAC and all 128k streams play, podcasts play.
+
 ## Consequence for the §5 matrix
 
 This closes **"AAC+ stream plays (WebView2 native)"** for Windows. The remaining

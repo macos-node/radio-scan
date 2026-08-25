@@ -147,16 +147,7 @@ async fn handle(mut client: TcpStream, app: AppHandle) {
 
         // Non-redirect (2xx): relay to the webview with our OWN clean HTTP/1.1
         // head (its media loader is fussier than curl about HTTP/1.0 + close).
-        // The two webviews want OPPOSITE MIMEs for the same HE-AAC stream:
-        // webkit2gtk (Linux) needs `audio/aac`; WKWebView (macOS) needs the legacy
-        // `audio/aacp` — so remap only on Linux. Everything else passes through.
-        let content_type = if cfg!(target_os = "linux")
-            && head.content_type.eq_ignore_ascii_case("audio/aacp")
-        {
-            "audio/aac".to_string()
-        } else {
-            head.content_type
-        };
+        let content_type = webview_content_type(&head.content_type);
         let resp = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n"
         );
@@ -375,6 +366,30 @@ async fn read_upstream_head(up: &mut TcpStream) -> Option<Head> {
 
 /// "http://host[:port]/path" -> ("host:port", "/path"), defaulting port 80.
 /// Returns None for anything that isn't a plain http:// URL.
+/// The Content-Type to hand the webview for an upstream that advertises `ct`.
+///
+/// Only ONE stream MIME needs touching: the legacy `audio/aacp` that Shoutcast-era
+/// servers still send for HE-AAC (SomaFM's AAC mount says `audio/aac` and passes
+/// straight through). **WKWebView (macOS) is the sole webview that wants the legacy
+/// spelling** — it fails on `audio/aac`. Everyone else wants the modern one:
+/// webkit2gtk needs it, and so does **WebView2**, whose
+/// `canPlayType("audio/aacp")` is empty, i.e. flatly unsupported — measured on
+/// WebView2 151.
+///
+/// This was written as "remap only on Linux", which left Windows passing
+/// `audio/aacp` through to a webview that cannot play it: every `audio/aacp`
+/// station failed there with MEDIA_ERR_SRC_NOT_SUPPORTED while `audio/mpeg` and
+/// `audio/aac` ones played. Inverting it to "macOS keeps the legacy MIME, everyone
+/// else gets `audio/aac`" states the actual rule and leaves mac + Linux unchanged.
+/// See docs/windows-playback-2026-08-25.md.
+fn webview_content_type(ct: &str) -> String {
+    if !cfg!(target_os = "macos") && ct.eq_ignore_ascii_case("audio/aacp") {
+        "audio/aac".to_string()
+    } else {
+        ct.to_string()
+    }
+}
+
 fn split_http_url(target: &str) -> Option<(String, String)> {
     let rest = target.strip_prefix("http://")?;
     let (authority, path) = match rest.split_once('/') {
@@ -422,4 +437,39 @@ fn target_from_request_line(line: &str) -> Option<String> {
         .ok()?
         .into_owned();
     Some(decoded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The bug this guards: a 320k HE-AAC Icecast mount advertising the legacy
+    // `audio/aacp` reached WebView2 unchanged and would not play, because that
+    // spelling is unsupported there. macOS is the one webview that needs it kept.
+    #[test]
+    fn legacy_aacp_is_modernised_everywhere_except_macos() {
+        let got = webview_content_type("audio/aacp");
+        if cfg!(target_os = "macos") {
+            assert_eq!(got, "audio/aacp", "WKWebView needs the legacy spelling");
+        } else {
+            assert_eq!(got, "audio/aac", "webkit2gtk + WebView2 need the modern one");
+        }
+    }
+
+    #[test]
+    fn the_remap_is_case_insensitive() {
+        // Header values are not normalised upstream; Shoutcast-era servers vary.
+        let got = webview_content_type("Audio/AACP");
+        let want = if cfg!(target_os = "macos") { "Audio/AACP" } else { "audio/aac" };
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn every_other_content_type_passes_through_untouched() {
+        // Only `audio/aacp` is special — notably `audio/aac` (SomaFM's AAC mount)
+        // must NOT be rewritten into the legacy spelling on any platform.
+        for ct in ["audio/aac", "audio/mpeg", "audio/ogg", "application/octet-stream"] {
+            assert_eq!(webview_content_type(ct), ct);
+        }
+    }
 }
