@@ -28,3 +28,16 @@ the drift this directory exists to end.
 **Slated for retirement.** `radioscan.py` with a one-station config reproduces it
 and receives fixes by pull. Retiring rather than maintaining a frozen copy is the
 agreed direction; this file is the rollback if that migration goes wrong.
+
+## `otw_playlist.macos-preslug.py`, `duck_playlist.macos-preslug.py`
+
+The episodic parsers as they ran on the macOS box until 2026-08-25, when that box
+migrated onto `episodic/*.py`. Vendored because **they match no commit in this
+repo's history** — a separate lineage that drifted on one machine, and the only
+record of the code that produced that box's 30,235-line otw log and 9,214-line
+duck log.
+
+Pre-generalization: hardcoded `HERE` / `CSV_OUT` / `JSONL_OUT` output paths, no
+`set_data_dir`, no `--data-dir`, no `--clean`, no `listen_url`. Provenance only —
+nothing runs them, and the generalized versions in `episodic/` supersede them
+entirely.
