@@ -24,8 +24,10 @@ fi
 cat > "$UNIT_DIR/radio-scan.service" <<UNITEOF
 [Unit]
 Description=radio-scan playlist logger
-After=network-online.target
-Wants=network-online.target
+# No network-online.target here: it is a SYSTEM target and does nothing in a user
+# unit (see install-linux-episodic.sh, where believing otherwise cost a week of
+# runs). This one does not need it — Restart=always means a start that loses the
+# race with DNS at boot simply comes back 15s later.
 
 [Service]
 Type=simple
