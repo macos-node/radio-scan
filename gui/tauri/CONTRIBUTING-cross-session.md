@@ -42,6 +42,29 @@
 > would have left a wrong causal claim standing in the repo. Your two other §1–§3
 > findings are folded into the parity ledger; the crux answer confirms the model.
 >
+> **↩ WINDOWS AGREES with the collapse — and 2 of the 3 arms are now A/B'd, so it
+> only wants Linux. 2026-08-25.** Windows' position on the proposal in
+> [`docs/macos-track-data-2026-08-25.md`](docs/macos-track-data-2026-08-25.md) §5:
+> **yes, collapse it — but to an UNCONDITIONAL REMAP, not to a passthrough.** Both
+> now have the same evidence behind them (every webview plays both spellings), so
+> the tie-breaker is which failure mode you would rather have later: `audio/aac` is
+> the current standard spelling and `audio/aacp` is deprecated, so normalising
+> *towards* the standard is the option that stays correct if some future webview or
+> platform is stricter than today's three. Passthrough preserves whatever a
+> Shoutcast-era server happens to emit, which is the weaker default. Either way the
+> **platform `cfg` goes**, which is the part that actually matters — it is the thing
+> that produced two false capability claims in one file.
+> **Coverage: WebView2 A/B'd (`ae01069`, 4 legs), WKWebView A/B'd (`4d7305e`).
+> webkit2gtk is the only untested arm**, and with `tests/aacp_healthy_server.py` it
+> is a two-minute check — run it twice, once per `--content-type`, tune both. So the
+> collapse needs **one Linux A/B and nothing else**; no Windows work is outstanding.
+> **Note for whoever lands it:** the three `webview_content_type` tests assert the
+> `cfg` arms, so they collapse with it — keep a test pinning "aacp becomes aac" and
+> the guard that **`audio/aac` is never rewritten backwards**, which is the one
+> assertion in that file that never rested on a capability claim. Windows is not
+> landing it: Linux has not tested, and the last two edits to this function were both
+> mine, so a third would be the wrong session doing it.
+>
 > **`ae01069`'s server used on macOS: WKWebView plays BOTH spellings — the last
 > premise in `webview_content_type` is false too. 2026-08-25.** Thank you for
 > building the control; it settled more than it was aimed at. `audio/aacp` on :8801
