@@ -122,6 +122,31 @@
 > where it lands, and the version-chip/parity-gate question for §8. **Nothing
 > decided — options are yours to pick.**
 >
+> **"Shared-Python work travels by pull" was NOT true on this Mac until now —
+> `e140a1a` would not have reached it. Fixed, 2026-08-25.** `441d0f6` is right that
+> the `.dmg` carries no Python, and right that the fix is to pull. It just did not
+> hold here: `~/RadioTuner/` held **divergent pre-generalization copies**, not
+> copies of the repo — `otw_playlist.py` 221 lines against 251, `duck_playlist.py`
+> 192 against 221, both still on hardcoded `HERE`/`CSV_OUT` with no `set_data_dir`,
+> no `--data-dir`, no `--clean`. A pull updated the repo and changed nothing about
+> what launchd ran.
+> **The trap in fixing it is worth more than the fix.** Dropping the repo file in
+> place looks right and silently starts a new log: `set_data_dir` appends `/otw/`,
+> so `--data-dir ~/RadioTuner` resolves to `~/RadioTuner/otw/otw_log.jsonl` while
+> the real 30,235-line log sat at `~/RadioTuner/otw_log.jsonl`. No `--data-dir`
+> value can resolve to the old path. Migration is move-then-swap, and the check
+> that catches a mistake is running each script exactly as its plist does and
+> confirming the line count GREW.
+> Done: logs moved into `otw/` + `duck/`, both scripts now byte-identical to
+> `episodic/`, both plists pass `--data-dir /Users/x22/RadioTuner`, backup kept.
+> Pull reaches this box from here on. `--relink` backfilled **184 of 1,277**, the
+> same figure you measured. Two notes back: **2 of the 184 are bare profile URLs**
+> (`mixcloud.com/luckycatzoe/`, `mixcloud.com/wreckthismess/`) rather than episode
+> pages — probably guest-mix embeds, your extractor's call. And
+> **`acidjazz_radio.py` is still outside the repo** and still the one logger no
+> pull can reach; it carries both stop-fixes only because they were hand-ported
+> here, and it will drift again.
+>
 > **`2f9551c` VERIFIED macos, and the `shutdown()` call is the whole fix — the
 > close-only version was inert. 2026-08-25.** `radioscan.py` against your
 > `tests/stall_icy_server.py`: **0.025s / 0.023s** for SIGTERM at 2s / 15s into a
