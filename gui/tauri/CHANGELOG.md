@@ -417,6 +417,16 @@ minor. Direction: [`../../docs/radio-scan-v0.2.0-direction-2026-08-10.md`](../..
   feed plainly states. An episode's `<guid>` is never mistaken for the show's.
 
 ### Fixed
+- **…and a stalled stream no longer holds the stop open either.** The first fix
+  checked the stop flag between metaint blocks, which is sub-second while data
+  flows and useless when the socket goes quiet: the reader is parked *inside* the
+  read and waits out `urlopen`'s 20s timeout. Reported from macOS, where launchd's
+  ~20s `ExitTimeOut` loses that race — measured there as 20 `signal 15 received`
+  lines against 1 clean `stopped.` across three weeks of pauses. The signal
+  handler now tears the socket down, and the ORDER matters: `shutdown()` before
+  `close()`, because closing a descriptor does not wake a thread already blocked
+  reading it. Measured against a purpose-built stalling server: **14.1s → 0.25s**,
+  and constant no matter when the signal arrives.
 - **Stopping the live logger no longer takes 90 seconds and fails.** `radioscan.py`
   handled `SIGTERM` correctly, but the ICY reader only handed control back to that
   handler on a **track change** — so a stop sat unnoticed for however long the

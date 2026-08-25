@@ -37,6 +37,7 @@ import sys
 import json
 import time
 import signal
+import socket
 import argparse
 import threading
 import urllib.request
@@ -130,6 +131,45 @@ def log_line(prefix, msg):
 # ---------------------------------------------------------------------------
 # Metadata acquisition
 # ---------------------------------------------------------------------------
+# --- live streams, so a stop doesn't have to wait out the socket -------------
+# The stop flag is checked between metaint blocks, which is sub-second while data
+# flows. A STALLED socket is the case that beats it: the thread is parked INSIDE
+# read_exactly() and never reaches the check, so the shutdown waits out
+# urlopen's 20s timeout. Reported from macOS (06ec7f9), where launchd's ~20s
+# ExitTimeOut loses that race and SIGKILLs mid-shutdown; on Linux systemd's 90s
+# absorbs it, which is why no amount of testing here would have found it.
+#
+# So the signal handler reaches in and tears the socket down. No lock: dict
+# get/set/pop are atomic under the GIL, and a lock could deadlock outright — with
+# ONE station the handler runs on the very thread that would be holding it.
+_LIVE_STREAMS = {}
+
+
+def _register_stream(resp):
+    _LIVE_STREAMS[threading.get_ident()] = resp
+
+
+def _unregister_stream():
+    _LIVE_STREAMS.pop(threading.get_ident(), None)
+
+
+def close_live_streams():
+    """Break every in-flight stream read. Called from the signal handler."""
+    for resp in list(_LIVE_STREAMS.values()):
+        # shutdown() BEFORE close(), and the order is the whole point: closing a
+        # file descriptor does NOT wake a thread already blocked reading it — the
+        # read stays parked until its own timeout — while shutdown() delivers EOF
+        # to that read immediately. close() alone looks like it works and doesn't.
+        try:
+            resp.fp.raw._sock.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+        try:
+            resp.close()
+        except Exception:
+            pass
+
+
 def open_stream(url):
     req = urllib.request.Request(url, headers={
         "Icy-MetaData": "1",
@@ -180,27 +220,31 @@ def icy_meta_generator(url, info_path=None, stop_event=None):
         raise RuntimeError("no icy-metaint (stream has no inline metadata)")
     metaint = int(metaint)
 
-    while not (stop_event is not None and stop_event.is_set()):
-        audio = read_exactly(resp, metaint)
-        if len(audio) < metaint:
-            break
-        length_byte = resp.read(1)
-        if not length_byte:
-            break
-        meta_len = length_byte[0] * 16
-        if meta_len == 0:
-            continue
-        meta = read_exactly(resp, meta_len).rstrip(b"\x00")
-        if not meta:
-            continue
-        text = decode_bytes(meta)
-        m = re.search(r"StreamTitle='(.*?)';", text, re.DOTALL)
-        if not (m and m.group(1).strip()):
-            continue
-        u = re.search(r"StreamUrl='(.*?)';", text, re.DOTALL)
-        yield {"title": m.group(1).strip(),
-               "url": (u.group(1).strip() if u else ""),
-               "meta_raw": text.strip()}
+    _register_stream(resp)
+    try:
+        while not (stop_event is not None and stop_event.is_set()):
+            audio = read_exactly(resp, metaint)
+            if len(audio) < metaint:
+                break
+            length_byte = resp.read(1)
+            if not length_byte:
+                break
+            meta_len = length_byte[0] * 16
+            if meta_len == 0:
+                continue
+            meta = read_exactly(resp, meta_len).rstrip(b"\x00")
+            if not meta:
+                continue
+            text = decode_bytes(meta)
+            m = re.search(r"StreamTitle='(.*?)';", text, re.DOTALL)
+            if not (m and m.group(1).strip()):
+                continue
+            u = re.search(r"StreamUrl='(.*?)';", text, re.DOTALL)
+            yield {"title": m.group(1).strip(),
+                   "url": (u.group(1).strip() if u else ""),
+                   "meta_raw": text.strip()}
+    finally:
+        _unregister_stream()
 
 
 def fetch_status_title(url):
@@ -495,6 +539,9 @@ def cmd_run(args):
     def _handle(signum, frame):
         log_line("main", f"signal {signum} received; shutting down.")
         stop_event.set()
+        # Setting the flag is not enough on its own: a reader blocked on a stalled
+        # socket will not look at it until the socket times out.
+        close_live_streams()
     signal.signal(signal.SIGTERM, _handle)
     signal.signal(signal.SIGINT, _handle)
 
