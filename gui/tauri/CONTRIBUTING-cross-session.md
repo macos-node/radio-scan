@@ -1,13 +1,13 @@
-# ntune — cross-session change contract v1.2 (proposed)
+# ntune — cross-session change contract v1.2
 
 > Status: **v1.1 ACCEPTED 2026-08-05 (macOS + Linux)** — adds §7 (CI hygiene) + §8
 > (release cadence) on top of v1.0 (accepted 2026-08-04). Adapted from
 > `xjmzx/pong`. Amend in place; major changes get a new version header.
 >
-> **v1.2 PROPOSED 2026-08-25 (macOS `macos-node`) — pending Linux acceptance.**
-> Adds §8's *parity gate on the stable promotion* + what the version number
-> asserts. **v1.1 remains binding until `adjmx` acks**; nothing below changes
-> today's behaviour except the new §8 subsection, which is marked proposed.
+> **v1.2 ACCEPTED 2026-08-25 (macOS + Linux), AMENDED on acceptance** — adds §8.1,
+> parity as a **guide** on the stable promotion. The draft made it a blocking gate
+> with mandatory acks; Linux amended it back to guidance, because that is what the
+> policy behind it actually was. See the acceptance log.
 >
 > **Note 2026-08-11 (macOS `macos-node`).** (1) A **Windows** build is prototyping —
 > §5 matrix Windows row added. (2) The **now-playing bridge** is a §2
@@ -187,18 +187,24 @@ release).
   version bumped across the manifests + a `CHANGELOG.md` entry · each platform has run
   the plays-on-my-platform check (§4 / §5).
 
-### 8.1 Parity gate on the stable promotion (PROPOSED v1.2 — pending `adjmx` ack)
+### 8.1 Parity as a guide on the stable promotion (v1.2)
 
-**What the version asserts.** A stable `0.x.0` asserts *"both platforms do this and
-it works"*, not *"code changed"*. The number is user-facing — it is rendered in
-ntune's header chip (`src/App.tsx`) and read by someone deciding whether to
-upgrade — so it is a claim made to a person, and should be true.
+**Where this came from, since the draft read it more strictly than it was meant.**
+The user's point (2026-08-25) was a **general guide**: keep the two platforms from
+drifting far enough apart that reconciling them becomes work. It was not a request
+for a release gate. Everything below is therefore a prompt to think before
+promoting — **nothing here blocks a tag**, and no session has to wait on another
+to answer.
 
-**The gate applies to the stable promotion ONLY, never to `-beta.N`.** This is not
-a softening: gating betas would deadlock the whole scheme, because a beta is how
-each platform *gets an installable artifact to test parity with*. No artifact, no
-verification; no verification, no parity; no parity, no artifact. Betas stay cheap
-and frequent exactly as §8 says, and they carry no parity claim.
+**What the version asserts.** A stable `0.x.0` should mean *"both platforms do this
+and it works"* rather than *"code changed"*. The number is user-facing — rendered
+in ntune's header chip (`src/App.tsx`), read by someone deciding whether to
+upgrade — so it is a claim made to a person, and worth keeping true.
+
+**It applies to the stable promotion only, never to `-beta.N`.** A beta is how each
+platform *gets an installable artifact to compare against*, so asking betas to
+carry a parity claim would be circular. Betas stay cheap and frequent exactly as
+§8 says.
 
 **Parity does NOT mean identical.** Sanctioned divergences already exist and are
 correct: the Linux installed app defaults to `--tray` while macOS is opt-in; the
@@ -209,26 +215,30 @@ round; RadioBar is macOS-only outright. Parity means:
 > platforms, or the divergence is **intended and written down** — in this contract,
 > a `docs/` note, or `STATUS.md`.
 
-An *unrecorded* divergence is the thing that blocks. Writing one down is a
-legitimate way to clear the gate, and is often the honest outcome.
+An *unrecorded* divergence is the thing to look for. Writing one down is a
+perfectly good outcome — usually the honest one — and is the main thing this
+subsection is trying to make habitual.
 
-**"No bugs detected" made falsifiable.** Unbounded, that can never be satisfied.
-It means, at tag time: no **known** open defect on a release-critical path (§3),
-and **both** sessions have run the current beta on their own platform and said so.
-Silence is not an ack (§1's rule, applied to releases).
+**"No bugs detected" — what was actually meant.** Taken literally it is
+unsatisfiable, and it was not meant literally. The aim is that **the betas we cut
+are stable ones** — an artifact each box can actually live on, not a checkpoint
+that happens to build. So the useful reading is: no **known** open defect on a
+release-critical path (§3), and ideally both sessions have run the current beta on
+their own platform. A session that hasn't got to it is a reason to say so in the
+tag annotation, not a reason to hold the release.
 
-**Declaring it.** Each session posts a `verified: <os> —` commit against the beta
-being promoted, as §3 already requires for `Needs-verify`. The promoting session
-names both in the tag annotation. No new ceremony — the same ack mechanism, aimed
-at a release instead of a path.
+**Declaring it.** If you've run the beta, say so with the `verified: <os> —` commit
+§3 already uses; the promoting session records in the tag annotation what was and
+wasn't covered. No new ceremony, and nothing waits on it.
 
-**The failure mode to watch, and the escape hatch.** A parity gate can stall stable
-releases indefinitely when one platform lags, which would push everyone onto betas
-and quietly make `-beta.N` the real release channel — the rot §8 exists to prevent,
-reintroduced by its own safeguard. The escape hatch is deliberate: **ship stable
-with a recorded, intended divergence** rather than blocking forever. If a
-capability is not going to reach one platform soon, write the divergence down and
-promote. Blocking is for *unknown* state, never for known-and-accepted asymmetry.
+**Why it is a guide and not a gate.** A hard gate stalls stable releases whenever
+one platform lags, which pushes everyone onto betas and quietly makes `-beta.N`
+the real release channel — the packaging rot §8 exists to prevent, reintroduced by
+its own safeguard. The draft answered that with an escape hatch; the simpler
+answer is not to build the trap. **Ship stable with a recorded, intended
+divergence.** Two sessions that both want the number to be honest do not need a
+mechanism forcing them to; what they need is the habit of writing the divergence
+down, which is the whole of §8.1.
 
 ## Acceptance log
 - **v1.0** (macOS `macos-node`, 2026-08-04) — initial proposal, adapted from
@@ -241,6 +251,24 @@ promote. Blocking is for *unknown* state, never for known-and-accepted asymmetry
   `main` invariant, no tag on red) and §8 (release cadence: `-beta.N` per phase),
   after the 0.1.1-beta.1 convergence exposed a long-red CI (RadioBar Swift-6 vs
   macos-14; ntune had no CI). Pending macOS acceptance.
+- **v1.2 accepted with an amendment** (Linux `adjmx`, 2026-08-25) — accepted in
+  substance, demoted in force: §8.1 is a **guide**, not a blocking gate, and the
+  mandatory two-session ack is gone. The draft read the source remark more
+  strictly than it was meant — the user's point was a general steer to keep the
+  platforms from drifting far enough apart that reconciling them becomes work, not
+  a request for release machinery. Enforcing a casual guide as a gate is how
+  process accretes: it adds a thing to satisfy without adding a thing anyone
+  wanted.
+  The substance is kept because it is good and was worth writing down —
+  stable-only (gating betas is circular), parity-as-recorded-divergence (the only
+  definition that survives RadioBar being macOS-only by design), and the
+  falsifiable reading of "no bugs". What is dropped is the part that could stall a
+  release on a session that simply hadn't got to it.
+  Same correction applies to "no bugs detected", which the draft worked hard to
+  make falsifiable: it was loose phrasing for *we want the betas we cut to be
+  stable ones*, not a defect-free assertion to be tested against. Kept as a
+  statement of what we are aiming at. Both sessions bound to v1.2 as amended;
+  macOS is free to push back.
 - **v1.2 proposed** (macOS `macos-node`, 2026-08-25) — adds §8.1: a parity gate on
   the **stable promotion only** (never on `-beta.N`, which would deadlock), a
   definition of parity that admits recorded divergences rather than demanding

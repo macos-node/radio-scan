@@ -1,8 +1,10 @@
 # Logger control on Linux — the half the tray arc never covered (proposal)
 
-> **Status: PROPOSAL — for the Linux (`adjmx`) session to choose.** Not started,
-> nothing decided. Written from macOS after verifying RadioBar's actual control
-> semantics against its source; the systemd mapping below is proposed, not tested.
+> **Status: DECIDED 2026-08-25 (Linux `adjmx`) — option A, ntune's tray grows
+> logger control, with hard separation in the menu.** Not started; the decision is
+> made, the build is not. Written from macOS after verifying RadioBar's actual
+> control semantics against its source; **the systemd mapping below is now
+> confirmed on Linux** — see the measurements in that section.
 > Contract: [`../CONTRIBUTING-cross-session.md`](../CONTRIBUTING-cross-session.md).
 > Companion to [`menubar-companion-2026-08-04.md`](menubar-companion-2026-08-04.md),
 > which this sharpens rather than replaces.
@@ -48,7 +50,7 @@ show you deliberately silenced shouldn't quietly restart. **A Linux surface that
 maps every pause to the same durability would be a regression** even though it
 would look identical in a menu.
 
-## Proposed systemd mapping (untested — Linux to confirm)
+## The systemd mapping — CONFIRMED on Linux 2026-08-25
 
 Units from `service/install-linux.sh` + `install-linux-episodic.sh`:
 `radio-scan.service` (stream), `otw-playlist.timer` / `duck-playlist.timer`
@@ -64,10 +66,26 @@ Units from `service/install-linux.sh` + `install-linux-episodic.sh`:
 | "is it running" | `systemctl --user is-active` / `is-enabled` — **two questions, not one** |
 
 `stop` vs `disable` is exactly launchd's `-w` distinction, which is a good sign the
-model transfers. Note the last row: launchd's `jobLoaded` collapses "running" and
-"will run again" into one boolean; systemd splits them, and the split is the more
-honest model — a stopped-but-enabled stream logger is a *different state* from a
-disabled one, and today's macOS UI cannot show that difference.
+model transfers. Measured on this box, each transition read back with `is-active`
+and `is-enabled`:
+
+| step | `is-active` | `is-enabled` |
+|---|---|---|
+| `radio-scan.service` baseline | active | enabled |
+| after `stop` | **inactive** | **enabled** |
+| after `start` | active | enabled |
+| `duck-playlist.timer` baseline | active | enabled |
+| after `disable --now` | **inactive** | **disabled** |
+| after `enable --now` | active | enabled |
+
+So the durability asymmetry holds as proposed: stopping the stream logger leaves
+it enabled and it comes back on its own, while disabling an episodic timer stays
+disabled across a reboot. Note the last row of the mapping table, which that
+`stop` line demonstrates: launchd's `jobLoaded` collapses "running" and "will run
+again" into one boolean; systemd splits them, and the split is the more honest
+model — **inactive + enabled** is a real, reachable state that today's macOS UI
+cannot express. Any menu built from this has to render two facts per job, not a
+checkbox.
 
 ## Where it should live — options
 
@@ -91,6 +109,28 @@ without a UI.
 objection is real and this is the Linux session's call, since it is the platform
 that has to live with the result.
 
+### Decision (Linux `adjmx`, 2026-08-25): A
+
+Taken with the mitigation as a **requirement, not a note**: separate labelled
+sections, and never a single merged "Pause". The source-of-truth objection is the
+right objection and it is what the build has to answer — but it is a menu-layout
+problem, and B pays for it with a whole second app while C leaves the platform
+asymmetry permanent — which §8.1 (accepted, as a guide, the same day) says to
+either close or write down as intended. Closing it is better than recording it.
+
+Two constraints on the build, both from the confirmed mapping above:
+
+1. **Two facts per job, never one.** `is-active` and `is-enabled` are different
+   questions and the stopped-but-enabled state is reachable in normal use. A
+   checkbox would lie about it.
+2. **Durability follows the job kind, not the menu item.** Stream pause is
+   `stop`; episodic pause is `disable --now`. Mapping both to the same verb would
+   look identical in a menu and be a regression — a 24/7 logger that stays dead
+   after a pause, or a weekly show that quietly restarts.
+
+Not building it in this pass. The CLI works and the timers self-heal since
+`0feed94`, so there is no outage waiting on this.
+
 ## Also open — version chip + a parity gate
 
 - The chip **already exists in ntune**: `src/App.tsx:801` renders
@@ -99,10 +139,16 @@ that has to live with the result.
 - **Proposed policy (user, 2026-08-25):** bump only when Linux and macOS are at
   parity with no known bugs — i.e. the version asserts *"both platforms do this
   and it works"*, not "code changed".
-- §8 (release cadence) does not encode a parity gate today; §3 gates tags on open
-  `Needs-verify` but says nothing about feature parity. If this should be enforced
-  rather than remembered, it wants a §8 amendment that **both sessions ack**.
-  Not drafted — say the word and macOS will write it.
+- ~~§8 does not encode a parity gate today~~ — **settled, and smaller than the
+  draft: §8.1 was accepted 2026-08-25 as a GUIDE, not a gate.** The policy behind
+  it was a general steer against the platforms drifting apart, and "no bugs" was
+  loose phrasing for *we want the betas we cut to be stable ones* — neither was a
+  request for release machinery, so nothing in §8.1 blocks a tag. This document is
+  still exactly the kind of record it asks for: RadioBar's logger control being
+  macOS-only is a divergence, now written down together with the decision to close
+  it.
+- Still open: **the version chip in RadioBar**, which ntune has
+  (`src/App.tsx:801`) and RadioBar does not. macOS's call.
 
 ## Not proposed, deliberately
 
