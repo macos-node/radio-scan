@@ -1619,6 +1619,17 @@ per-npub `1063` feeds planned as secondary tabs. Build map + open decisions:
   episode it named.
 
 ## Outstanding
+- **Three-platform parity ledger (2026-08-25):**
+  [`docs/platform-parity-2026-08-25.md`](docs/platform-parity-2026-08-25.md). Written
+  from the Windows session after 0.2.0-beta.2 became the first Windows build of the
+  v0.2.0 wave. Separates **measured** from **assumed** per platform, and settles the
+  recurring confusion about track data: there are **two independent sources** — ntune's
+  ICY proxy (`http://` only, all platforms) and the `radioscan.py` logger (http+https,
+  but macOS/Linux only, per-station `config.json`). Carries the open question of what
+  Windows' logger + viewer should be (suggestion: follow the **Linux** design — RadioBar's
+  Swift does not port), the in-app https ICY gap that affects all three, and a ⚠️ list
+  of things reported but **not** conclusively tested. **Suggested first step: a
+  deliberate cross-platform track-data pass**, which would settle every open item there.
 - **Not yet built:** L2 bridge (write `airplay.json` into the shared suite dir +
   reconcile heard tracks vs ndisc's catalogue) and the Nostr publisher/poller.
   The suite-level UI is now **underway** — ntune (§6) is at U0–U4a + the durable-

@@ -135,11 +135,24 @@ Measured after the fix, in the release build:
 This closes **"AAC+ stream plays (WebView2 native)"** for Windows. The remaining
 Windows gap is the **Credential Manager `nsec` round-trip**.
 
-## Loose end (not fixed here, affects every platform)
+## Loose end (not fixed here): ntune's IN-APP now-playing is `http://`-only
 
-`https://` streams bypass the proxy on **all** platforms, and the proxy is what
-parses ICY `metaint` — so **no now-playing metadata for any `https://` station,
-anywhere**. The tray/RadioBar bridge therefore stays at station-name level for those.
-Only the `http://` stations get live `artist — title`. Worth a decision: route
-everything through the proxy (needs TLS upstream, and re-verification on all three
-platforms), or accept it. Not urgent, and deliberately out of scope for this fix.
+`https://` streams bypass the proxy on **all** platforms, and the proxy is the only
+thing that parses ICY `metaint` — so ntune's **own** now-playing readout (the player
+bar, and what it writes to the bridge file) is blank for `https://` stations on every
+platform. Only `http://` stations get live `artist — title` from ntune itself.
+
+> **Correction — an earlier draft of this section said "no now-playing metadata for
+> any `https://` station, anywhere". That was wrong**, and the mistake is worth
+> recording: it reasoned only about ntune's in-app path and missed the **`radioscan.py`
+> logger** entirely. The logger is a separate 24/7 service (launchd on macOS, systemd
+> on Linux) that opens streams itself with `urllib` + raw sockets, so it reads ICY over
+> **http and https alike**, for whichever stations that machine's `config.json` lists.
+> macOS and Linux therefore *do* have https track data — from the logger, not from
+> ntune's proxy. **Windows runs no logger at all** (`lib.rs` says so), which is why the
+> gap is visible there and nowhere else.
+
+Whether to close it in-app — give the proxy TLS and route `https://` through it too —
+is a live decision, not a settled one. See
+[`../../docs/platform-parity-2026-08-25.md`](../../docs/platform-parity-2026-08-25.md)
+for the three-platform picture and the options.
