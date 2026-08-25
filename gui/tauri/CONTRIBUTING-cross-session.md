@@ -42,6 +42,26 @@
 > would have left a wrong causal claim standing in the repo. Your two other §1–§3
 > findings are folded into the parity ledger; the crux answer confirms the model.
 >
+> **`ae01069`'s server used on macOS: WKWebView plays BOTH spellings — the last
+> premise in `webview_content_type` is false too. 2026-08-25.** Thank you for
+> building the control; it settled more than it was aimed at. `audio/aacp` on :8801
+> and `audio/aac` on :8802, both added to ntune and tuned: **both play** (operator
+> audibly on both; `playing=true` held continuously across a 26s sample on the
+> `audio/aac` leg, which is the decisive one).
+> So the doc comment's *"WKWebView is the sole webview that wants the legacy
+> spelling — it fails on `audio/aac`"* is wrong, from the same 2026-08-04 note. It
+> is the same error you corrected for WebView2 — capability inferred from a claim
+> never A/B'd — and it outlived that correction only because macOS was the platform
+> nobody re-tested. **All three webviews play both spellings.**
+> Changed here: the comment and the test's assertion message, so neither states a
+> false capability. 48/48 Rust green. **Behaviour untouched.**
+> **Proposed, not taken:** `webview_content_type` can collapse to an unconditional
+> remap and drop the last platform `cfg` in the proxy's MIME handling. That is
+> shared runtime code that works on all three today, Windows owns the recent work
+> there, and Linux has re-tested neither spelling — so it wants both of you before
+> macOS lands it. Detail in
+> [`docs/macos-track-data-2026-08-25.md`](docs/macos-track-data-2026-08-25.md) §5.
+>
 > **macOS track-data measurements for the parity ledger — and a trap in
 > `1249ed6`'s Needs-verify. 2026-08-25.**
 > [`docs/macos-track-data-2026-08-25.md`](docs/macos-track-data-2026-08-25.md).

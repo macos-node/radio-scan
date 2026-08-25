@@ -370,8 +370,14 @@ async fn read_upstream_head(up: &mut TcpStream) -> Option<Head> {
 ///
 /// Only ONE stream MIME needs touching: the legacy `audio/aacp` that Shoutcast-era
 /// servers still send for HE-AAC (SomaFM's AAC mount says `audio/aac` and passes
-/// straight through). **WKWebView (macOS) is the sole webview that wants the legacy
-/// spelling** — it fails on `audio/aac`. Everyone else wants the modern one:
+/// straight through). macOS keeps the legacy spelling here — but NOT because it
+/// needs it. **Measured on WKWebView 2026-08-25 with `tests/aacp_healthy_server.py`,
+/// byte-identical audio and the MIME as the only variable: `audio/aacp` AND
+/// `audio/aac` both play.** The earlier "it fails on `audio/aac`" was never A/B'd
+/// and is false, so the `macos` arm below is currently a no-op preserved for
+/// caution rather than a capability requirement — see the note in
+/// docs/macos-track-data-2026-08-25.md before relying on it. Everyone else wants
+/// the modern one:
 /// webkit2gtk needs it, and so does **WebView2**, whose
 /// `canPlayType("audio/aacp")` is empty, i.e. flatly unsupported — measured on
 /// WebView2 151.
@@ -450,7 +456,9 @@ mod tests {
     fn legacy_aacp_is_modernised_everywhere_except_macos() {
         let got = webview_content_type("audio/aacp");
         if cfg!(target_os = "macos") {
-            assert_eq!(got, "audio/aacp", "WKWebView needs the legacy spelling");
+            // Pins CURRENT behaviour, not a capability: WKWebView plays both
+                // spellings (measured 2026-08-25). See the fn's doc comment.
+                assert_eq!(got, "audio/aacp", "macOS arm keeps the legacy spelling");
         } else {
             assert_eq!(got, "audio/aac", "webkit2gtk + WebView2 need the modern one");
         }

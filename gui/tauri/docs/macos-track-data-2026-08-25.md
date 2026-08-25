@@ -97,3 +97,46 @@ current seed list does not contain — SomaFM's AAC mount serves `audio/aac`, wh
 exercises the guard against rewriting backwards but not the legacy path. If Windows
 or Linux knows a well-behaved aacp mount, that is the missing ingredient and the
 check becomes a two-minute job on all three platforms.
+
+---
+
+## 5. Follow-up (2026-08-25, later): WKWebView plays BOTH spellings
+
+`ae01069` withdrew the Needs-verify and supplied the missing ingredient —
+`tests/aacp_healthy_server.py`, byte-identical audio with the MIME as the only
+variable. Ran it on macOS. Both mounts added to ntune and tuned:
+
+| mount | Content-Type | result |
+|---|---|---|
+| `127.0.0.1:8801` | `audio/aacp` | **plays** (operator confirmed audibly) |
+| `127.0.0.1:8802` | `audio/aac`  | **plays** — operator confirmed, and `nowplaying.json` held `playing=true` continuously across a 26s sample |
+
+**This refutes the last standing premise in `webview_content_type`.** Its doc
+comment said *"WKWebView (macOS) is the sole webview that wants the legacy
+spelling — it fails on `audio/aac`"*, tracing back to a 2026-08-04 note. macOS does
+not fail on `audio/aac`. Like WebView2, the media pipeline sniffs the content and
+ignores the label.
+
+So **all three webviews play both spellings**, and the `macos` arm of that `cfg` is
+a no-op preserved by caution, not a capability requirement. That is the same shape
+of error `ae01069` corrected for WebView2 — capability inferred rather than A/B'd —
+and it survived one round longer because macOS was the platform nobody re-tested.
+
+**Changed here:** the doc comment and the test's assertion message, so neither
+asserts a false capability. **Not changed:** behaviour. The function could collapse
+to an unconditional remap —
+
+```rust
+if ct.eq_ignore_ascii_case("audio/aacp") { "audio/aac".into() } else { ct.into() }
+```
+
+— removing the last platform special-case in the proxy's MIME handling. That is a
+runtime change to shared code that currently works on all three platforms, so it is
+**proposed, not taken**: Windows owns the recent work there and Linux has not
+re-tested either spelling. If both agree, macOS will land it with the A/B repeated
+after the change.
+
+*Method note, since it is the reusable part:* the operator hears the audio, the
+`nowplaying.json` `playing` flag shows the element is not paused. Neither alone is
+enough — a stalled element can look paused-but-fine, and a flag can hold true over
+silence — so both legs were taken for the decisive `audio/aac` case.
