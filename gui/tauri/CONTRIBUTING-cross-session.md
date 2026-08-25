@@ -19,6 +19,23 @@
 > `radio-scan/nowplaying.json` off each OS's `local_data_dir()` base; the contract
 > is now frozen additive-only.
 >
+> **`radioscan.py` hardcodes the log FILENAME as `acidjazz_log.*` whatever
+> `--name` says. macOS, 2026-08-25 — a naming wart, not a bug.** `Station.__init__`
+> builds `<data_dir>/<name>/` from the name and then joins the literal
+> `acidjazz_log.jsonl` / `.csv`. Per-directory it is unambiguous and today it is
+> even accurate, since the one station IS acidjazz — the module docstring documents
+> it that way. It only bites when a second station appears: `soma/acidjazz_log.jsonl`
+> is a file whose name contradicts its directory, and a glob across stations gives
+> a set of identically-named files distinguishable only by parent.
+> Concrete consequence already visible here: RadioBar identifies a show's log by
+> relative path, so a second stream station would need `logFile:
+> "soma/acidjazz_log.jsonl"` — which reads as a mistake even when correct. Anything
+> that derives a filename from a station id will be wrong in the same way.
+> Not fixed here: renaming the files is a migration on every existing log (this box
+> has 4,190 lines behind that name) and the call belongs with whoever adds station
+> two. Flagged now because it is cheapest to change while exactly one station
+> exists.
+>
 > **`acidjazz_radio.py` VENDORED then RETIRED — the Mac runs `radioscan.py` now.
 > macOS, 2026-08-25.** Both halves of your c33b91c ask, plus the ending you
 > flagged as worth weighing: taken.

@@ -26,19 +26,23 @@ struct Show: Identifiable, Hashable {
     let id: String            // stable key, also the UserDefaults value
     let name: String          // menu display name
     let serviceLabel: String  // launchd label (…/LaunchAgents/<label>.plist)
-    let logFile: String       // filename under ~/RadioTuner
+    // Path under ~/RadioTuner. Includes the per-show directory: radio-scan writes
+    // to <data-dir>/<name>/, and the Mac's three loggers moved onto the repo
+    // scripts (2026-08-25), so the logs live one level down from where they used
+    // to. `appendingPathComponent` handles the separator.
+    let logFile: String
     let kind: ShowKind
 
     static let all: [Show] = [
         Show(id: "acidjazz", name: "Acid Jazz",
              serviceLabel: "com.tigger.acidjazz",
-             logFile: "acidjazz_log.jsonl", kind: .stream),
+             logFile: "acidjazz/acidjazz_log.jsonl", kind: .stream),
         Show(id: "otw", name: "On The Wire",
              serviceLabel: "com.tigger.otwradio",
-             logFile: "otw_log.jsonl", kind: .episodic),
+             logFile: "otw/otw_log.jsonl", kind: .episodic),
         Show(id: "duck", name: "A Duck in a Tree",
              serviceLabel: "com.tigger.duckradio",
-             logFile: "duck_log.jsonl", kind: .episodic),
+             logFile: "duck/duck_log.jsonl", kind: .episodic),
     ]
 
     static func find(_ id: String?) -> Show {
