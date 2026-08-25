@@ -165,7 +165,27 @@ then §6 (in-app https ICY) is the higher-value job — it fixes **all three** p
 where the Windows logger fixes one. The pass is an hour and could save a week of
 building the less useful thing.
 
-### If/when the Windows logger is the choice: the port is naturally staged
+### ✅ STAGE 1 IS DONE (`9bd3bd1`, 2026-08-25) — Windows reads episodic logs
+
+Un-gated as described below, with **no frontend change** (`episodic_shows()` already
+drove the UI off the command's return). `cargo test` 50/50 — up from 48, because the
+two portable logger tests now compile on Windows too — and `cargo check` clean with
+**zero warnings**, which is what confirms the `cfg` split leaves no dead code on
+either platform. **Trap 1 fixed in the same commit** (`home_dir()` prefers
+`USERPROFILE`, falls back to `HOMEDRIVE`+`HOMEPATH`, then `HOME`; `RADIOSCAN_DATA`
+still wins) — without it the un-gate would have been silently useless, reading a
+directory the writer never writes.
+
+macOS was deliberately left out: RadioBar is its viewer, and a second one there is
+that session's call. **The view stays empty on Windows until something writes the
+logs** — that is stage 2, below, and an empty view is the same shape as a Linux box
+with no jobs installed.
+
+**Needs-verify: linux** — that both halves still build and the tray's logger section
+is untouched. It should be: every control item kept the same `cfg` it had at module
+level, and no control code changed.
+
+### The original staging analysis (kept — stage 2 is still ahead)
 
 ✅ **`logger.rs` (419 lines) splits cleanly in two**, so this does not have to be
 all-or-nothing:
