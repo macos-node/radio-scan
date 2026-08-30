@@ -6,8 +6,14 @@
 # Two weekly one-shots, the Linux equivalent of the macOS launchd jobs they came
 # from (com.tigger.otwradio / com.tigger.duckradio):
 #
-#   On The Wire      Mon 09:00   Blogger feed, one post per episode
+#   On The Wire      Sun 09:00   Blogger feed, one post per episode
 #   A Duck in a Tree Wed 09:00   Podbean feed, whole archive in one document
+#
+# Each day is picked to sit just after that show publishes, not on a round
+# weekday. On The Wire posts Saturday night UTC (the 30 Aug 2026 playlist went
+# up Sat 22:52Z); it ran Mon 09:00 until 2026-08-30, which left the newest
+# episode missing for the whole of Sunday every week and read exactly like a
+# dead timer. Sun 09:00 local picks it up a few hours after it lands.
 #
 # These are TIMERS, not the always-on service install-linux.sh sets up for live
 # streams: an episodic show publishes its tracklist once, so there is nothing to
@@ -68,7 +74,7 @@ Persistent=true
 WantedBy=timers.target
 TIMEREOF
 done <<'JOBS'
-otw-playlist|otw_playlist.py|Mon 09:00|otwradio.blogspot.com|On The Wire playlist parser
+otw-playlist|otw_playlist.py|Sun 09:00|otwradio.blogspot.com|On The Wire playlist parser
 duck-playlist|duck_playlist.py|Wed 09:00|feed.podbean.com|A Duck in a Tree tracklist parser
 JOBS
 
