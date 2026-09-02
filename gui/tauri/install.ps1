@@ -23,6 +23,15 @@ if (-not $SkipBuild) {
   Write-Host '--- Quitting running ntune (if any) ---'
   Get-Process -Name ntune -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
   Start-Sleep -Milliseconds 500
+  # Same first-run gap as install.sh: `npm run tauri` resolves the CLI out of
+  # node_modules\.bin, so a fresh clone fails with "tauri: command not found",
+  # which reads like a missing global tool. If the shim is ever named something
+  # else the check simply re-runs npm install, which is wasteful but not wrong.
+  if (-not (Test-Path 'node_modules\.bin\tauri.cmd')) {
+    Write-Host '--- Installing npm dependencies (first build here) ---'
+    npm install
+    if ($LASTEXITCODE -ne 0) { throw "npm install failed (exit $LASTEXITCODE)" }
+  }
   Write-Host '--- Building ntune (release, no bundle) ---'
   npm run tauri build -- --no-bundle
   if ($LASTEXITCODE -ne 0) { throw "build failed (exit $LASTEXITCODE)" }
