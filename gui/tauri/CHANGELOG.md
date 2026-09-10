@@ -5,6 +5,28 @@ tag date; unreleased work sits under the top heading until tagged.
 
 ## Unreleased
 
+### Added
+- **Windows reads the episodic logs (stage 1 of the logger port).** The READ half of
+  `logger.rs` is no longer Linux-only, so the episodic viewer and the "new episode"
+  dot light up on Windows with **no frontend change** — `episodic_shows()` already
+  drove the UI off whatever the command returns. The CONTROL half (pause/resume/
+  fetch-now) stays Linux-only because it shells `systemctl --user`, and Task
+  Scheduler's model is nothing like it; that is stage 2. Windows still has no logger
+  *service*, so the view stays empty until something writes those logs
+  (`python radioscan.py run --config config.json` does) — the same shape as a Linux
+  box with no jobs installed. Carries the fix for the trap that would have made the
+  un-gate silently useless: `data_dir()` resolved `HOME`, which is unset for a
+  GUI-launched app on Windows, while `radioscan.py` writes under `%USERPROFILE%`, so
+  reader and writer would have pointed at different directories. `home_dir()` now
+  prefers `USERPROFILE`, falls back to `HOMEDRIVE`+`HOMEPATH`, then `HOME`, with
+  `RADIOSCAN_DATA` still winning over all of it. macOS is deliberately **not**
+  un-gated — RadioBar is that box's reader, and a second one there is the macOS
+  session's call. `cargo test` 50/50 on Windows (48 before; the two portable logger
+  tests now compile there too) and `cargo check` clean with zero warnings, which is
+  what confirms the `cfg` split leaves no dead code on either arm — Needs-verify:
+  linux, that both halves still build and the tray's LOGGER section is untouched.
+  Background: [`../../docs/platform-parity-2026-08-25.md`](../../docs/platform-parity-2026-08-25.md).
+
 ### Fixed
 - **Windows: no `https://` station would play.** Every `https://` stream failed with
   `MEDIA_ERR_SRC_NOT_SUPPORTED`, which read like the standing "AAC+ in WebView2"
