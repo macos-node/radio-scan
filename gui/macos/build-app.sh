@@ -33,6 +33,24 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINPATH" "$APP/Contents/MacOS/$BIN"
 
+# The bundle icon. RadioBar is an LSUIElement agent so this never appears in
+# the Dock — it is what Finder, Spotlight and the Login Items list show, and
+# without it they show the blank default. icon.icns is committed so a box
+# without librsvg can still build; it is regenerated here when rsvg-convert is
+# present, which keeps it honest against icon.svg.
+if command -v rsvg-convert >/dev/null 2>&1; then
+    ICONSET="$(mktemp -d)/icon.iconset"; mkdir -p "$ICONSET"
+    for pair in "16 icon_16x16" "32 icon_16x16@2x" "32 icon_32x32" "64 icon_32x32@2x" \
+                "128 icon_128x128" "256 icon_128x128@2x" "256 icon_256x256" \
+                "512 icon_256x256@2x" "512 icon_512x512" "1024 icon_512x512@2x"; do
+        set -- $pair
+        rsvg-convert -w "$1" -h "$1" icon.svg -o "$ICONSET/$2.png"
+    done
+    iconutil -c icns "$ICONSET" -o icon.icns
+    rm -rf "$(dirname "$ICONSET")"
+fi
+cp icon.icns "$APP/Contents/Resources/icon.icns"
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -42,6 +60,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleDisplayName</key>       <string>RadioBar</string>
     <key>CFBundleIdentifier</key>        <string>$ID</string>
     <key>CFBundleExecutable</key>        <string>$BIN</string>
+    <key>CFBundleIconFile</key>          <string>icon</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key>           <string>1</string>
