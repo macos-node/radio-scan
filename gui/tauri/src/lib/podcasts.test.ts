@@ -591,15 +591,16 @@ describe("withinRecency", () => {
   });
 
   it("keeps a feed inside the window and drops one outside", () => {
+    expect(withinRecency(daysAgo(0.5), 1, now)).toBe(true);
+    expect(withinRecency(daysAgo(3), 1, now)).toBe(false);
     expect(withinRecency(daysAgo(3), 7, now)).toBe(true);
     expect(withinRecency(daysAgo(10), 7, now)).toBe(false);
     expect(withinRecency(daysAgo(10), 14, now)).toBe(true);
     expect(withinRecency(daysAgo(20), 14, now)).toBe(false);
-    expect(withinRecency(daysAgo(20), 30, now)).toBe(true);
-    expect(withinRecency(daysAgo(40), 30, now)).toBe(false);
   });
 
   it("is inclusive at the boundary", () => {
+    expect(withinRecency(daysAgo(1), 1, now)).toBe(true);
     expect(withinRecency(daysAgo(7), 7, now)).toBe(true);
   });
 
@@ -619,8 +620,8 @@ describe("withinRecency", () => {
 
 describe("recencyLabel", () => {
   it("names each window", () => {
+    expect(recencyLabel(1)).toBe("day");
     expect(recencyLabel(7)).toBe("week");
     expect(recencyLabel(14)).toBe("2 weeks");
-    expect(recencyLabel(30)).toBe("month");
   });
 });

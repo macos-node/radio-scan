@@ -96,9 +96,9 @@ const SORTS: { id: PodcastSort; label: string; title: string }[] = [
 
 const RECENCIES: { id: Recency; label: string; title: string }[] = [
   { id: null, label: "All", title: "Every subscription" },
-  { id: 30, label: "1m", title: "Published in the last month" },
   { id: 14, label: "2w", title: "Published in the last 2 weeks" },
   { id: 7, label: "1w", title: "Published in the last week" },
+  { id: 1, label: "1d", title: "Published in the last 24 hours" },
 ];
 
 

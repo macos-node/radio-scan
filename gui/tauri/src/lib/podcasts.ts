@@ -683,12 +683,12 @@ export function externalHttpUrl(raw: string | undefined | null): string | null {
  *  Days rather than months: the useful windows here turned out to be short
  *  (a week to a month), and at that scale calendar-month arithmetic buys
  *  nothing but edge cases around month length. */
-export type Recency = null | 7 | 14 | 30;
+export type Recency = null | 1 | 7 | 14;
 
 /** Human name for a window, so the buttons and the "N hidden" line cannot
  *  drift apart. */
 export function recencyLabel(r: Exclude<Recency, null>): string {
-  return r === 7 ? "week" : r === 14 ? "2 weeks" : "month";
+  return r === 1 ? "day" : r === 7 ? "week" : "2 weeks";
 }
 
 /** Is a feed recent enough to stay in the list?
