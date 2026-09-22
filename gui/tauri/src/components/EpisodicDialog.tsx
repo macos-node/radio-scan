@@ -100,7 +100,7 @@ export function EpisodicDialog({
         <button
           type="button"
           onClick={() => void openUrl(show.listen_url)}
-          className="mb-3 flex items-center gap-1.5 rounded-sm border border-surface px-2 py-1 text-xs text-muted transition-colors hover:bg-surfaceHover hover:text-fg"
+          className="link-ext mb-3 text-xs"
         >
           <ExternalLink size={13} />
           Listen on Mixcloud

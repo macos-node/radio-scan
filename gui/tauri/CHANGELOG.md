@@ -6,6 +6,22 @@ tag date; unreleased work sits under the top heading until tagged.
 ## Unreleased
 
 ### Added
+- **Recent filter on the Podcasts list.** `All / 1y / 6m / 3m`, beside the sort
+  control, answering "which of my subscriptions are still alive". Filters on the
+  **same date key the sort uses** — `orderKeys`, with the identical fallback
+  chain — so the filter and the ordering can never disagree about how recent a
+  feed is. A row with no date at all is **kept**: absence of a date is not
+  evidence a feed is dead, and dropping it would hide subscriptions whose feed
+  simply has not been fetched yet. Session-only, deliberately — a persisted
+  filter that hides most of the list is a bad thing to be greeted by on launch
+  without remembering why. When it hides anything it says so, with a "show all"
+  out; a filter that silently removes rows is the same failure as a count that
+  never reaches zero. Stations carry no dates at all, so the control does not
+  appear on that tab rather than sitting there permanently inert.
+
+  Note there is no release *year* anywhere in ntune — an episode date is the
+  better signpost regardless, since it says whether a feed is still publishing
+  rather than when it started.
 - **Windows reads the episodic logs (stage 1 of the logger port).** The READ half of
   `logger.rs` is no longer Linux-only, so the episodic viewer and the "new episode"
   dot light up on Windows with **no frontend change** — `episodic_shows()` already
@@ -26,6 +42,16 @@ tag date; unreleased work sits under the top heading until tagged.
   what confirms the `cfg` split leaves no dead code on either arm — Needs-verify:
   linux, that both halves still build and the tray's LOGGER section is untouched.
   Background: [`../../docs/platform-parity-2026-08-25.md`](../../docs/platform-parity-2026-08-25.md).
+
+### Changed
+- **External links share one treatment.** A `.link-ext` class in `index.css`:
+  dotted amber at rest, solid white on hover, with an explicit pointer cursor
+  (browsers default `<button>` to an arrow and Tailwind's preflight does not
+  override it). Dotted rather than solid so it reads as actionable without
+  looking like a body-copy hyperlink, and visible **at rest** rather than only
+  on hover — a hover-only affordance is invisible until you are already
+  hovering. Applied to "Listen on Mixcloud", which was a bordered button.
+  Shared with ndisc, where the same treatment marks the drift chip.
 
 ### Fixed
 - **Windows: no `https://` station would play.** Every `https://` stream failed with

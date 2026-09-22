@@ -82,6 +82,30 @@ const SORTS: { id: PodcastSort; label: string; title: string }[] = [
   { id: "added", label: "Added", title: "Newest subscription first" },
 ];
 
+/** How recently a feed must have published to stay in the list.
+ *
+ *  Months rather than a year field: ntune has no notion of a release year, and
+ *  an episode date is a better signpost anyway — it says whether a feed is
+ *  still alive, not when it started. `null` is "no cut-off". */
+type Recency = null | 3 | 6 | 12;
+
+const RECENCIES: { id: Recency; label: string; title: string }[] = [
+  { id: null, label: "All", title: "Every subscription" },
+  { id: 12, label: "1y", title: "Published in the last 12 months" },
+  { id: 6, label: "6m", title: "Published in the last 6 months" },
+  { id: 3, label: "3m", title: "Published in the last 3 months" },
+];
+
+/** Cut-off in epoch ms, or null for no filtering. Computed per render rather
+ *  than memoised: it moves with the clock, and a stale boundary would quietly
+ *  keep a feed visible past its window. */
+function cutoffMs(r: Recency): number | null {
+  if (r === null) return null;
+  const d = new Date();
+  d.setMonth(d.getMonth() - r);
+  return d.getTime();
+}
+
 function fmtDuration(secs: number | null): string {
   if (!secs) return "";
   const h = Math.floor(secs / 3600);
@@ -347,6 +371,9 @@ export function PodcastTab({
   const [subs, setSubs] = useState<Sub[]>(loadSubs);
   const [view, setView] = useState<View>(loadView);
   const [sort, setSort] = useState<PodcastSort>(loadSort);
+  // Session-only, deliberately: a persisted filter that hides most of the list
+  // is a bad thing to be greeted by on launch without remembering why.
+  const [recency, setRecency] = useState<Recency>(null);
   const [addUrl, setAddUrl] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -593,6 +620,21 @@ export function PodcastTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows, sort, orderEpoch],
   );
+
+  // Filtered view. Uses the SAME date key as the sort — `orderKeys`, with the
+  // identical fallback chain — so the filter and the ordering can never
+  // disagree about how recent a feed is. A row with no date at all is kept:
+  // absence of a date is not evidence the feed is dead, and dropping it would
+  // hide subscriptions whose feed simply has not been fetched yet.
+  const shown = useMemo(() => {
+    const cut = cutoffMs(recency);
+    if (cut === null) return ordered;
+    return ordered.filter((r) => {
+      const at = orderKeys.current.get(r.url) ?? r.latestAt ?? null;
+      return at === null || at >= cut;
+    });
+  }, [ordered, recency]);
+  const hiddenByRecency = ordered.length - shown.length;
 
   /** Re-read every subscribed feed from the network, now.
    *
@@ -974,6 +1016,24 @@ export function PodcastTab({
               </button>
             )}
             <div className="ml-auto flex items-center gap-0.5">
+              {RECENCIES.map((o) => (
+                <button
+                  key={o.label}
+                  type="button"
+                  onClick={() => setRecency(o.id)}
+                  title={o.title}
+                  aria-pressed={recency === o.id}
+                  className={cn(
+                    "rounded-sm px-1.5 py-0.5 text-[10px] transition-colors",
+                    recency === o.id
+                      ? "bg-surface text-fg"
+                      : "text-muted hover:bg-surfaceHover hover:text-fg",
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+              <span className="mx-1 h-3 w-px bg-surface" aria-hidden />
               {SORTS.map((o) => (
                 <button
                   key={o.id}
@@ -1019,9 +1079,22 @@ export function PodcastTab({
             </div>
           </div>
 
+          {hiddenByRecency > 0 && (
+            <p className="px-2 pb-1 text-[10px] text-muted">
+              {hiddenByRecency} subscription{hiddenByRecency === 1 ? "" : "s"}{" "}
+              hidden — no episode in the last {recency} months.{" "}
+              <button
+                type="button"
+                onClick={() => setRecency(null)}
+                className="underline decoration-dotted underline-offset-2 hover:text-fg"
+              >
+                show all
+              </button>
+            </p>
+          )}
           {view === "list" ? (
             <ul className="flex flex-col">
-              {ordered.map((s) => {
+              {shown.map((s) => {
                 const open = expanded === s.url;
                 const pod = cache[s.url];
                 return (
@@ -1216,7 +1289,7 @@ export function PodcastTab({
             <div className="px-3 pb-3">
               <div className="overflow-x-auto pb-1">
               <div className="flex items-stretch gap-2">
-                {ordered.map((s) => {
+                {shown.map((s) => {
                   const open = expanded === s.url;
                   const pod = cache[s.url];
                   return (

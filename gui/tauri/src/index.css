@@ -82,6 +82,22 @@ body {
   @apply bg-surfaceHover text-fg;
 }
 
+/* Outward link — anything that leaves the app for a browser.
+ *
+ * Dotted amber at rest, solid white on hover. Dotted rather than solid so it
+ * reads as actionable without looking like body-copy hyperlink, and visible at
+ * REST rather than only on hover: a hover-only affordance is invisible until
+ * you are already hovering, which is exactly the feedback that prompted this.
+ * Browsers default <button> to an arrow cursor and Tailwind's preflight does
+ * not override it, hence the explicit cursor.
+ *
+ * Shared with ndisc, where the same treatment marks the drift chip. */
+.link-ext {
+  @apply inline-flex items-center gap-1.5 text-warn underline decoration-dotted
+         underline-offset-2 cursor-pointer transition-colors
+         hover:text-fg hover:decoration-solid;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
