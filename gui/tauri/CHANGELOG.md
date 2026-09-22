@@ -50,7 +50,20 @@ tag date; unreleased work sits under the top heading until tagged.
   override it). Dotted rather than solid so it reads as actionable without
   looking like a body-copy hyperlink, and visible **at rest** rather than only
   on hover — a hover-only affordance is invisible until you are already
-  hovering. Applied to "Listen on Mixcloud", which was a bordered button.
+  hovering. Applied to "Listen on Mixcloud", which was a bordered button, and to
+  the **show website** on the identity card — previously inert text with the
+  value on a tooltip, which the code had flagged as pending "until fields get
+  real link-outs".
+
+  The website is **guarded**: only http(s) is linkified. It comes out of an RSS
+  feed — third-party content — and `openUrl` hands a string to the desktop's URL
+  handler, which acts on `file://`, `smb://` or any registered custom scheme just
+  as readily as https, so linkifying whatever the feed said would let a feed
+  author choose what the OS opens. Anything else still renders, as inert text,
+  because the value is worth seeing even when it is not worth clicking.
+  `externalHttpUrl` in `lib/podcasts.ts`, with tests covering the refusals
+  (file, javascript, smb, mailto, data, scheme-less, empty).
+
   Shared with ndisc, where the same treatment marks the drift chip.
 
 ### Fixed
