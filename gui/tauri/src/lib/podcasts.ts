@@ -653,3 +653,26 @@ export function sortSubs(
   }
   return out;
 }
+
+/** A feed-supplied URL, but only if it is safe to hand to the OS opener.
+ *
+ *  `website`, `listen_url` and friends come straight out of an RSS feed — third
+ *  party content we do not control. `openUrl` hands a string to the desktop's
+ *  URL handler, which will happily act on `file://`, `smb://` or any registered
+ *  custom scheme, so linkifying whatever the feed said would let a feed author
+ *  choose what the OS opens. Only http(s) is ever worth a link-out here.
+ *
+ *  Returns the parsed href (normalised by `URL`) or null, so callers can fall
+ *  back to rendering inert text rather than a link that goes somewhere odd.
+ */
+export function externalHttpUrl(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    const u = new URL(trimmed);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : null;
+  } catch {
+    return null;
+  }
+}

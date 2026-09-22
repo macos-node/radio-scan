@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  externalHttpUrl,
   absorbPodcast,
   harvestOf,
   loadSubs,
@@ -546,5 +547,34 @@ describe("setEnrich — the editor's store operation", () => {
 
   it("ignores a url that is not subscribed", () => {
     expect(setEnrich("nope", { author: "X" })).toBe(false);
+  });
+});
+
+describe("externalHttpUrl", () => {
+  it("accepts http and https", () => {
+    expect(externalHttpUrl("https://example.com/show")).toBe(
+      "https://example.com/show",
+    );
+    expect(externalHttpUrl("http://example.com")).toBe("http://example.com/");
+  });
+
+  it("refuses schemes the OS opener would act on", () => {
+    // A feed author must not get to choose what the desktop opens.
+    for (const s of [
+      "file:///etc/passwd",
+      "javascript:alert(1)",
+      "smb://host/share",
+      "mailto:someone@example.com",
+      "data:text/html,<script>",
+    ]) {
+      expect(externalHttpUrl(s)).toBeNull();
+    }
+  });
+
+  it("refuses anything that is not a URL, and empties", () => {
+    expect(externalHttpUrl("example.com")).toBeNull(); // no scheme: ambiguous
+    expect(externalHttpUrl("   ")).toBeNull();
+    expect(externalHttpUrl(undefined)).toBeNull();
+    expect(externalHttpUrl(null)).toBeNull();
   });
 });

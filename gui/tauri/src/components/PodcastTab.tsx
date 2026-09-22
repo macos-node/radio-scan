@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Check,
   ChevronDown,
@@ -13,6 +14,7 @@ import {
   Rss,
   Upload,
   X,
+  ExternalLink,
 } from "lucide-react";
 import {
   cachedPodcasts,
@@ -61,6 +63,7 @@ import { StateSlots } from "./StateSlots";
 import { Modal } from "./Modal";
 import { EnrichDialog } from "./EnrichDialog";
 import { cn } from "../lib/cn";
+import { externalHttpUrl } from "../lib/podcasts";
 import { describeOutcome, publishSequentially } from "../lib/publishAll";
 
 type View = "list" | "cards";
@@ -246,11 +249,33 @@ function IdentityRow({
           {c}
         </span>
       ))}
-      {id.website && (
-        <span className={chip} title={id.website}>
-          {id.website.replace(/^https?:\/\//, "").replace(/\/+$/, "")}
-        </span>
-      )}
+      {id.website &&
+        (() => {
+          // Only linkify what is safe to hand to the OS opener — the website
+          // comes from the feed, and `openUrl` would act on file:// or any
+          // registered custom scheme just as happily as https. Anything else
+          // still shows, as inert text, because the value is worth seeing even
+          // when it is not worth clicking.
+          const href = externalHttpUrl(id.website);
+          const shown = id.website
+            .replace(/^https?:\/\//, "")
+            .replace(/\/+$/, "");
+          return href ? (
+            <button
+              type="button"
+              onClick={() => void openUrl(href)}
+              title={`Open ${href}`}
+              className={cn(chip, "link-ext bg-transparent px-0")}
+            >
+              <ExternalLink size={10} />
+              {shown}
+            </button>
+          ) : (
+            <span className={chip} title={id.website}>
+              {shown}
+            </span>
+          );
+        })()}
       {id.ownerEmail && (
         <span className={chip} title={id.ownerEmail}>
           {id.ownerEmail}
