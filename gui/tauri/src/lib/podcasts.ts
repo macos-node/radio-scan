@@ -676,3 +676,30 @@ export function externalHttpUrl(raw: string | undefined | null): string | null {
     return null;
   }
 }
+
+/** Months of recency for the Podcasts list filter. `null` is "no cut-off". */
+export type Recency = null | 3 | 6 | 12;
+
+/** Is a feed recent enough to stay in the list?
+ *
+ *  `at` is unix **seconds** — the unit `latestEpisodeAt` and `Sub.latestAt`
+ *  both use. Getting that wrong is not a near miss: a milliseconds cut-off is
+ *  ~1000x larger than any seconds timestamp, so EVERY dated feed fails the
+ *  comparison and only undated ones survive. That shipped once; hence this
+ *  function, and the test below it.
+ *
+ *  A feed with no date at all is KEPT. Absence of a date is not evidence the
+ *  feed is dead — usually it just has not been fetched yet — and hiding those
+ *  would quietly drop real subscriptions.
+ */
+export function withinRecency(
+  at: number | null | undefined,
+  months: Recency,
+  nowMs: number = Date.now(),
+): boolean {
+  if (months === null) return true;
+  if (at == null) return true;
+  const cut = new Date(nowMs);
+  cut.setMonth(cut.getMonth() - months);
+  return at >= Math.floor(cut.getTime() / 1000);
+}

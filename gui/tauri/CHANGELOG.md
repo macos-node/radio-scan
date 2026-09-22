@@ -19,6 +19,13 @@ tag date; unreleased work sits under the top heading until tagged.
   never reaches zero. Stations carry no dates at all, so the control does not
   appear on that tab rather than sitting there permanently inert.
 
+  The comparison lives in `withinRecency` (`lib/podcasts.ts`), beside the date
+  it reads, because the unit matters: `latestEpisodeAt` and `Sub.latestAt` are
+  unix **seconds**, and a milliseconds cut-off is ~1000× any seconds timestamp,
+  so every dated feed fails and only undated ones survive. That shipped for
+  about ten minutes — the filter hid 24 of 27 subscriptions, keeping exactly the
+  three whose dates had not resolved. Pinned by a test that asserts the unit.
+
   Note there is no release *year* anywhere in ntune — an episode date is the
   better signpost regardless, since it says whether a feed is still publishing
   rather than when it started.

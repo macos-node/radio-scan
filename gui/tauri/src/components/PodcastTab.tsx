@@ -63,7 +63,7 @@ import { StateSlots } from "./StateSlots";
 import { Modal } from "./Modal";
 import { EnrichDialog } from "./EnrichDialog";
 import { cn } from "../lib/cn";
-import { externalHttpUrl } from "../lib/podcasts";
+import { externalHttpUrl, withinRecency, type Recency } from "../lib/podcasts";
 import { describeOutcome, publishSequentially } from "../lib/publishAll";
 
 type View = "list" | "cards";
@@ -85,12 +85,9 @@ const SORTS: { id: PodcastSort; label: string; title: string }[] = [
   { id: "added", label: "Added", title: "Newest subscription first" },
 ];
 
-/** How recently a feed must have published to stay in the list.
- *
- *  Months rather than a year field: ntune has no notion of a release year, and
- *  an episode date is a better signpost anyway — it says whether a feed is
- *  still alive, not when it started. `null` is "no cut-off". */
-type Recency = null | 3 | 6 | 12;
+/* `Recency` and `withinRecency` live in lib/podcasts.ts, beside the date they
+   read — the unit is unix SECONDS and getting that wrong hides every dated
+   feed, so the comparison is a tested function rather than inline arithmetic. */
 
 const RECENCIES: { id: Recency; label: string; title: string }[] = [
   { id: null, label: "All", title: "Every subscription" },
@@ -99,15 +96,6 @@ const RECENCIES: { id: Recency; label: string; title: string }[] = [
   { id: 3, label: "3m", title: "Published in the last 3 months" },
 ];
 
-/** Cut-off in epoch ms, or null for no filtering. Computed per render rather
- *  than memoised: it moves with the clock, and a stale boundary would quietly
- *  keep a feed visible past its window. */
-function cutoffMs(r: Recency): number | null {
-  if (r === null) return null;
-  const d = new Date();
-  d.setMonth(d.getMonth() - r);
-  return d.getTime();
-}
 
 function fmtDuration(secs: number | null): string {
   if (!secs) return "";
@@ -652,12 +640,10 @@ export function PodcastTab({
   // absence of a date is not evidence the feed is dead, and dropping it would
   // hide subscriptions whose feed simply has not been fetched yet.
   const shown = useMemo(() => {
-    const cut = cutoffMs(recency);
-    if (cut === null) return ordered;
-    return ordered.filter((r) => {
-      const at = orderKeys.current.get(r.url) ?? r.latestAt ?? null;
-      return at === null || at >= cut;
-    });
+    if (recency === null) return ordered;
+    return ordered.filter((r) =>
+      withinRecency(orderKeys.current.get(r.url) ?? r.latestAt ?? null, recency),
+    );
   }, [ordered, recency]);
   const hiddenByRecency = ordered.length - shown.length;
 

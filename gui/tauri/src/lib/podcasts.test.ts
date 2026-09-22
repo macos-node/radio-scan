@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   externalHttpUrl,
+  withinRecency,
   absorbPodcast,
   harvestOf,
   loadSubs,
@@ -576,5 +577,37 @@ describe("externalHttpUrl", () => {
     expect(externalHttpUrl("   ")).toBeNull();
     expect(externalHttpUrl(undefined)).toBeNull();
     expect(externalHttpUrl(null)).toBeNull();
+  });
+});
+
+describe("withinRecency", () => {
+  // 2026-09-22T12:00:00Z
+  const now = Date.UTC(2026, 8, 22, 12, 0, 0);
+  const secs = (y: number, m: number, d: number) =>
+    Math.floor(Date.UTC(y, m, d) / 1000);
+
+  it("keeps everything when there is no cut-off", () => {
+    expect(withinRecency(secs(2001, 0, 1), null, now)).toBe(true);
+  });
+
+  it("keeps a feed inside the window and drops one outside", () => {
+    expect(withinRecency(secs(2026, 7, 1), 3, now)).toBe(true); // Aug, 1mo ago
+    expect(withinRecency(secs(2026, 3, 1), 3, now)).toBe(false); // Apr, 5mo ago
+    expect(withinRecency(secs(2026, 3, 1), 12, now)).toBe(true);
+  });
+
+  it("keeps a feed with no date", () => {
+    // Not evidence the feed is dead — usually just not fetched yet.
+    expect(withinRecency(null, 3, now)).toBe(true);
+    expect(withinRecency(undefined, 3, now)).toBe(true);
+  });
+
+  it("treats `at` as SECONDS, not milliseconds", () => {
+    // The regression that shipped: a ms cut-off is ~1000x any seconds
+    // timestamp, so every dated feed failed and only undated ones survived.
+    const yesterday = Math.floor((now - 86_400_000) / 1000);
+    expect(withinRecency(yesterday, 3, now)).toBe(true);
+    // A value that would only pass if the function wrongly expected ms.
+    expect(withinRecency(now, 3, now)).toBe(true);
   });
 });
