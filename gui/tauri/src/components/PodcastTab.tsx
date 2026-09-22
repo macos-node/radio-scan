@@ -63,7 +63,12 @@ import { StateSlots } from "./StateSlots";
 import { Modal } from "./Modal";
 import { EnrichDialog } from "./EnrichDialog";
 import { cn } from "../lib/cn";
-import { externalHttpUrl, withinRecency, type Recency } from "../lib/podcasts";
+import {
+  externalHttpUrl,
+  recencyLabel,
+  withinRecency,
+  type Recency,
+} from "../lib/podcasts";
 import { describeOutcome, publishSequentially } from "../lib/publishAll";
 
 type View = "list" | "cards";
@@ -91,9 +96,9 @@ const SORTS: { id: PodcastSort; label: string; title: string }[] = [
 
 const RECENCIES: { id: Recency; label: string; title: string }[] = [
   { id: null, label: "All", title: "Every subscription" },
-  { id: 12, label: "1y", title: "Published in the last 12 months" },
-  { id: 6, label: "6m", title: "Published in the last 6 months" },
-  { id: 3, label: "3m", title: "Published in the last 3 months" },
+  { id: 30, label: "1m", title: "Published in the last month" },
+  { id: 14, label: "2w", title: "Published in the last 2 weeks" },
+  { id: 7, label: "1w", title: "Published in the last week" },
 ];
 
 
@@ -1093,7 +1098,8 @@ export function PodcastTab({
           {hiddenByRecency > 0 && (
             <p className="px-2 pb-1 text-[10px] text-muted">
               {hiddenByRecency} subscription{hiddenByRecency === 1 ? "" : "s"}{" "}
-              hidden — no episode in the last {recency} months.{" "}
+              hidden — no episode in the last{" "}
+              {recency === null ? "" : recencyLabel(recency)}.{" "}
               <button
                 type="button"
                 onClick={() => setRecency(null)}

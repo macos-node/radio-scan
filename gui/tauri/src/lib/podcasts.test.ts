@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   externalHttpUrl,
   withinRecency,
+  recencyLabel,
   absorbPodcast,
   harvestOf,
   loadSubs,
@@ -583,31 +584,43 @@ describe("externalHttpUrl", () => {
 describe("withinRecency", () => {
   // 2026-09-22T12:00:00Z
   const now = Date.UTC(2026, 8, 22, 12, 0, 0);
-  const secs = (y: number, m: number, d: number) =>
-    Math.floor(Date.UTC(y, m, d) / 1000);
+  const daysAgo = (n: number) => Math.floor((now - n * 86_400_000) / 1000);
 
   it("keeps everything when there is no cut-off", () => {
-    expect(withinRecency(secs(2001, 0, 1), null, now)).toBe(true);
+    expect(withinRecency(daysAgo(4000), null, now)).toBe(true);
   });
 
   it("keeps a feed inside the window and drops one outside", () => {
-    expect(withinRecency(secs(2026, 7, 1), 3, now)).toBe(true); // Aug, 1mo ago
-    expect(withinRecency(secs(2026, 3, 1), 3, now)).toBe(false); // Apr, 5mo ago
-    expect(withinRecency(secs(2026, 3, 1), 12, now)).toBe(true);
+    expect(withinRecency(daysAgo(3), 7, now)).toBe(true);
+    expect(withinRecency(daysAgo(10), 7, now)).toBe(false);
+    expect(withinRecency(daysAgo(10), 14, now)).toBe(true);
+    expect(withinRecency(daysAgo(20), 14, now)).toBe(false);
+    expect(withinRecency(daysAgo(20), 30, now)).toBe(true);
+    expect(withinRecency(daysAgo(40), 30, now)).toBe(false);
+  });
+
+  it("is inclusive at the boundary", () => {
+    expect(withinRecency(daysAgo(7), 7, now)).toBe(true);
   });
 
   it("keeps a feed with no date", () => {
     // Not evidence the feed is dead — usually just not fetched yet.
-    expect(withinRecency(null, 3, now)).toBe(true);
-    expect(withinRecency(undefined, 3, now)).toBe(true);
+    expect(withinRecency(null, 7, now)).toBe(true);
+    expect(withinRecency(undefined, 7, now)).toBe(true);
   });
 
   it("treats `at` as SECONDS, not milliseconds", () => {
     // The regression that shipped: a ms cut-off is ~1000x any seconds
     // timestamp, so every dated feed failed and only undated ones survived.
-    const yesterday = Math.floor((now - 86_400_000) / 1000);
-    expect(withinRecency(yesterday, 3, now)).toBe(true);
-    // A value that would only pass if the function wrongly expected ms.
-    expect(withinRecency(now, 3, now)).toBe(true);
+    expect(withinRecency(daysAgo(1), 7, now)).toBe(true);
+    expect(withinRecency(Math.floor(now / 1000), 7, now)).toBe(true);
+  });
+});
+
+describe("recencyLabel", () => {
+  it("names each window", () => {
+    expect(recencyLabel(7)).toBe("week");
+    expect(recencyLabel(14)).toBe("2 weeks");
+    expect(recencyLabel(30)).toBe("month");
   });
 });

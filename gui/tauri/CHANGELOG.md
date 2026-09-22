@@ -6,8 +6,11 @@ tag date; unreleased work sits under the top heading until tagged.
 ## Unreleased
 
 ### Added
-- **Recent filter on the Podcasts list.** `All / 1y / 6m / 3m`, beside the sort
-  control, answering "which of my subscriptions are still alive". Filters on the
+- **Recent filter on the Podcasts list.** `All / 1m / 2w / 1w`, beside the sort
+  control, answering "which of my subscriptions are still alive". Windows are
+  in **days**, not months: the useful scale here turned out to be a week to a
+  month, and at that range calendar-month arithmetic buys nothing but edge
+  cases around month length. Filters on the
   **same date key the sort uses** — `orderKeys`, with the identical fallback
   chain — so the filter and the ordering can never disagree about how recent a
   feed is. A row with no date at all is **kept**: absence of a date is not

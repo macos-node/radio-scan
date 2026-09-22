@@ -677,8 +677,19 @@ export function externalHttpUrl(raw: string | undefined | null): string | null {
   }
 }
 
-/** Months of recency for the Podcasts list filter. `null` is "no cut-off". */
-export type Recency = null | 3 | 6 | 12;
+/** Recency window for the Podcasts list filter, in **days**. `null` is "no
+ *  cut-off".
+ *
+ *  Days rather than months: the useful windows here turned out to be short
+ *  (a week to a month), and at that scale calendar-month arithmetic buys
+ *  nothing but edge cases around month length. */
+export type Recency = null | 7 | 14 | 30;
+
+/** Human name for a window, so the buttons and the "N hidden" line cannot
+ *  drift apart. */
+export function recencyLabel(r: Exclude<Recency, null>): string {
+  return r === 7 ? "week" : r === 14 ? "2 weeks" : "month";
+}
 
 /** Is a feed recent enough to stay in the list?
  *
@@ -694,12 +705,10 @@ export type Recency = null | 3 | 6 | 12;
  */
 export function withinRecency(
   at: number | null | undefined,
-  months: Recency,
+  days: Recency,
   nowMs: number = Date.now(),
 ): boolean {
-  if (months === null) return true;
+  if (days === null) return true;
   if (at == null) return true;
-  const cut = new Date(nowMs);
-  cut.setMonth(cut.getMonth() - months);
-  return at >= Math.floor(cut.getTime() / 1000);
+  return at >= Math.floor((nowMs - days * 86_400_000) / 1000);
 }
