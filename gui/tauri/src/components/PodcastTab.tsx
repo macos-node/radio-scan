@@ -11,6 +11,7 @@ import {
   Loader2,
   Play,
   Plus,
+  RefreshCw,
   Rss,
   Upload,
   X,
@@ -1006,9 +1007,12 @@ export function PodcastTab({
                 onClick={() => void refreshAll()}
                 disabled={refreshing}
                 title="Re-read every subscribed feed now — feeds are otherwise fetched once per launch"
-                className="rounded-sm px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surfaceHover hover:text-fg disabled:opacity-40"
+                // A chip in the accent tone, not muted text: it sat next to
+                // the green "in sync" and read as a footnote, so it went unseen.
+                className="flex items-center gap-1 rounded-sm bg-accent/15 px-1.5 py-0.5 font-mono text-[10px] text-accent transition-colors hover:bg-accent/25 disabled:opacity-40"
               >
-                refresh
+                <RefreshCw size={11} />
+                refresh feeds
               </button>
             )}
             {relaysAnswered && counts.notHere > 0 && !bulkMsg && (
