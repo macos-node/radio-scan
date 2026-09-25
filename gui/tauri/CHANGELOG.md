@@ -5,6 +5,19 @@ tag date; unreleased work sits under the top heading until tagged.
 
 ## Unreleased
 
+## 0.2.0-beta.4 — 2026-09-26
+
+### Changed
+- **Podcast "refresh" is findable.** The status-line link that re-reads every
+  subscribed feed was muted text beside the green "in sync" and went unnoticed.
+  It is now an accent chip with an icon, "refresh feeds". Behaviour unchanged:
+  every feed re-read, one at a time.
+
+## 0.2.0-beta.3 — 2026-09-23
+
+Everything below was committed before this tag; the heading was never moved
+when it was cut. beta.3 itself also re-shipped the corrected Linux icons.
+
 ### Added
 - **Recent filter on the Podcasts list.** `All / 2w / 1w / 1d`, beside the sort
   control, answering "what has actually published lately". Windows are in
