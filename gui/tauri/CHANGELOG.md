@@ -5,6 +5,25 @@ tag date; unreleased work sits under the top heading until tagged.
 
 ## Unreleased
 
+## 0.2.0 — 2026-10-03
+
+The first release off the beta line. 0.2.0's subject is **metadata persistence**
+(U4.5): what ntune works out about a station or a show is written down, export
+is exactly what is stored, and hand-entered details are kept apart from what a
+feed says. Its definition of done was met on Linux on 2026-08-19 and is now
+confirmed on macOS, check by check, against a real profile (25 shows, 11
+stations):
+
+- relaunch with the network off: details and episode lists paint from disk;
+- export equals the store, field for field; importing both files into an empty
+  profile brings everything back;
+- a hand-entered detail survives a refresh, whether or not the feed states the
+  same field;
+- importing over existing subscriptions wipes nothing;
+- unsubscribing removes that show's file from `feed-cache/`.
+
+Running those checks found three defects, fixed here. None lost data.
+
 ### Fixed
 - **An unchanged feed no longer re-stamps `fetchedAt` or rewrites `podcasts.json`.**
   `absorbPodcast` decided "has this feed's account of itself changed?" by

@@ -9,9 +9,17 @@ follow it, and (later phases) subscribe to podcasts and per-npub audio feeds.
 > Suite conventions & wire contract: [`../../SUITE.md`](../../SUITE.md),
 > [`../../schema/airplay-design-2026-07-28.md`](../../schema/airplay-design-2026-07-28.md).
 
-## Status — **U0 (scaffold)**
+## Status — **0.2.0**
 
-A working internet-radio player. Stations live in a **local store**
+An internet-radio and podcast player. Stations and podcast subscriptions are
+kept locally, with what each stream and feed says about itself stored beside
+them (metadata persistence, U4.5); either can also be followed over Nostr
+(`station.v1`, kind 31241; `show.v1`, kind 31242); there is a tray companion,
+and a read view of radio-scan's episodic logs. The
+[CHANGELOG](CHANGELOG.md) is the record of what has shipped — the phase table
+below is the original plan and has not been kept in step with it.
+
+How it began, and still the core: stations live in a **local store**
 (`stations.json` in the app-data dir), seeded from a handful of SomaFM stations
 on first run (`seed_stations`); adds persist there with no Nostr key and every
 seed is a removable row. It lists them and plays the selected stream in the
