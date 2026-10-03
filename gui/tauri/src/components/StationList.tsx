@@ -427,7 +427,12 @@ export function StationList({
               <li
                 key={s.slug}
                 className={cn(
-                  "group relative flex items-stretch transition-opacity",
+                  // The highlight belongs to the whole row, not the tune button:
+                  // on the button alone it stopped flush against the state
+                  // icons, neither covering them nor clear of them.
+                  "group relative flex items-stretch transition",
+                  "hover:bg-surfaceHover",
+                  current && "bg-surface",
                   // A ghost reads as a tombstone rather than a row — dimmed, but it
                   // brightens as you reach for it, because the whole reason it is
                   // still here is that you might want it back.
@@ -440,8 +445,7 @@ export function StationList({
                   className={cn(
                     "flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left",
                     "border-l-2 border-transparent transition-colors",
-                    "hover:bg-surfaceHover",
-                    current && "border-accent bg-surface",
+                    current && "border-accent",
                   )}
                 >
                   {/* Source dot — green when this station is the one playing. The

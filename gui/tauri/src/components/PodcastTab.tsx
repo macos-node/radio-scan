@@ -1130,11 +1130,14 @@ export function PodcastTab({
                       flash === s.url && "bg-nostr/20",
                     )}
                   >
-                    <div className="group flex items-stretch">
+                    {/* Hover lights the whole row, as on Stations — not just
+                        the toggle button, which stopped flush against the
+                        state icons. */}
+                    <div className="group flex items-stretch transition-colors hover:bg-surfaceHover">
                       <button
                         type="button"
                         onClick={() => toggle(s.url)}
-                        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left hover:bg-surfaceHover"
+                        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
                       >
                         {open ? (
                           <ChevronDown size={14} className="shrink-0 text-muted" />
