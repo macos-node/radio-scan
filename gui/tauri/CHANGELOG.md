@@ -5,6 +5,17 @@ tag date; unreleased work sits under the top heading until tagged.
 
 ## Unreleased
 
+## 0.2.0-beta.6 — 2026-10-03
+
+### Changed
+- **Our own relays only.** ntune reads and publishes on `relay.fizx.uk` and its
+  mirror `relay.nfunc.xyz`; `nos.lol` and `relay.primal.net` are dropped,
+  matching ndisc and nplay. Both are whitelist-only, so a key not allowed on
+  them publishes nowhere. Events already on the two public relays are left
+  where they are.
+- **The row highlight covers the whole row** on Stations and Podcasts. It used
+  to stop flush against the device icon.
+
 ## 0.2.0-beta.5 — 2026-10-03
 
 ### Changed
