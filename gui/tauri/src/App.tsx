@@ -14,7 +14,6 @@ import {
   Heart,
   KeyRound,
   ListMusic,
-  Palette,
   Plus,
   Radio,
   Upload,
@@ -846,7 +845,20 @@ export default function App() {
       {/* Header */}
       <header className="flex items-center gap-3 border-b border-surface bg-panel px-4 py-2">
         <Radio size={18} className="text-accent" />
-        <h1 className="text-sm font-semibold tracking-tight">ntune</h1>
+        {/* The wordmark cycles the theme, as in the rest of the suite
+            (SUITE.md § Top-bar grammar). */}
+        <h1 className="text-sm font-semibold tracking-tight">
+          <button
+            type="button"
+            onClick={cycleTheme}
+            title={`Theme: ${theme} (click to cycle)`}
+            aria-label="Switch colour theme"
+            className="cursor-pointer select-none transition-opacity hover:opacity-70"
+          >
+            <span className="text-accent">n</span>
+            <span className="text-mauve">tune</span>
+          </button>
+        </h1>
         {version && (
           <span
             title={`radio-scan L4 UI · v${version}`}
@@ -910,11 +922,6 @@ export default function App() {
             icon={<Archive size={15} />}
             title="Backup & Restore"
             onClick={() => setShowBackup(true)}
-          />
-          <ToolbarIconButton
-            icon={<Palette size={15} />}
-            title={`Theme: ${theme} (click to cycle)`}
-            onClick={cycleTheme}
           />
         </div>
       </header>
