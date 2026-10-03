@@ -289,10 +289,7 @@ export function absorbPodcast(url: string, pod: AbsorbablePodcast): boolean {
   const nextAt = at ?? sub.latestAt;
   const nextGuid = pod.guid ?? sub.guid;
   const fresh = harvestOf(pod, sub.harvest?.fetchedAt ?? nowSecs());
-  const unchanged =
-    sub.harvest != null &&
-    JSON.stringify({ ...sub.harvest, fetchedAt: 0 }) ===
-      JSON.stringify({ ...fresh, fetchedAt: 0 });
+  const unchanged = sub.harvest != null && sameHarvest(sub.harvest, fresh);
   const nextHarvest = unchanged ? sub.harvest : { ...fresh, fetchedAt: nowSecs() };
 
   if (nextAt === sub.latestAt && nextGuid === sub.guid && nextHarvest === sub.harvest)
@@ -307,6 +304,34 @@ export function absorbPodcast(url: string, pod: AbsorbablePodcast): boolean {
   next[i] = updated;
   setPodcasts(next); // saves + notifies, so a mounted tab re-reads
   return true;
+}
+
+/** Whether two harvest slices say the same thing, apart from when they were
+ *  fetched — whatever order their fields happen to be in.
+ *
+ *  The order is the point. A slice read back from the durable store carries the
+ *  Rust struct's field order (`categories` before `language`, `fetchedAt` last);
+ *  one built by `harvestOf` carries this file's. Comparing the two as JSON text
+ *  therefore never matched once a slice had been through the store, so every
+ *  launch — offline ones included — re-stamped `fetchedAt` on every subscription
+ *  and rewrote `podcasts.json`, the churn `absorbPodcast` promises not to cause.
+ *  Measured on macOS, 2026-10-03: 25 of 25 subscriptions, nothing fetched. */
+export function sameHarvest(a: Harvest, b: Harvest): boolean {
+  return canonical({ ...a, fetchedAt: 0 }) === canonical({ ...b, fetchedAt: 0 });
+}
+
+/** JSON with every object's keys sorted, so equal content gives equal text.
+ *  Arrays keep their order: a feed's category order is something it states. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, v) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(
+          Object.entries(v as Record<string, unknown>).sort(([x], [y]) =>
+            x < y ? -1 : x > y ? 1 : 0,
+          ),
+        )
+      : v,
+  );
 }
 
 /** Write (or clear) the user's own values for a subscription.
@@ -341,9 +366,12 @@ export function setEnrich(url: string, values: Partial<Enrich>): boolean {
 
   const stated = Object.keys(clean).length > 1;
   const next: Enrich | undefined = stated ? clean : undefined;
+  // Field order must not count: a stored slice comes back in the Rust struct's
+  // order (see sameHarvest), and comparing as plain JSON text made a save
+  // without typing look like an edit once the slice had been through the store.
   const unchanged =
-    JSON.stringify({ ...(sub.enrich ?? {}), editedAt: 0 }) ===
-    JSON.stringify({ ...(next ?? {}), editedAt: 0 });
+    canonical({ ...(sub.enrich ?? {}), editedAt: 0 }) ===
+    canonical({ ...(next ?? {}), editedAt: 0 });
   if (unchanged) return false;
 
   const updated: Sub = { ...sub };

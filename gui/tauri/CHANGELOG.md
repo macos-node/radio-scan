@@ -5,6 +5,23 @@ tag date; unreleased work sits under the top heading until tagged.
 
 ## Unreleased
 
+### Fixed
+- **An unchanged feed no longer re-stamps `fetchedAt` or rewrites `podcasts.json`.**
+  `absorbPodcast` decided "has this feed's account of itself changed?" by
+  comparing the stored harvest slice with a fresh one as JSON text. A slice read
+  back from the durable store carries the Rust struct's field order; a fresh one
+  carries `harvestOf`'s. The texts never matched, so every load of the Podcasts
+  tab — offline included — set `fetchedAt` to now on every subscription and
+  rewrote the store, which is exactly what the function promises not to do.
+  Measured on macOS: 25 of 25 subscriptions re-stamped with the network off and
+  nothing fetched. The comparison now ignores field order (`sameHarvest`). After
+  the fix, a full refresh of the same 25 re-stamped only the two whose image URL
+  had really changed. No data was ever lost to this; the times were wrong and
+  the file was written needlessly.
+- **Saving the details editor without typing is not an edit.** `setEnrich` had
+  the same text comparison, so once a hand-entered slice had been through the
+  store, saving it unchanged bumped `editedAt` and rewrote the store.
+
 ## 0.2.0-beta.6 — 2026-10-03
 
 ### Changed

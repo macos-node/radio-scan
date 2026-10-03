@@ -464,6 +464,49 @@ describe("absorbPodcast — persistence that does not need a mounted tab", () =>
     expect(loadSubs()[0].harvest?.fetchedAt).toBe(before); // no churn, no rewrite
   });
 
+  it("reports no change for a slice that came back from the store in another field order", () => {
+    // What the durable store hands back: the Rust struct's order, not this
+    // file's — categories before language, funding nested, fetchedAt last.
+    const full = feed({
+      website: "https://example.org/",
+      funding: { url: "https://example.org/support", label: "Support" },
+      valueAddress: { address: "show@example.org", name: "Show", split: 90 },
+    });
+    saveSubs([
+      {
+        url: "u1",
+        title: "One",
+        guid: "g-1",
+        latestAt: 1_787_000_000,
+        harvest: {
+          author: "Author",
+          website: "https://example.org/",
+          categories: ["News"],
+          language: "en",
+          funding: { label: "Support", url: "https://example.org/support" },
+          valueAddress: { split: 90, name: "Show", address: "show@example.org" },
+          fetchedAt: 1_786_000_000,
+        } as Harvest,
+      },
+    ]);
+    expect(absorbPodcast("u1", full)).toBe(false);
+    expect(loadSubs()[0].harvest?.fetchedAt).toBe(1_786_000_000); // not re-stamped
+  });
+
+  it("still sees a change in a reordered slice", () => {
+    saveSubs([
+      {
+        url: "u1",
+        title: "One",
+        guid: "g-1",
+        latestAt: 1_787_000_000,
+        harvest: { categories: ["News"], language: "en", author: "Author", fetchedAt: 1 } as Harvest,
+      },
+    ]);
+    expect(absorbPodcast("u1", feed({ categories: ["News", "Music"] }))).toBe(true);
+    expect(loadSubs()[0].harvest?.categories).toEqual(["News", "Music"]);
+  });
+
   it("updates when the feed's account of itself changes", () => {
     absorbPodcast("u1", feed());
     expect(absorbPodcast("u1", feed({ author: "New Author" }))).toBe(true);
@@ -473,6 +516,15 @@ describe("absorbPodcast — persistence that does not need a mounted tab", () =>
   it("ignores a feed that is not subscribed", () => {
     expect(absorbPodcast("not-subscribed", feed())).toBe(false);
     expect(loadSubs()).toHaveLength(1);
+  });
+
+  it("saving the same hand-entered details is not an edit, whatever order the store kept them in", () => {
+    // As read back from the store: the timestamp last, not first.
+    saveSubs([
+      { url: "u1", title: "One", enrich: { website: "https://mine", author: "Me", editedAt: 3 } as Enrich },
+    ]);
+    expect(setEnrich("u1", { author: "Me", website: "https://mine" })).toBe(false);
+    expect(loadSubs()[0].enrich?.editedAt).toBe(3);
   });
 
   it("never touches the user's enrich slice", () => {
