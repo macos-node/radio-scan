@@ -10,6 +10,7 @@
 import type { Event as NostrEvent } from "nostr-tools";
 import { countSync, type SyncCounts } from "./sync";
 import { addressOf, resolveAddressable, DELETE_KIND } from "./addressable";
+import { looksLikePodcasts } from "./importShape";
 
 export const STATION_KIND = 31241; // station.v1 — a followed radio stream
 export { DELETE_KIND };
@@ -87,6 +88,8 @@ export interface Station {
  *  the Stations-tab import and the app-level Backup/Restore router. */
 export function parseStationsJson(data: unknown): Station[] {
   if (!Array.isArray(data)) throw new Error("expected a JSON array of stations");
+  if (looksLikePodcasts(data))
+    throw new Error("this is a podcasts file — import it from the Podcasts tab");
   return data
     .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
     .map((r) => {

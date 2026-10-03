@@ -13,6 +13,7 @@
 // migration source and a same-session fallback until initSubs() has run.
 
 import { invoke } from "@tauri-apps/api/core";
+import { looksLikeStations } from "./importShape";
 
 /** Channel-level identity exactly as the feed stated it (U4.5).
  *
@@ -250,6 +251,8 @@ export function parseOpml(xml: string): Sub[] {
 /** Parse the app's JSON export shape: [{url, title?, npub?, latestAt?, guid?}]. */
 export function parseSubsJson(data: unknown): Sub[] {
   if (!Array.isArray(data)) throw new Error("expected a JSON array of feeds");
+  if (looksLikeStations(data))
+    throw new Error("this is a stations file — import it from the Stations tab");
   return data
     .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
     .map((r) => {

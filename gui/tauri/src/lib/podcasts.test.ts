@@ -677,3 +677,18 @@ describe("recencyLabel", () => {
     expect(recencyLabel(14)).toBe("2 weeks");
   });
 });
+
+describe("parseSubsJson — refuses a stations file", () => {
+  it("throws on the stations export shape instead of making podcasts of streams", () => {
+    const stations = [
+      { slug: "groovesalad", name: "Groove Salad", url: "https://ice1.somafm.com/groovesalad-128-mp3", fmt: "audio/mpeg", bitrate: 128, tags: ["ambient"] },
+      { slug: "lush", name: "Lush", url: "https://ice1.somafm.com/lush-128-mp3" },
+    ];
+    expect(() => parseSubsJson(stations)).toThrow(/stations file/);
+  });
+
+  it("still takes its own export, a minimal list, and a bare url", () => {
+    expect(parseSubsJson([{ url: "https://a/feed", title: "A" }])).toHaveLength(1);
+    expect(parseSubsJson([{ url: "https://a/feed" }])[0].title).toBe("https://a/feed");
+  });
+});

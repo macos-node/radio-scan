@@ -18,6 +18,15 @@ tag date; unreleased work sits under the top heading until tagged.
   the fix, a full refresh of the same 25 re-stamped only the two whose image URL
   had really changed. No data was ever lost to this; the times were wrong and
   the file was written needlessly.
+- **Importing the wrong kind of file is refused, not absorbed.** A stations
+  export imported from the Podcasts tab was accepted without a word: eleven
+  stream addresses became eleven "podcasts", each titled by its own URL. Both
+  exports are a bare array of objects with a `url`, and each tab's importer took
+  whatever it was handed. `parseSubsJson` now refuses a list that looks like
+  stations ("this is a stations file — import it from the Stations tab") and
+  `parseStationsJson` one that looks like podcasts, by the same shape test the
+  Backup dialog already routed on (`lib/importShape.ts`, now shared). A list of
+  bare urls could be either and is still taken.
 - **Saving the details editor without typing is not an edit.** `setEnrich` had
   the same text comparison, so once a hand-entered slice had been through the
   store, saving it unchanged bumped `editedAt` and rewrote the store.

@@ -287,3 +287,19 @@ describe("station ghosts", () => {
     expect(stationSyncCounts([ghost]).inSync).toBe(false);
   });
 });
+
+describe("parseStationsJson — refuses a podcasts file", () => {
+  it("throws on the podcasts export shape instead of making stations of feeds", () => {
+    const podcasts = [
+      { url: "https://a/feed", title: "A", harvest: { fetchedAt: 1, author: "Someone" }, latestAt: 2 },
+      { url: "https://b/feed", title: "B" },
+    ];
+    expect(() => parseStationsJson(podcasts)).toThrow(/podcasts file/);
+  });
+
+  it("still takes a minimal [{name,url}] and a bare url", () => {
+    expect(parseStationsJson([{ name: "Lush", url: "https://ice1.somafm.com/lush-128-mp3" }])).toHaveLength(1);
+    // A bare url could be either kind, so it is not refused; it is named by its url, as before.
+    expect(parseStationsJson([{ url: "https://ice1.somafm.com/lush-128-mp3" }])).toHaveLength(1);
+  });
+});

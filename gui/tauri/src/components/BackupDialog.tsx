@@ -11,6 +11,7 @@ import {
   setPodcasts,
 } from "../lib/podcasts";
 import { parseStationsJson, toExportStation, type Station } from "../lib/station";
+import { looksLikeStations } from "../lib/importShape";
 
 /** App-level Backup & Restore. Exports both stores in one file (or podcasts as
  *  portable OPML), and restores by routing entries to the right store BY SHAPE —
@@ -110,14 +111,7 @@ export function BackupDialog({
 
       // Bare array — route by shape: stations carry name/slug, podcasts carry title.
       if (Array.isArray(data)) {
-        const looksStations = data.some(
-          (r) =>
-            r &&
-            typeof r === "object" &&
-            ("name" in r || "slug" in r) &&
-            !("title" in r),
-        );
-        if (looksStations) {
+        if (looksLikeStations(data)) {
           const sts = parseStationsJson(data);
           await onRestoreStations(sts);
           flash(`Restored ${sts.length} stations`);
