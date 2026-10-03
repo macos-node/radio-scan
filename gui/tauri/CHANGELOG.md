@@ -27,6 +27,15 @@ tag date; unreleased work sits under the top heading until tagged.
   `parseStationsJson` one that looks like podcasts, by the same shape test the
   Backup dialog already routed on (`lib/importShape.ts`, now shared). A list of
   bare urls could be either and is still taken.
+- **An import never moves anything backwards.** `mergeSubs` was "incoming wins,
+  stored only fills its gaps", so importing an export from twenty minutes earlier
+  put back an older cover image and older newest-episode dates over ones a refresh
+  had just fetched — and would have replaced a hand edit made since the export.
+  Each part is now decided by its own stamp, whichever side it came from: the
+  harvest slice with the later `fetchedAt` (its `guid` travels with it), the
+  enrich slice with the later `editedAt`, and the later `latestAt`. Title and
+  order still come from the file; a side with nothing to say still loses, so an
+  OPML or pre-U4.5 export wipes nothing; a clean profile takes everything.
 - **Saving the details editor without typing is not an edit.** `setEnrich` had
   the same text comparison, so once a hand-entered slice had been through the
   store, saving it unchanged bumped `editedAt` and rewrote the store.

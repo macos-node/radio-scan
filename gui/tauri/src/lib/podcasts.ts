@@ -591,16 +591,27 @@ export function buildOpml(subs: Sub[], title = "ntune podcasts"): string {
   ].join("\n");
 }
 
-/** Merge incoming subs into existing, deduped by url (incoming wins, first).
+/** Merge incoming subs into existing, deduped by url. Incoming entries come
+ *  first and their **title and order** win — those are the user's.
  *
- *  One exception: the **harvest** fields (`latestAt`, `guid`) are not user data, so
- *  an incoming entry that lacks them inherits what we already derived rather than
- *  wiping it.
- *  Without that, restoring any export written before the field existed — or one
- *  from another app / an OPML file, which has nowhere to carry it — reset every
- *  feed's newest-episode date and the "Recent" order went flat until each feed
- *  refetched. Same rule as the rest of the harvest slice: a fetch overwrites it
- *  freely (the feed always wins), but an import only gap-fills. */
+ *  Everything ntune keeps *about* a show is decided by which copy is newer, never
+ *  by which side it came from, so that restoring a backup cannot move anything
+ *  backwards:
+ *
+ *  - **harvest** — the slice with the later `fetchedAt`;
+ *  - **enrich** (hand-entered) — the slice with the later `editedAt`;
+ *  - **latestAt** — the later of the two dates;
+ *  - **guid** — travels with the harvest that won.
+ *
+ *  A side that has nothing to say simply loses to the one that does, which keeps
+ *  the older rule intact: an export written before these fields existed — or an
+ *  OPML file, which has nowhere to carry them — never wipes what was derived.
+ *  Equal stamps go to the incoming copy.
+ *
+ *  It used to be "incoming wins, stored only fills its gaps". Importing an export
+ *  from twenty minutes earlier then put back an older cover image and older
+ *  newest-episode dates over ones a refresh had just fetched (macOS, 2026-10-03),
+ *  and would have done the same to a hand edit made since the export. */
 export function mergeSubs(existing: Sub[], incoming: Sub[]): Sub[] {
   const seen = new Set<string>();
   const fresh = incoming.filter((s) =>
@@ -612,10 +623,21 @@ export function mergeSubs(existing: Sub[], incoming: Sub[]): Sub[] {
     ...fresh.map((s) => {
       const prev = prevByUrl.get(s.url);
       if (!prev) return s;
-      const latestAt = s.latestAt ?? prev.latestAt;
-      const guid = s.guid ?? prev.guid;
-      const harvest = s.harvest ?? prev.harvest;
-      const enrich = s.enrich ?? prev.enrich;
+
+      const storedHarvestIsNewer =
+        prev.harvest != null &&
+        (s.harvest == null || prev.harvest.fetchedAt > s.harvest.fetchedAt);
+      const harvest = storedHarvestIsNewer ? prev.harvest : s.harvest;
+      const guid = storedHarvestIsNewer ? (prev.guid ?? s.guid) : (s.guid ?? prev.guid);
+      const enrich =
+        prev.enrich != null && (s.enrich == null || prev.enrich.editedAt > s.enrich.editedAt)
+          ? prev.enrich
+          : s.enrich;
+      const latestAt =
+        s.latestAt != null && prev.latestAt != null
+          ? Math.max(s.latestAt, prev.latestAt)
+          : (s.latestAt ?? prev.latestAt);
+
       if (
         latestAt === s.latestAt &&
         guid === s.guid &&
@@ -626,6 +648,7 @@ export function mergeSubs(existing: Sub[], incoming: Sub[]): Sub[] {
       const merged: Sub = { ...s };
       if (latestAt != null) merged.latestAt = latestAt;
       if (guid) merged.guid = guid;
+      else delete merged.guid;
       if (harvest) merged.harvest = harvest;
       if (enrich) merged.enrich = enrich;
       return merged;

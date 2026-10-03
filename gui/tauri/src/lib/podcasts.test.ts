@@ -152,6 +152,64 @@ describe("mergeSubs — the harvest slice", () => {
   });
 });
 
+describe("mergeSubs — an import never moves anything backwards", () => {
+  // The stored copy has been refreshed since the export being imported was written.
+  const stored: Sub[] = [
+    {
+      url: "a",
+      title: "Alpha",
+      guid: "guid-new",
+      latestAt: 900,
+      harvest: { image: "https://x/art-1908.jpg", author: "A", fetchedAt: 200 },
+      enrich: { author: "Mine, corrected", editedAt: 60 },
+    },
+  ];
+  const olderExport: Sub[] = [
+    {
+      url: "a",
+      title: "Alpha",
+      guid: "guid-old",
+      latestAt: 500,
+      harvest: { image: "https://x/art-1906.jpg", author: "A", fetchedAt: 100 },
+      enrich: { author: "Mine", editedAt: 50 },
+    },
+  ];
+
+  it("keeps the newer harvest, with its guid", () => {
+    const [m] = mergeSubs(stored, olderExport);
+    expect(m.harvest?.image).toBe("https://x/art-1908.jpg");
+    expect(m.harvest?.fetchedAt).toBe(200);
+    expect(m.guid).toBe("guid-new");
+  });
+
+  it("keeps the later newest-episode date", () => {
+    expect(mergeSubs(stored, olderExport)[0].latestAt).toBe(900);
+  });
+
+  it("keeps the later hand edit", () => {
+    expect(mergeSubs(stored, olderExport)[0].enrich).toEqual({ author: "Mine, corrected", editedAt: 60 });
+  });
+
+  it("takes all three from a newer export", () => {
+    const [m] = mergeSubs(olderExport, stored);
+    expect([m.harvest?.fetchedAt, m.latestAt, m.enrich?.editedAt, m.guid]).toEqual([200, 900, 60, "guid-new"]);
+  });
+
+  it("decides each part on its own stamp", () => {
+    // Newer harvest in the file, newer hand edit in the store.
+    const [m] = mergeSubs(
+      [{ url: "a", title: "Alpha", harvest: { author: "Old", fetchedAt: 1 }, enrich: { website: "https://mine", editedAt: 9 } }],
+      [{ url: "a", title: "Alpha", harvest: { author: "New", fetchedAt: 2 }, enrich: { website: "https://stale", editedAt: 3 } }],
+    );
+    expect(m.harvest?.author).toBe("New");
+    expect(m.enrich?.website).toBe("https://mine");
+  });
+
+  it("still brings everything in on a clean profile", () => {
+    expect(mergeSubs([], olderExport)).toEqual(olderExport);
+  });
+});
+
 describe("harvestOf — the feed's own account of itself", () => {
   const feed = {
     author: "Adam Curry",
