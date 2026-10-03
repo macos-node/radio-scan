@@ -8,7 +8,7 @@
 // unpublished it, resurrecting something someone else chose to remove.
 //
 // Paced on purpose. macOS measured hosts rate-limiting an unpaced 31-feed *read*
-// sweep, and this writes to three relays per item; a burst is the one shape most
+// sweep, and this writes to every relay per item; a burst is the one shape most
 // likely to be refused. Sequential with a gap is slower and finishes.
 
 export interface PublishOutcome<T> {
