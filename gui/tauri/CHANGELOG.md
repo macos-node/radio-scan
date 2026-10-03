@@ -5,6 +5,14 @@ tag date; unreleased work sits under the top heading until tagged.
 
 ## Unreleased
 
+## 0.2.0-beta.5 — 2026-10-03
+
+### Changed
+- **The wordmark cycles the theme**, as in every other suite app. The switch
+  used to be a palette button at the far end of the header, easy to miss; that
+  button is gone. Themes themselves are unchanged (mono, fizx, upleb; mono on
+  first launch).
+
 ## 0.2.0-beta.4 — 2026-09-26
 
 ### Changed
