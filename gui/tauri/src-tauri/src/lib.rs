@@ -991,8 +991,9 @@ fn deletion_tags(address: &str, event_id: Option<&str>) -> Result<Vec<Tag>, Stri
 /// concrete event `e` id. Both are legal NIP-09 targets and they cover different
 /// relay implementations: several honour deletion only **by event id**, so an
 /// `a`-only deletion is accepted and then quietly ignored. Measured 2026-08-18 on
-/// the suite's own hub — `relay.fizx.uk` still served every station it had been
-/// told to delete (7 of 7), while nos.lol dropped them. ntune filters deletions
+/// the suite's own nostr-rs-relay 0.10.0 — the software `relay.nfunc.xyz` runs —
+/// which still served every station it had been told to delete (7 of 7), while
+/// nos.lol dropped them. ntune filters deletions
 /// client-side (`resolveStations`) so it was unaffected either way; any other
 /// client reading that relay was not.
 ///
@@ -2726,7 +2727,7 @@ mod tests {
     #[test]
     fn deletion_names_the_address_and_the_event() {
         // Both targets: `a` for addressable-aware relays, `e` for the ones that
-        // only delete by id (relay.fizx.uk kept serving a-only tombstones).
+        // only delete by id (relay.nfunc.xyz's nostr-rs-relay keeps serving a-only tombstones).
         let tags = deletion_tags(ADDR, Some(EV)).unwrap();
         let flat: Vec<Vec<String>> = tags.iter().map(|t| t.clone().to_vec()).collect();
         assert_eq!(flat[0], vec!["a".to_string(), ADDR.to_string()]);

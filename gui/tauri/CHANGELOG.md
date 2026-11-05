@@ -5,6 +5,13 @@ tag date; unreleased work sits under the top heading until tagged.
 
 ## Unreleased
 
+### Changed
+
+- **relay.fizx.uk removed from the relay set.** The fizx.uk server was
+  decommissioned (the host no longer resolves); stations are now read from and
+  published to `wss://relay.nfunc.xyz` alone. The relay set is fixed in code,
+  so there is nothing persisted to migrate.
+
 ## 0.2.0 — 2026-10-03
 
 The first release off the beta line. 0.2.0's subject is **metadata persistence**

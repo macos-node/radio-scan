@@ -408,9 +408,10 @@ export function unfollowShow(
  *  Pass `eventId` (the id of the kind:31241 event being deleted) whenever the row
  *  came from a relay: NIP-09 lets a deletion name both the addressable `a`
  *  coordinate and the concrete `e` id, and several relay implementations only
- *  honour deletion **by event id**. Measured 2026-08-18 on the suite's own hub —
- *  `relay.fizx.uk` accepted a-only deletions and kept serving every tombstoned
- *  station; nos.lol dropped them. Clients that filter deletions themselves (ntune
+ *  honour deletion **by event id**. Measured 2026-08-18 on the suite's own
+ *  nostr-rs-relay 0.10.0 (the software `relay.nfunc.xyz` runs): it accepted
+ *  a-only deletions and kept serving every tombstoned station; nos.lol dropped
+ *  them. Clients that filter deletions themselves (ntune
  *  does) were fine either way; anything trusting the relay was not. */
 export function unfollowStation(
   url: string,

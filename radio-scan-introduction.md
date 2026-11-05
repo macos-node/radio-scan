@@ -66,7 +66,7 @@ Proposed **producer** of two new kinds — `airplay.v1` (**31240**) and
 `station.v1` (**31241**), locked for the proposal and drafted with fixtures in
 `schema/` (see the schema design). Signs with the **same owner `nsec`** as `ndisc` / `ntree` /
 `nsmpl` (one person = one `npub`), held in the OS keyring. Keeps
-`relay.fizx.uk` in its relay set as the discovery hub. Publishing is
+`relay.nfunc.xyz` in its relay set as the discovery hub. Publishing is
 **opt-in and aggregated** by default — see the privacy note in the design doc,
 since airplay reveals listening habits in a way the catalogue does not.
 
