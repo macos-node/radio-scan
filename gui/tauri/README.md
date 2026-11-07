@@ -9,7 +9,7 @@ follow it, and (later phases) subscribe to podcasts and per-npub audio feeds.
 > Suite conventions & wire contract: [`../../SUITE.md`](../../SUITE.md),
 > [`../../schema/airplay-design-2026-07-28.md`](../../schema/airplay-design-2026-07-28.md).
 
-## Status — **0.2.0**
+## Status — **0.2.1**
 
 An internet-radio and podcast player. Stations and podcast subscriptions are
 kept locally, with what each stream and feed says about itself stored beside

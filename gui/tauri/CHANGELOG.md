@@ -3,7 +3,7 @@
 radio-scan's L4 desktop tuner/player. Notable changes per release. Dates are the
 tag date; unreleased work sits under the top heading until tagged.
 
-## Unreleased
+## 0.2.1 — 2026-11-08
 
 ### Changed
 
