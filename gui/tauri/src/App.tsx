@@ -712,16 +712,26 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [togglePlay, skip]);
 
-  /** Re-read the episode logs. Cheap (two small files) and always on demand, so
-   *  the view can't show a fetch that finished after the app started. */
+  /** Re-read the episode logs, so the view can't show a fetch that finished
+   *  after the app started. */
   const loadEpisodic = useCallback(() => {
     episodicShows()
       .then(setEpisodic)
       .catch(() => setEpisodic([]));
   }, []);
 
+  // Not just at launch: a timer run or a tray "Fetch now" lands while the app is
+  // open, and nothing tells the window — the dot stayed dark until restart
+  // (2026-11-08). Re-read on focus and every few minutes; the logs are a few MB
+  // each, so not more often than that.
   useEffect(() => {
     loadEpisodic();
+    const id = window.setInterval(loadEpisodic, 5 * 60 * 1000);
+    window.addEventListener("focus", loadEpisodic);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", loadEpisodic);
+    };
   }, [loadEpisodic]);
 
   /** Mark one show's current episode as looked at. Per show, not per open: the

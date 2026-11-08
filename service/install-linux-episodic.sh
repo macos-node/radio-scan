@@ -67,6 +67,10 @@ UNITEOF
 Description=$desc (weekly)
 
 [Timer]
+# Two slots, not one. At boot the clock can read hours fast until NTP syncs, so
+# Persistent=true sees the slot as missed and fires the catch-up at once — before
+# the week's post exists — and the real slot is then skipped (2026-11-08: ran at
+# 07:00, OTW posted 07:16). The later slot is the backstop; a run is idempotent.
 OnCalendar=$cal
 Persistent=true
 
@@ -74,8 +78,8 @@ Persistent=true
 WantedBy=timers.target
 TIMEREOF
 done <<'JOBS'
-otw-playlist|otw_playlist.py|Sun 09:00|otwradio.blogspot.com|On The Wire playlist parser
-duck-playlist|duck_playlist.py|Wed 09:00|feed.podbean.com|A Duck in a Tree tracklist parser
+otw-playlist|otw_playlist.py|Sun 09,12:00|otwradio.blogspot.com|On The Wire playlist parser
+duck-playlist|duck_playlist.py|Wed 09,12:00|feed.podbean.com|A Duck in a Tree tracklist parser
 JOBS
 
 systemctl --user daemon-reload
