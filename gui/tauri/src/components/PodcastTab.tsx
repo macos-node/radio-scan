@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { podCache, refreshed } from "../lib/feedCache";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Check,
@@ -346,16 +347,7 @@ function StateColumn({
   );
 }
 
-/** Feed bodies for this session, shared across mounts so switching tabs doesn't
- *  refetch. Primed on first mount from the on-disk cache (Rust `feed-cache/`), so
- *  the list paints from the last known state instead of a blank slate while every
- *  feed refetches. */
-const podCache: Record<string, Podcast> = {};
-
-/** Feeds already refreshed from the network this session. The prefetch loop skips
- *  these rather than everything in `podCache` — otherwise a disk-primed entry
- *  would look fetched and the list would never see today's episodes. */
-const refreshed = new Set<string>();
+// `podCache` and `refreshed` live in lib/feedCache — shared with the Home tab.
 
 /** Podcasts tab (U4): subscribe by RSS URL (localStorage), browse episodes
  *  fetched via Rust feed-rs, play through the shared player. Two views — a dense

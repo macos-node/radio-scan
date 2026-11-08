@@ -18,6 +18,11 @@ export const PODCAST_SORT_KEY = "ntune.podcastSort";
  *  show id, which is the coarsest thing that can't false-positive: a re-parse of
  *  the same episode changes rows, not the date. */
 export const EPISODIC_SEEN_KEY = "ntune.episodicSeen";
+/** Home tab: range switch (days), when each recent episode was first seen (see
+ *  lib/timeline Ledger), and when Home was last left — the "new" line. */
+export const HOME_RANGE_KEY = "ntune.homeRange";
+export const HOME_LEDGER_KEY = "ntune.homeLedger";
+export const HOME_LAST_LOOK_KEY = "ntune.homeLastLook";
 
 /** The prefs migrated from localStorage on the first launch after this store. */
 const MIGRATE_KEYS = [

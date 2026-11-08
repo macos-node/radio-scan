@@ -12,6 +12,7 @@ import {
   Download,
   Headphones,
   Heart,
+  House,
   KeyRound,
   ListMusic,
   Plus,
@@ -22,6 +23,7 @@ import { ToolbarIconButton } from "./components/ToolbarIconButton";
 import { EpisodicDialog } from "./components/EpisodicDialog";
 import { StationList } from "./components/StationList";
 import { PodcastTab } from "./components/PodcastTab";
+import { HomeTab } from "./components/HomeTab";
 import { PlayerBar } from "./components/PlayerBar";
 import { IdentityDialog } from "./components/IdentityDialog";
 import { AddStationDialog } from "./components/AddStationDialog";
@@ -87,7 +89,7 @@ import { cn } from "./lib/cn";
  *  Kept in step with the pre-paint script in index.html. */
 type Theme = "fizx" | "upleb" | "mono";
 const THEMES: Theme[] = ["mono", "fizx", "upleb"];
-type Tab = "stations" | "podcasts";
+type Tab = "home" | "stations" | "podcasts";
 
 function loadTheme(): Theme {
   const v = getSetting(THEME_KEY);
@@ -157,7 +159,7 @@ export default function App() {
       return {};
     }
   });
-  const [tab, setTab] = useState<Tab>("stations");
+  const [tab, setTab] = useState<Tab>("home");
   // Unified "what's playing" — a live station or a seekable episode (U4).
   const [current, setCurrent] = useState<Playing | null>(null);
   // Win #2: ICY headers captured per stream URL when tuned (homepage/genre/etc).
@@ -936,10 +938,11 @@ export default function App() {
         </div>
       </header>
 
-      {/* Body: Stations (radio) | Podcasts (RSS). npub-1063 feeds arrive in U4b. */}
+      {/* Body: Home (what's new) | Stations (radio) | Podcasts (RSS). */}
       <main className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center gap-1 border-b border-surface px-2 py-1">
           {([
+            { id: "home", label: "Home", icon: <House size={13} /> },
             { id: "stations", label: "Stations", icon: <Radio size={13} /> },
             { id: "podcasts", label: "Podcasts", icon: <Headphones size={13} /> },
           ] as const).map((t) => (
@@ -1008,7 +1011,13 @@ export default function App() {
               {skewWarning}
             </p>
           )}
-          {tab === "stations" ? (
+          {tab === "home" ? (
+            <HomeTab
+              onPlayEpisode={playEpisode}
+              currentKey={current?.kind === "episode" ? current.key : null}
+              playing={playing}
+            />
+          ) : tab === "stations" ? (
             <section className="flex flex-col">
               <div className="flex items-center gap-2 px-3 pb-1 pt-3">
                 <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
