@@ -522,9 +522,10 @@ now-playing proxy**. Cosmetic or self-contained changes don't gate.
 Verification reply = a follow-up commit `verified: <os> — <path>` (or a fix
 commit if broken).
 
-## 4. CI builds both platforms — but it can't hear
-`.github/workflows/ntune-release.yml` builds mac `.dmg` + Linux `.deb` from one
-`ntune-v*` tag, so neither session hand-builds the other's installer. (The
+## 4. CI builds all three platforms — but it can't hear
+`.github/workflows/ntune-release.yml` builds mac `.dmg`, Linux `.deb` and
+Windows NSIS `.exe` from one `ntune-v*` tag, so no session hand-builds another's
+installer. (The
 `.AppImage` is deferred — it freezes on playback; see
 `docs/appimage-gstreamer-2026-08-04.md`.) **But CI has no audio device and installs no GStreamer codec
 plugins** — it proves the app *compiles and bundles*, never that a stream

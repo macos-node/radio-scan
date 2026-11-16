@@ -6,7 +6,9 @@ name: ntune Release
 #   Linux x86_64 : .deb   (webkit2gtk; .AppImage deferred — freezes on playback,
 #                          see gui/tauri/docs/appimage-gstreamer-2026-08-04.md)
 #   macOS arm64  : .dmg   (WKWebView)
-# The Linux job creates the release + notes; the macOS job appends its .dmg.
+#   Windows x86_64: .exe  (NSIS; WebView2)
+# The Linux job creates the release + notes; the macOS and Windows jobs only
+# append their own installer to it.
 #
 # ntune lives in gui/tauri/ within this monorepo — hence the per-job
 # working-directory and the gui/tauri-prefixed artifact paths. The tag is
@@ -180,3 +182,71 @@ jobs:
           prerelease: ${{ steps.tag.outputs.prerelease }}
           files: |
             gui/tauri/src-tauri/target/release/bundle/dmg/*.dmg
+
+  build-windows-x86_64:
+    name: Build Windows x86_64
+    # Runs after the Linux job so the release (and its notes) already exist;
+    # this job only appends the NSIS installer to it. Mirrors ndisc's
+    # build-windows-x86_64 job, adjusted for the gui/tauri subdirectory.
+    needs: build-linux-x86_64
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: gui/tauri
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: gui/tauri/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gui/tauri/src-tauri
+
+      - name: Install npm deps
+        run: npm ci
+
+      # Windows runners ship the MSVC build tools and the WebView2 runtime, so
+      # there is no system-deps step; the Tauri bundler fetches NSIS itself.
+      # NSIS only: tauri.conf.json's `"targets": "all"` would also try MSI
+      # (WiX), which rejects pre-release versions such as 0.2.0-beta.6.
+      - name: Build Tauri bundle (NSIS installer)
+        run: npm run tauri build -- --bundles nsis
+
+      # `shell: bash`: the default shell on Windows runners is PowerShell,
+      # which can't parse the `${GITHUB_REF#refs/tags/}` expansion below.
+      - name: Determine tag + prerelease
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          VER="${TAG#ntune-v}"
+          case "$VER" in
+            *-*) echo "prerelease=true"  >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      # Appends the .exe to the release the Linux job already published — no
+      # `name`/`generate_release_notes` here, so the jobs don't clobber.
+      - name: Upload Windows installer to release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          prerelease: ${{ steps.tag.outputs.prerelease }}
+          files: |
+            gui/tauri/src-tauri/target/release/bundle/nsis/*-setup.exe
