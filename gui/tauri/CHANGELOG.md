@@ -3,6 +3,26 @@
 radio-scan's L4 desktop tuner/player. Notable changes per release. Dates are the
 tag date; unreleased work sits under the top heading until tagged.
 
+## Unreleased
+
+### Added
+
+- **Home tab — what's new.** ntune now opens on Home: every subscribed show's
+  episodes in one list, newest first, grouped by day, with a 24h / 1 week /
+  2 weeks switch. It counts episodes, not shows, so the ranges really differ
+  (the Podcasts tab's switch filters shows by their newest episode, which is
+  why its 1w and 2w lists matched). A show posting 4+ episodes in a day folds
+  into one expandable row. A dot marks episodes picked up since you last
+  looked, from a first-seen record ntune keeps — no feed says when an episode
+  reached you. New subscriptions and the first run start with no dots.
+
+### Changed
+
+- **The new-episode dot (logged shows) refreshes while ntune is open.** The
+  episode logs were read only at launch or when the panel opened, so a Fetch
+  Now or a timer run never lit the dot. They are now re-read on window focus
+  and every 5 minutes.
+
 ## 0.2.1 — 2026-11-08
 
 ### Changed
