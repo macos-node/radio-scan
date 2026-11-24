@@ -29,6 +29,7 @@ use tauri::Manager;
 // items carry their own `cfg` inside. macOS stays out entirely: RadioBar is its
 // viewer, and a second one there is that session's call, not a side effect.
 #[cfg(any(target_os = "linux", target_os = "windows"))]
+mod art;
 mod logger;
 mod proxy;
 mod tray;
@@ -1596,6 +1597,15 @@ fn prune_feed_cache(app: &tauri::AppHandle, subs: &[PodcastSub]) {
     }
 }
 
+/// A podcast's cover art as a `data:` URI — downloaded once, shrunk to a 512 px
+/// JPEG and cached on disk (see art.rs). Errors mean "no art": the UI keeps the
+/// category glyph.
+#[tauri::command]
+async fn podcast_art(app: tauri::AppHandle, url: String) -> Result<String, String> {
+    let dir = art::art_cache_dir(&app_data_dir(&app)?)?;
+    art::podcast_art(dir, url).await
+}
+
 /// Fetch and parse a podcast feed into an episode list (newest first).
 #[tauri::command]
 async fn fetch_podcast(app: tauri::AppHandle, url: String) -> Result<Podcast, String> {
@@ -1953,6 +1963,7 @@ pub fn run() {
             unfollow_show,
             fetch_podcast,
             cached_podcasts,
+            podcast_art,
             station_icy,
             episodic_shows,
             add_favorite,

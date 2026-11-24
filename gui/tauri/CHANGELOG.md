@@ -5,6 +5,40 @@ tag date; unreleased work sits under the top heading until tagged.
 
 ## Unreleased
 
+## 0.3.0 — 2026-11-24
+
+### Added
+
+- **Card view on Home.** A list / card switch beside the range buttons. Cards
+  form one continuous grid, newest first, with no day breaks: each tile carries
+  its day and time in a chip (Today in the accent colour, Yesterday filled,
+  older dates outlined). A batch (a show posting 4+ episodes in a day) is one
+  card that plays the whole batch in order. Tiles come in three sizes —
+  **S** (icon + show name; the rest in the tooltip), **M** (full detail, the
+  default) and **L** (a square artwork slot). View and size are remembered.
+- **Cover art on large tiles.** The image each feed states is downloaded once,
+  shrunk to a 512 px JPEG and kept in `art-cache/` beside the feed cache, so a
+  tile reads it from disk and no outside host sees the app render. At most four
+  downloads run at a time; the cache is not part of any backup. Low-res sources
+  (short edge under 300 px — a favicon or logo, not cover art) are refused and
+  remembered with a marker file, so the tile keeps its icon instead of a blurry
+  stretch. Anything that fails to load also keeps the icon.
+- **Category icons from the feed.** Podcasts were matched on title alone; when
+  the title says nothing, the feed's own categories (Apple's top-level set —
+  Technology, Sports, Health & Fitness, …) now pick the icon. "The Cycling
+  Podcast" reads as sport. Stations gained hip-hop, space, lounge/downtempo and
+  americana/folk. Home's list rows show the same icon beside each show.
+- **A hint of colour per category.** Icons take a hue from a new set of
+  theme-neutral `--c-cat-*` tokens, 30° apart round the wheel from Bitcoin
+  orange, the same under every theme. Bitcoin shows the bitcoin.design symbol
+  (`#F7931A` disc, white ₿). The generic podcast and radio icons stay grey.
+
+### Changed
+
+- **Home tiles** are plain grey squares with 20 px corners; the icon sits
+  directly on the tile rather than in a box inside it. The Podcasts and
+  Stations grids keep their bordered cards but get the coloured icons.
+
 ## 0.2.3 — 2026-11-24
 
 There is no 0.2.2 release. 0.2.1 and 0.2.2 were also used as numbers for local

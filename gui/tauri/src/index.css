@@ -25,6 +25,23 @@
   /* Theme-neutral Nostr tint — publish/relay UI reads the same under every
      theme (suite rule). Defined ONCE here, deliberately not overridden below. */
   --c-nostr: 130 95 235;
+  /* Category hues for media glyphs — theme-neutral like --c-nostr (a category
+     is meaning, so it keeps its colour under mono too). Bitcoin is the brand
+     orange (#F7931A); the rest step 30° round the wheel from it at one
+     saturation/lightness, so no hue outshouts another on the dark tiles. */
+  --c-cat-bitcoin: 247 147 26;
+  --c-cat-bitcoin-fg: 255 255 255;
+  --c-cat-red: 228 110 103;
+  --c-cat-pink: 228 103 160;
+  --c-cat-magenta: 228 103 222;
+  --c-cat-violet: 172 103 228;
+  --c-cat-indigo: 110 103 228;
+  --c-cat-blue: 103 160 228;
+  --c-cat-cyan: 103 222 228;
+  --c-cat-teal: 103 228 172;
+  --c-cat-green: 103 228 110;
+  --c-cat-lime: 160 228 103;
+  --c-cat-yellow: 222 228 103;
 }
 
 .theme-upleb {

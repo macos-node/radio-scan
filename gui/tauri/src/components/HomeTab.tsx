@@ -1,8 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Play, RefreshCw } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  LayoutGrid,
+  List,
+  ListVideo,
+  Play,
+  RefreshCw,
+} from "lucide-react";
 import { cn } from "../lib/cn";
 import { podCache, refreshed } from "../lib/feedCache";
-import { absorbPodcast, loadSubs, PODCASTS_EVENT, type Sub } from "../lib/podcasts";
+import { podcastIconKey, type MediaIconKey } from "../lib/mediaIcon";
+import {
+  absorbPodcast,
+  loadSubs,
+  podcastIdentity,
+  PODCASTS_EVENT,
+  type Sub,
+} from "../lib/podcasts";
+import { CoverArt } from "./CoverArt";
+import { MediaGlyph } from "./MediaGlyph";
 import { describeOutcome, publishSequentially } from "../lib/publishAll";
 import {
   getSetting,
@@ -10,6 +27,8 @@ import {
   HOME_LAST_LOOK_KEY,
   HOME_LEDGER_KEY,
   HOME_RANGE_KEY,
+  HOME_TILE_KEY,
+  HOME_VIEW_KEY,
 } from "../lib/settings";
 import { cachedPodcasts, fetchPodcast, type Episode, type Podcast } from "../lib/tauri";
 import {
@@ -42,6 +61,28 @@ const nowSecs = () => Math.floor(Date.now() / 1000);
 function loadRange(): HomeRange {
   const v = Number(getSetting(HOME_RANGE_KEY));
   return isHomeRange(v) ? v : 7;
+}
+
+type View = "list" | "cards";
+
+function loadView(): View {
+  return getSetting(HOME_VIEW_KEY) === "cards" ? "cards" : "list";
+}
+
+// Card size. m is the default full-detail tile; s caps the detail at the show
+// name (everything else is in the tooltip); l gives the glyph an artwork-sized
+// square — the slot a publisher's cover art would fill later.
+type Tile = "s" | "m" | "l";
+
+const TILES: { id: Tile; label: string; title: string; min: string }[] = [
+  { id: "s", label: "S", title: "Small tiles — show name only", min: "112px" },
+  { id: "m", label: "M", title: "Medium tiles — full detail", min: "160px" },
+  { id: "l", label: "L", title: "Large tiles — room for artwork", min: "240px" },
+];
+
+function loadTile(): Tile {
+  const v = getSetting(HOME_TILE_KEY);
+  return v === "s" || v === "l" ? v : "m";
 }
 
 function fmtTime(unix: number): string {
@@ -83,8 +124,12 @@ export function HomeTab({
   playing: boolean;
 }) {
   const [subs, setSubs] = useState<Sub[]>(loadSubs);
-  const [cache, setCache] = useState<Record<string, Podcast>>(() => ({ ...podCache }));
+  const [cache, setCache] = useState<Record<string, Podcast>>(() => ({
+    ...podCache,
+  }));
   const [range, setRange] = useState<HomeRange>(loadRange);
+  const [view, setView] = useState<View>(loadView);
+  const [tile, setTile] = useState<Tile>(loadTile);
   const [now, setNow] = useState(nowSecs);
   const [since] = useState(() => {
     if (leaveTimer !== null) {
@@ -179,6 +224,23 @@ export function HomeTab({
     [subs, cache],
   );
 
+  // Same glyph per show as the Podcasts grid: title subject, host format, then
+  // the feed's own categories.
+  const glyphs = useMemo(() => {
+    const m = new Map<string, MediaIconKey>();
+    for (const s of subs) m.set(s.url, podcastIconKey(s.title, podcastIdentity(s).categories));
+    return m;
+  }, [subs]);
+  // The feed's own cover-art URL (harvested <itunes:image>), for large tiles.
+  const images = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of subs) if (s.harvest?.image) m.set(s.url, s.harvest.image);
+    return m;
+  }, [subs]);
+  const glyph = (feedUrl: string) => (
+    <MediaGlyph iconKey={glyphs.get(feedUrl) ?? "default"} size={18} />
+  );
+
   // Record first sightings as feeds land.
   useEffect(() => {
     const next = updateLedger(ledgerRef.current, feeds, nowSecs());
@@ -193,12 +255,21 @@ export function HomeTab({
   const fresh = (e: Entry) => isNew(ledger, e.feedUrl, e.ep.id, since);
   const newCount = groups.reduce(
     (n, g) =>
-      n +
-      g.rows.filter((r) => (r.kind === "one" ? fresh(r.entry) : r.entries.some(fresh))).length,
+      n + g.rows.filter((r) => (r.kind === "one" ? fresh(r.entry) : r.entries.some(fresh))).length,
     0,
   );
   const showCount = new Set(entries.map((e) => e.feedUrl)).size;
   const loaded = feeds.filter((f) => f.pod).length;
+
+  const chooseTile = (t: Tile) => {
+    setTile(t);
+    setSetting(HOME_TILE_KEY, t);
+  };
+
+  const chooseView = (v: View) => {
+    setView(v);
+    setSetting(HOME_VIEW_KEY, v);
+  };
 
   const chooseRange = (r: HomeRange) => {
     setRange(r);
@@ -275,9 +346,8 @@ export function HomeTab({
               {fmtTime(e.at)}
             </span>
           )}
-          {!nested && (
-            <span className="w-40 shrink-0 truncate text-xs text-muted">{e.show}</span>
-          )}
+          {!nested && glyph(e.feedUrl)}
+          {!nested && <span className="w-40 shrink-0 truncate text-xs text-muted">{e.show}</span>}
           <span
             className={cn(
               "min-w-0 flex-1 truncate text-xs",
@@ -295,12 +365,152 @@ export function HomeTab({
     );
   };
 
+  // Card view: same order and day groups as the list, one card per row of it.
+  // A folded batch is one card that plays the whole batch top-down (the list's
+  // fold expands instead; a grid has no room to open a batch in place).
+  const cardShell = (
+    key: string,
+    opts: {
+      feedUrl: string;
+      show: string;
+      onClick: () => void;
+      title: string;
+      current: boolean;
+      dot: "playing" | "new" | null;
+      body: React.ReactNode;
+      day: string;
+      at: number;
+      secs: number | null | undefined;
+    },
+  ) => (
+    <li key={key} className="relative">
+      <button
+        type="button"
+        onClick={opts.onClick}
+        title={opts.title}
+        aria-pressed={opts.current}
+        className={cn(
+          "flex h-full w-full flex-col items-center rounded-[20px] bg-surface text-center transition-colors hover:bg-surfaceHover",
+          tile === "s" ? "gap-1.5 px-2 py-3" : tile === "l" ? "gap-2.5 p-3" : "gap-2 p-3",
+          opts.current && "ring-1 ring-inset ring-accent",
+        )}
+      >
+        {tile === "l" ? (
+          <CoverArt
+            imageUrl={images.get(opts.feedUrl)}
+            iconKey={glyphs.get(opts.feedUrl) ?? "default"}
+          />
+        ) : (
+          <MediaGlyph
+            iconKey={glyphs.get(opts.feedUrl) ?? "default"}
+            size={tile === "s" ? 44 : 56}
+            bare
+          />
+        )}
+        {tile === "s" ? (
+          <span className="line-clamp-2 max-w-full text-[11px] leading-snug text-fg">
+            {opts.show}
+          </span>
+        ) : (
+          <>
+            <span className="line-clamp-1 max-w-full text-[10px] text-muted">{opts.show}</span>
+            {opts.body}
+            <span className="mt-auto flex items-center gap-1.5">
+              <span
+                className={cn(
+                  "rounded-sm px-1.5 py-0.5 font-mono text-[10px]",
+                  opts.day === "Today"
+                    ? "bg-accent/15 text-accent"
+                    : opts.day === "Yesterday"
+                      ? "bg-fg/10 text-fg"
+                      : "border border-fg/10 text-muted",
+                )}
+              >
+                {opts.day} · {fmtTime(opts.at)}
+              </span>
+              {opts.secs ? (
+                <span className="font-mono text-[10px] text-muted/70">
+                  {fmtDuration(opts.secs)}
+                </span>
+              ) : null}
+            </span>
+          </>
+        )}
+      </button>
+      {opts.dot && (
+        <span
+          className={cn(
+            "absolute left-3 top-3 rounded-full",
+            opts.dot === "playing" ? "h-2 w-2 bg-ok" : "h-1.5 w-1.5 bg-warn",
+          )}
+          aria-hidden
+        />
+      )}
+    </li>
+  );
+
+  const episodeCard = (e: Entry, day: string) => {
+    const isCurrent = e.ep.id === currentKey;
+    return cardShell(e.key, {
+      feedUrl: e.feedUrl,
+      show: e.show,
+      onClick: () => onPlayEpisode(e.ep, e.show),
+      title: `${e.show} — ${e.ep.title}\n${day} · ${fmtTime(e.at)}`,
+      current: isCurrent,
+      dot: isCurrent && playing ? "playing" : fresh(e) ? "new" : null,
+      body: (
+        <span
+          className={cn(
+            "line-clamp-3 text-xs leading-snug",
+            isCurrent && playing ? "text-ok" : "text-fg",
+          )}
+        >
+          {e.ep.title}
+        </span>
+      ),
+      day,
+      at: e.at,
+      secs: e.ep.durationSecs,
+    });
+  };
+
+  const foldCard = (key: string, entries: Entry[], show: string, feedUrl: string, day: string) => {
+    const [first, ...rest] = entries;
+    const isCurrent = entries.some((e) => e.ep.id === currentKey);
+    const total = entries.reduce((n, e) => n + (e.ep.durationSecs ?? 0), 0);
+    return cardShell(key, {
+      feedUrl,
+      show,
+      onClick: () =>
+        onPlayEpisode(
+          first.ep,
+          first.show,
+          rest.map((x) => ({ ep: x.ep, podcastTitle: x.show })),
+        ),
+      title: `${show} · ${day} · ${fmtTime(first.at)} — plays all ${entries.length} in order:\n${entries.map((e) => e.ep.title).join("\n")}`,
+      current: isCurrent,
+      dot: isCurrent && playing ? "playing" : entries.some(fresh) ? "new" : null,
+      body: (
+        <span className="flex flex-col items-center gap-0.5 text-xs leading-snug text-fg">
+          <span className="flex items-center gap-1">
+            <ListVideo size={12} className="shrink-0 text-muted" aria-hidden />
+            {entries.length} episodes
+          </span>
+          <span className="line-clamp-2 text-[10px] text-muted">
+            {entries.map((e) => e.ep.title).join(", ")}
+          </span>
+        </span>
+      ),
+      day,
+      at: first.at,
+      secs: total,
+    });
+  };
+
   return (
     <section className="flex flex-col">
       <div className="flex flex-wrap items-center gap-2 px-3 pb-1 pt-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-          What's new
-        </h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted">What's new</h2>
         {newCount > 0 && (
           <span className="flex items-center gap-1 text-[10px] text-muted">
             <span className="h-1.5 w-1.5 rounded-full bg-warn" aria-hidden />
@@ -333,6 +543,57 @@ export function HomeTab({
               </button>
             ))}
           </div>
+          {view === "cards" && (
+            <div className="flex items-center gap-0.5">
+              {TILES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => chooseTile(t.id)}
+                  title={t.title}
+                  aria-label={t.title}
+                  aria-pressed={tile === t.id}
+                  className={cn(
+                    "grid h-6 w-6 place-items-center rounded-sm font-mono text-[10px] transition-colors",
+                    tile === t.id
+                      ? "bg-surface text-fg"
+                      : "text-muted hover:bg-surfaceHover hover:text-fg",
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-0.5">
+            {(
+              [
+                { id: "list", icon: <List size={13} />, label: "List view" },
+                {
+                  id: "cards",
+                  icon: <LayoutGrid size={13} />,
+                  label: "Card view",
+                },
+              ] as const
+            ).map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => chooseView(v.id)}
+                title={v.label}
+                aria-label={v.label}
+                aria-pressed={view === v.id}
+                className={cn(
+                  "grid h-6 w-6 place-items-center rounded-sm transition-colors",
+                  view === v.id
+                    ? "bg-surface text-fg"
+                    : "text-muted hover:bg-surfaceHover hover:text-fg",
+                )}
+              >
+                {v.icon}
+              </button>
+            ))}
+          </div>
           {msg ? (
             <span className="font-mono text-[10px] text-accent">{msg}</span>
           ) : (
@@ -362,6 +623,23 @@ export function HomeTab({
             ? "Reading feeds…"
             : `No episodes in the last ${range === 1 ? "24 hours" : range === 7 ? "week" : "2 weeks"}.`}
         </p>
+      ) : view === "cards" ? (
+        // One continuous grid, newest first — the day lives on each card's chip
+        // instead of breaking the grid into per-day rows.
+        <ul
+          className={cn("grid px-3 pb-3 pt-2", tile === "l" ? "gap-3" : "gap-2")}
+          style={{
+            gridTemplateColumns: `repeat(auto-fill, minmax(${TILES.find((t) => t.id === tile)!.min}, 1fr))`,
+          }}
+        >
+          {groups.flatMap((g) =>
+            g.rows.map((r) =>
+              r.kind === "one"
+                ? episodeCard(r.entry, g.label)
+                : foldCard(`${g.day}\n${r.feedUrl}`, r.entries, r.show, r.feedUrl, g.label),
+            ),
+          )}
+        </ul>
       ) : (
         groups.map((g) => (
           <div key={g.day} className="flex flex-col">
@@ -387,6 +665,7 @@ export function HomeTab({
                       <span className="w-10 shrink-0 font-mono text-[10px] text-muted/70">
                         {fmtTime(r.entries[0].at)}
                       </span>
+                      {glyph(r.feedUrl)}
                       <span className="w-40 shrink-0 truncate text-xs text-muted">{r.show}</span>
                       <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-xs text-muted">
                         {open ? (

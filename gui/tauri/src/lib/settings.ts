@@ -23,6 +23,10 @@ export const EPISODIC_SEEN_KEY = "ntune.episodicSeen";
 export const HOME_RANGE_KEY = "ntune.homeRange";
 export const HOME_LEDGER_KEY = "ntune.homeLedger";
 export const HOME_LAST_LOOK_KEY = "ntune.homeLastLook";
+/** Home tab: "list" (one line per episode) or "cards" (a glyph grid). */
+export const HOME_VIEW_KEY = "ntune.homeView";
+/** Home tab card size: "s" (glyph + show), "m" (full detail), "l" (artwork-sized). */
+export const HOME_TILE_KEY = "ntune.homeTile";
 
 /** The prefs migrated from localStorage on the first launch after this store. */
 const MIGRATE_KEYS = [

@@ -1,6 +1,6 @@
 [package]
 name = "ntune"
-version = "0.2.3"
+version = "0.3.0"
 description = "radio-scan L4 desktop UI — tuner / player / subscription surface (n-suite)"
 authors = ["macos-node"]
 edition = "2021"
@@ -42,6 +42,11 @@ encoding_rs = "0.8"
 # Podcast RSS (U4): fetch the feed document + parse RSS 2.0/Atom + podcast tags.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "charset"] }
 feed-rs = "2"
+# Podcast cover art (src/art.rs): decode a feed's image, shrink it to a 512 px
+# thumbnail, re-encode JPEG for the on-disk art cache. Both already in the lock
+# as transitive deps; formats limited to what feeds actually serve.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
+base64 = "0.22"
 # <podcast:guid> extraction (show.v1's NIP-73 `i` tag + U4.5's podcast key).
 # feed-rs 2.x exposes NO extension map, so the podcast namespace is unreachable
 # through its model — we scan the raw feed bytes ourselves. Already in the lock

@@ -1328,7 +1328,7 @@ export function PodcastTab({
                             : "border-surface hover:bg-surfaceHover",
                         )}
                       >
-                        <MediaGlyph iconKey={podcastIconKey(s.title)} size={48} />
+                        <MediaGlyph iconKey={podcastIconKey(s.title, podcastIdentity(s).categories)} size={48} />
                         <span className="line-clamp-2 text-xs leading-snug text-fg">
                           {s.title}
                         </span>
@@ -1401,7 +1401,7 @@ export function PodcastTab({
               {expandedSub && (
                 <div className="mt-3 rounded-sm border border-surface">
                   <div className="flex items-center gap-2 border-b border-surface px-3 py-2">
-                    <MediaGlyph iconKey={podcastIconKey(expandedSub.title)} size={22} />
+                    <MediaGlyph iconKey={podcastIconKey(expandedSub.title, podcastIdentity(expandedSub).categories)} size={22} />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
                       {expandedSub.title}
                     </span>

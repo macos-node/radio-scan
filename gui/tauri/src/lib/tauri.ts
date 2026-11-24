@@ -259,6 +259,12 @@ export interface CachedFeed {
 /** Cached bodies for the given feed URLs — a local disk read, so the Podcasts
  *  tab can paint immediately instead of waiting on the network. Feeds with no
  *  cache entry are simply absent from the result. */
+/** A podcast's cover art as a `data:` URI: fetched once by the Rust side, shrunk
+ *  to a 512 px JPEG and cached on disk. Rejects when there's no usable image. */
+export function podcastArt(url: string): Promise<string> {
+  return invoke<string>("podcast_art", { url });
+}
+
 export function cachedPodcasts(urls: string[]): Promise<CachedFeed[]> {
   return invoke<CachedFeed[]>("cached_podcasts", { urls });
 }
