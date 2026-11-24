@@ -25,6 +25,12 @@ import {
   type Ledger,
 } from "../lib/timeline";
 
+/** One episode waiting to play — see App's play-through queue. */
+export interface QueueItem {
+  ep: Episode;
+  podcastTitle: string;
+}
+
 const RANGES: { id: HomeRange; label: string; title: string }[] = [
   { id: 1, label: "24h", title: "Episodes published in the last 24 hours" },
   { id: 7, label: "1 week", title: "Episodes published in the last week" },
@@ -71,7 +77,8 @@ export function HomeTab({
   currentKey,
   playing,
 }: {
-  onPlayEpisode: (ep: Episode, podcastTitle: string) => void;
+  /** `then` plays after this episode ends; omitted, playback stops there. */
+  onPlayEpisode: (ep: Episode, podcastTitle: string, then?: QueueItem[]) => void;
   currentKey: string | null;
   playing: boolean;
 }) {
@@ -230,14 +237,26 @@ export function HomeTab({
       return n;
     });
 
-  const episodeRow = (e: Entry, nested = false) => {
+  /** `rest`: for a track inside an expanded batch, the tracks below it — they
+   *  play on in list order and playback stops after the last. */
+  const episodeRow = (e: Entry, nested = false, rest: Entry[] = []) => {
     const isCurrent = e.ep.id === currentKey;
     return (
       <li key={e.key}>
         <button
           type="button"
-          onClick={() => onPlayEpisode(e.ep, e.show)}
-          title={`${e.show} — ${e.ep.title}`}
+          onClick={() =>
+            onPlayEpisode(
+              e.ep,
+              e.show,
+              rest.map((x) => ({ ep: x.ep, podcastTitle: x.show })),
+            )
+          }
+          title={
+            nested && rest.length > 0
+              ? `${e.ep.title} — then plays on through the ${rest.length} below`
+              : `${e.show} — ${e.ep.title}`
+          }
           className={cn(
             "flex w-full items-center gap-2 py-1.5 pr-3 text-left hover:bg-surfaceHover",
             nested ? "pl-[4.5rem]" : "pl-3",
@@ -390,7 +409,9 @@ export function HomeTab({
                       <span className="w-[11px] shrink-0" aria-hidden />
                     </button>
                     {open && (
-                      <ul className="flex flex-col">{r.entries.map((e) => episodeRow(e, true))}</ul>
+                      <ul className="flex flex-col">
+                        {r.entries.map((e, i) => episodeRow(e, true, r.entries.slice(i + 1)))}
+                      </ul>
                     )}
                   </li>
                 );

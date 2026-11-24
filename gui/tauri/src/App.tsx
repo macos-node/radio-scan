@@ -23,7 +23,7 @@ import { ToolbarIconButton } from "./components/ToolbarIconButton";
 import { EpisodicDialog } from "./components/EpisodicDialog";
 import { StationList } from "./components/StationList";
 import { PodcastTab } from "./components/PodcastTab";
-import { HomeTab } from "./components/HomeTab";
+import { HomeTab, type QueueItem } from "./components/HomeTab";
 import { PlayerBar } from "./components/PlayerBar";
 import { IdentityDialog } from "./components/IdentityDialog";
 import { AddStationDialog } from "./components/AddStationDialog";
@@ -483,7 +483,14 @@ export default function App() {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
 
+  /** Episodes to play after the current one ends — set only when a track is
+   *  started from an expanded batch row on Home (the rest of that list, in list
+   *  order). Anything else that starts or stops playback empties it, so a single
+   *  episode always just stops at its end. */
+  const queueRef = useRef<QueueItem[]>([]);
+
   const stop = useCallback(() => {
+    queueRef.current = [];
     const a = audioRef.current;
     if (!a) return;
     if (current?.kind === "episode") {
@@ -536,6 +543,7 @@ export default function App() {
         stop();
         return;
       }
+      queueRef.current = [];
       play({ kind: "station", key: s.slug, title: s.name, url: s.url, seekable: false });
       // Win #2: probe the stream's ICY headers once to enrich the station
       // (homepage / live genre / description). Best-effort; failures are ignored.
@@ -592,12 +600,8 @@ export default function App() {
     [current, playing, stop, play, icyByUrl],
   );
 
-  const playEpisode = useCallback(
-    (ep: Episode, podcastTitle: string) => {
-      if (current?.kind === "episode" && current.key === ep.id && playing) {
-        stop();
-        return;
-      }
+  const startEpisode = useCallback(
+    (ep: Episode, podcastTitle: string) =>
       play({
         kind: "episode",
         key: ep.id,
@@ -605,9 +609,21 @@ export default function App() {
         subtitle: podcastTitle,
         url: ep.enclosureUrl,
         seekable: true,
-      });
+      }),
+    [play],
+  );
+
+  /** `then`: what plays after this one ends (see queueRef). Omitted = stop. */
+  const playEpisode = useCallback(
+    (ep: Episode, podcastTitle: string, then: QueueItem[] = []) => {
+      if (current?.kind === "episode" && current.key === ep.id && playing) {
+        stop();
+        return;
+      }
+      queueRef.current = then;
+      startEpisode(ep, podcastTitle);
     },
-    [current, playing, stop, play],
+    [current, playing, stop, startEpisode],
   );
 
   const togglePlay = useCallback(() => {
@@ -1152,6 +1168,13 @@ export default function App() {
         }}
         onEnded={() => {
           if (current?.kind === "episode") savePosition(current.url, 0);
+          const [next, ...rest] = current?.kind === "episode" ? queueRef.current : [];
+          if (next) {
+            queueRef.current = rest;
+            startEpisode(next.ep, next.podcastTitle);
+            return;
+          }
+          queueRef.current = [];
           setPlaying(false);
           setBuffering(false);
         }}

@@ -7,6 +7,12 @@ tag date; unreleased work sits under the top heading until tagged.
 
 ### Added
 
+- **Play-through on Home's batch rows.** Playing a track inside an expanded
+  batch row (a show that posted 4+ episodes in a day) plays on through the
+  tracks below it, in list order, and stops after the last. Single episodes
+  still stop at their end. Starting anything else, or stopping, ends the run;
+  pausing keeps it.
+
 - **Home tab — what's new.** ntune now opens on Home: every subscribed show's
   episodes in one list, newest first, grouped by day, with a 24h / 1 week /
   2 weeks switch. It counts episodes, not shows, so the ranges really differ
