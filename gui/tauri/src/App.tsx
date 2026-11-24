@@ -82,8 +82,8 @@ import { describeOutcome, publishSequentially } from "./lib/publishAll";
 import { OWNER_PUBKEY, parseStationsJson, toExportStation } from "./lib/station";
 import { canonicalUrl } from "./lib/address";
 import { useFollows } from "./hooks/useFollows";
-import { shortVersion } from "./lib/format";
 import { cn } from "./lib/cn";
+import { VersionChip } from "./components/VersionChip";
 
 /** Default = mono, like the rest of the suite; an existing choice is respected.
  *  Kept in step with the pre-paint script in index.html. */
@@ -887,14 +887,7 @@ export default function App() {
             <span className="text-mauve">tune</span>
           </button>
         </h1>
-        {version && (
-          <span
-            title={`radio-scan L4 UI · v${version}`}
-            className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[10px] text-muted"
-          >
-            {shortVersion(version)}
-          </span>
-        )}
+        {version && <VersionChip version={version} />}
         <span className="text-xs text-muted">radio-scan · tuner</span>
         <div className="ml-auto flex items-center gap-1">
           <button

@@ -5,8 +5,24 @@ tag date; unreleased work sits under the top heading until tagged.
 
 ## Unreleased
 
+## 0.2.3 — 2026-11-24
+
+There is no 0.2.2 release. 0.2.1 and 0.2.2 were also used as numbers for local
+Linux builds of the Home tab and play-through, while ntune-v0.2.1 (the relay
+change) was published from the other machine. The local commits are rebased
+onto that release, and everything they added ships here.
+
 ### Added
 
+- **Update check on the version chip.** The chip is now the suite's standard
+  one (`v0.2.3`, full version in the tooltip). Once a day it asks GitHub for
+  radio-scan's newest published `ntune-v*` release — the repo's other tags and
+  pre-releases never count (`TAG_PREFIX = "ntune-v"`). When one is newer, a dot
+  appears on the chip's corner; clicking the chip opens a popover with the
+  status, a link to the release page, **Check now**, and a **Check daily**
+  switch to turn it off. Notify-only: nothing is downloaded or installed.
+  Vendored from ndisc (`src/lib/updateCheck.ts`,
+  `src/components/VersionChip.tsx`, `src/components/TickBox.tsx`).
 - **Play-through on Home's batch rows.** Playing a track inside an expanded
   batch row (a show that posted 4+ episodes in a day) plays on through the
   tracks below it, in list order, and stops after the last. Single episodes
@@ -23,6 +39,9 @@ tag date; unreleased work sits under the top heading until tagged.
   reached you. New subscriptions and the first run start with no dots.
 
 ### Changed
+
+- **New icon.** New master from the suite's icon set; the raster set is
+  regenerated from it (`make icons`).
 
 - **The new-episode dot (logged shows) refreshes while ntune is open.** The
   episode logs were read only at launch or when the panel opened, so a Fetch
