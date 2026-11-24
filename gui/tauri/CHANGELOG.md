@@ -5,6 +5,26 @@ tag date; unreleased work sits under the top heading until tagged.
 
 ## Unreleased
 
+## 0.3.2 — 2026-11-24
+
+### Added
+
+- **Homepage link-out.** Podcasts grid cards and Home tiles carry a globe in
+  the bottom-right corner (muted, full white on hover) that opens the show's
+  homepage in the system browser — never the episode. It comes from the
+  website the feed states, and is left off when that is really a feed (a
+  `feeds.` host, an `.rss`/`.xml`/`/rss`/`/feed` path, or the subscription's
+  own address) or isn't an http(s) URL.
+
+### Changed
+
+- **Home opens on large cards.** With nothing saved, Home now starts in card
+  view at size L (cover art) instead of the list. A choice you've made is
+  still remembered.
+- **Home's card grid ends square.** A short last row is padded with dim,
+  empty template tiles (with a faint artwork slot at size L), counted from the
+  columns the grid actually lays out, so it stays square at any window width.
+
 ## 0.3.1 — 2026-11-24
 
 ### Fixed

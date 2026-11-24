@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  showHomepage,
   externalHttpUrl,
   withinRecency,
   recencyLabel,
@@ -748,5 +749,30 @@ describe("parseSubsJson — refuses a stations file", () => {
   it("still takes its own export, a minimal list, and a bare url", () => {
     expect(parseSubsJson([{ url: "https://a/feed", title: "A" }])).toHaveLength(1);
     expect(parseSubsJson([{ url: "https://a/feed" }])[0].title).toBe("https://a/feed");
+  });
+});
+
+describe("showHomepage", () => {
+  it("keeps a real homepage", () => {
+    expect(showHomepage("https://atp.fm/")).toBe("https://atp.fm/");
+    expect(showHomepage("http://www.bip.show/")).toBe("http://www.bip.show/");
+    expect(showHomepage("https://changelog.com/podcast")).toBe("https://changelog.com/podcast");
+  });
+
+  it("drops a feed posing as the website", () => {
+    expect(
+      showHomepage("https://feeds.soundcloud.com/users/soundcloud:users:1/sounds.rss?before=2"),
+    ).toBeNull();
+    expect(showHomepage("https://feeds.jupiterbroadcasting.com/lup")).toBeNull();
+    expect(showHomepage("https://example.com/podcast/rss")).toBeNull();
+    expect(showHomepage("https://example.com/feed/")).toBeNull();
+    expect(showHomepage("https://x.org/show/", "https://x.org/show")).toBeNull();
+  });
+
+  it("drops non-web and missing values", () => {
+    expect(showHomepage("file:///etc/passwd")).toBeNull();
+    expect(showHomepage("javascript:alert(1)")).toBeNull();
+    expect(showHomepage(undefined)).toBeNull();
+    expect(showHomepage("  ")).toBeNull();
   });
 });

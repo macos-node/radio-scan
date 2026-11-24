@@ -731,6 +731,26 @@ export function externalHttpUrl(raw: string | undefined | null): string | null {
   }
 }
 
+/** A show's homepage for a www link-out: the feed's stated website, when it is
+ *  a web page. Null when there is none, when it isn't http(s), and when it is
+ *  really a feed — some feeds put their own RSS address in `<link>` (a
+ *  SoundCloud `.rss`, a `feeds.` host), and opening that in a browser shows XML,
+ *  not a homepage. */
+export function showHomepage(website: string | undefined | null, feedUrl?: string): string | null {
+  const href = externalHttpUrl(website);
+  if (!href) return null;
+  const u = new URL(href);
+  const bare = (x: string) =>
+    x
+      .replace(/^https?:\/\//, "")
+      .replace(/\/+$/, "")
+      .toLowerCase();
+  if (feedUrl && bare(href) === bare(feedUrl)) return null;
+  if (/^feeds?\./i.test(u.hostname)) return null;
+  if (/(\.rss|\.xml|\/rss|\/feed)\/?$/i.test(u.pathname)) return null;
+  return href;
+}
+
 /** Recency window for the Podcasts list filter, in **days**. `null` is "no
  *  cut-off".
  *

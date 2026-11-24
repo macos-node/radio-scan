@@ -41,6 +41,7 @@ import {
   isPodcastSort,
   liveHarvest,
   podcastIdentity,
+  showHomepage,
   latestEpisodeAt,
   loadSubs,
   mergeSubs,
@@ -61,6 +62,7 @@ import {
 } from "../lib/settings";
 import { podcastIconKey } from "../lib/mediaIcon";
 import { MediaGlyph } from "./MediaGlyph";
+import { WwwLink } from "./WwwLink";
 import { StateSlots } from "./StateSlots";
 import { Modal } from "./Modal";
 import { EnrichDialog } from "./EnrichDialog";
@@ -1369,6 +1371,15 @@ export function PodcastTab({
                         })()}
                       </button>
                       {/* Outside the card button — nested buttons are invalid. */}
+                      {(() => {
+                        const home = showHomepage(
+                          podcastIdentity(s, pod ? liveHarvest(pod) : undefined).website,
+                          s.url,
+                        );
+                        return home ? (
+                          <WwwLink href={home} className="absolute bottom-1 right-1" />
+                        ) : null;
+                      })()}
                       <div className="absolute left-1 top-1">
                         <StateColumn
                           row={s}

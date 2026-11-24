@@ -221,3 +221,11 @@ export function isNew(ledger: Ledger, feedUrl: string, epId: string, since: numb
   const t = ledger[feedUrl]?.[epHash(epId)];
   return t !== undefined && t > since;
 }
+
+/** How many empty tiles complete the last row of a `cols`-wide grid holding `n`
+ *  items: 0 when the row is already full, there are no items, or the column
+ *  count isn't known yet (≤ 0). */
+export function fillerCount(n: number, cols: number): number {
+  if (n <= 0 || cols <= 0) return 0;
+  return (cols - (n % cols)) % cols;
+}

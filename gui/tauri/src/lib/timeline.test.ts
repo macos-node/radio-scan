@@ -5,6 +5,7 @@ import {
   FOLD_MIN,
   buildTimeline,
   epHash,
+  fillerCount,
   groupByDay,
   isNew,
   parseLedger,
@@ -169,5 +170,22 @@ describe("ledger", () => {
     expect(epHash("https://example.com/a-very-long-episode-guid.mp3")).toMatch(/^[0-9a-z]{1,7}$/);
     expect(epHash("x")).toBe(epHash("x"));
     expect(epHash("x")).not.toBe(epHash("y"));
+  });
+});
+
+describe("fillerCount", () => {
+  it("completes a short last row", () => {
+    expect(fillerCount(10, 6)).toBe(2);
+    expect(fillerCount(1, 8)).toBe(7);
+  });
+
+  it("adds nothing to a full row", () => {
+    expect(fillerCount(12, 6)).toBe(0);
+    expect(fillerCount(8, 8)).toBe(0);
+  });
+
+  it("adds nothing with no items or no measured columns", () => {
+    expect(fillerCount(0, 6)).toBe(0);
+    expect(fillerCount(5, 0)).toBe(0);
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -15,11 +15,13 @@ import {
   absorbPodcast,
   loadSubs,
   podcastIdentity,
+  showHomepage,
   PODCASTS_EVENT,
   type Sub,
 } from "../lib/podcasts";
 import { CoverArt } from "./CoverArt";
 import { MediaGlyph } from "./MediaGlyph";
+import { WwwLink } from "./WwwLink";
 import { describeOutcome, publishSequentially } from "../lib/publishAll";
 import {
   getSetting,
@@ -33,6 +35,7 @@ import {
 import { cachedPodcasts, fetchPodcast, type Episode, type Podcast } from "../lib/tauri";
 import {
   buildTimeline,
+  fillerCount,
   groupByDay,
   isHomeRange,
   isNew,
@@ -66,12 +69,13 @@ function loadRange(): HomeRange {
 type View = "list" | "cards";
 
 function loadView(): View {
-  return getSetting(HOME_VIEW_KEY) === "cards" ? "cards" : "list";
+  // Cards unless the user picked the list.
+  return getSetting(HOME_VIEW_KEY) === "list" ? "list" : "cards";
 }
 
-// Card size. m is the default full-detail tile; s caps the detail at the show
-// name (everything else is in the tooltip); l gives the glyph an artwork-sized
-// square — the slot a publisher's cover art would fill later.
+// Card size. l (the default) gives each tile a square artwork slot — the show's
+// cached cover art, or its glyph; m is the full-detail tile without art; s caps
+// the detail at the show name (everything else is in the tooltip).
 type Tile = "s" | "m" | "l";
 
 const TILES: { id: Tile; label: string; title: string; min: string }[] = [
@@ -82,7 +86,7 @@ const TILES: { id: Tile; label: string; title: string; min: string }[] = [
 
 function loadTile(): Tile {
   const v = getSetting(HOME_TILE_KEY);
-  return v === "s" || v === "l" ? v : "m";
+  return v === "s" || v === "m" ? v : "l";
 }
 
 function fmtTime(unix: number): string {
@@ -237,6 +241,15 @@ export function HomeTab({
     for (const s of subs) if (s.harvest?.image) m.set(s.url, s.harvest.image);
     return m;
   }, [subs]);
+  // The show's homepage (feed-stated website, vetted) for the tile's www link.
+  const homepages = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of subs) {
+      const h = showHomepage(podcastIdentity(s).website, s.url);
+      if (h) m.set(s.url, h);
+    }
+    return m;
+  }, [subs]);
   const glyph = (feedUrl: string) => (
     <MediaGlyph iconKey={glyphs.get(feedUrl) ?? "default"} size={18} />
   );
@@ -260,6 +273,22 @@ export function HomeTab({
   );
   const showCount = new Set(entries.map((e) => e.feedUrl)).size;
   const loaded = feeds.filter((f) => f.pod).length;
+
+  // Columns the card grid actually laid out (auto-fill decides from the width),
+  // so a short last row can be padded with empty template tiles.
+  const gridRef = useRef<HTMLUListElement>(null);
+  const [cols, setCols] = useState(0);
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const measure = () =>
+      setCols(getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [view, tile, entries.length > 0]);
+  const cardCount = groups.reduce((n, g) => n + g.rows.length, 0);
 
   const chooseTile = (t: Tile) => {
     setTile(t);
@@ -437,6 +466,9 @@ export function HomeTab({
           </>
         )}
       </button>
+      {homepages.has(opts.feedUrl) && (
+        <WwwLink href={homepages.get(opts.feedUrl)!} className="absolute bottom-2 right-2" />
+      )}
       {opts.dot && (
         <span
           className={cn(
@@ -627,6 +659,7 @@ export function HomeTab({
         // One continuous grid, newest first — the day lives on each card's chip
         // instead of breaking the grid into per-day rows.
         <ul
+          ref={gridRef}
           className={cn("grid px-3 pb-3 pt-2", tile === "l" ? "gap-3" : "gap-2")}
           style={{
             gridTemplateColumns: `repeat(auto-fill, minmax(${TILES.find((t) => t.id === tile)!.min}, 1fr))`,
@@ -639,6 +672,18 @@ export function HomeTab({
                 : foldCard(`${g.day}\n${r.feedUrl}`, r.entries, r.show, r.feedUrl, g.label),
             ),
           )}
+          {/* Empty template tiles to square off a short last row. */}
+          {Array.from({ length: fillerCount(cardCount, cols) }, (_, i) => (
+            <li
+              key={`filler-${i}`}
+              aria-hidden
+              className={cn("rounded-[20px] bg-surface/40", tile === "s" ? "px-2 py-3" : "p-3")}
+            >
+              {tile === "l" && (
+                <span className="block aspect-square w-full rounded-[14px] bg-fg/[0.03]" />
+              )}
+            </li>
+          ))}
         </ul>
       ) : (
         groups.map((g) => (
