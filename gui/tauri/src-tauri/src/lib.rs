@@ -29,8 +29,8 @@ use tauri::Manager;
 // items carry their own `cfg` inside. macOS stays out entirely: RadioBar is its
 // viewer, and a second one there is that session's call, not a side effect.
 #[cfg(any(target_os = "linux", target_os = "windows"))]
-mod art;
 mod logger;
+mod art;
 mod proxy;
 mod tray;
 

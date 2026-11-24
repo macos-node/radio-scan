@@ -5,6 +5,17 @@ tag date; unreleased work sits under the top heading until tagged.
 
 ## Unreleased
 
+## 0.3.1 — 2026-11-24
+
+### Fixed
+
+- **macOS build.** 0.3.0 failed to compile on macOS: the new cover-art module
+  was declared under the Linux/Windows-only attribute that belongs to the
+  logger module, so macOS dropped the art code — and the logger, which stays
+  off macOS by design (RadioBar is its viewer there), lost its guard. Both are
+  back in place. The 0.3.0 Linux and Windows builds are unaffected (both
+  modules compile there either way); this release adds the macOS `.dmg`.
+
 ## 0.3.0 — 2026-11-24
 
 ### Added
